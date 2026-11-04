@@ -36,6 +36,10 @@ python tools/replaytest/replaytest.py suite --quick    # the quick set alone
 python tools/replaytest/replaytest.py corpus           # every replay corpus.json names, here
 ```
 
+Each gate writes `rt_runs/gate_<time>/gate.json`: the commit, engine/ as it played (a tree in
+git's store, edits and new files included), which steps ran, and whether it passed.
+`tools/release.py prep` compares that tree with the release's commit to reuse a merge gate.
+
 The replays are named in `tools/replaytest/corpus.json`, each with its file's sha1, where
 it came from and the sets it is in; the files themselves are kept in
 `testrun\rt_replays\` (gitignored). `corpus` checks that each is there and unchanged, and

@@ -3,6 +3,25 @@
   "about": "Hyperion's release notes, newest first (docs/versioning.md). Hyperion.exe carries them: the build compiles this file in, the home screen shows the first three entries as notifications (each with its line), and Patch Notes shows them all. tools/release_notes.py checks it against hyperion/version.h and writes docs/release-notes.md from it.",
   "entries": [
     {
+      "id": "v0.7.2-beta",
+      "kind": "release",
+      "version": "0.7.2-beta",
+      "date": "2026-11-04",
+      "title": "Start-up and campaign scene fixes",
+      "summary": "Hyperion now starts on PCs where the graphics driver hangs or fails, and campaign scenes that move the camera now always start.",
+      "line": "Fixes for starting on some graphics drivers, and campaign scenes that didn't start.",
+      "fixed": [
+        {
+          "title": "Starting on some graphics drivers",
+          "text": "On some PCs, laptops with two graphics chips in particular, Hyperion stopped at a black screen while starting. If the graphics driver hangs or fails, Hyperion now restarts by itself after 20 seconds and draws another way, down to one that needs no graphics driver at all. You can also choose one yourself: Hyperion.exe --renderer sdl, or --renderer software as the last resort. The start-up report now names your graphics card and its driver."
+        },
+        {
+          "title": "Campaign scenes that didn't start",
+          "text": "A scene that moves the camera to a place on the map sometimes never started, which held up the mission. This sometimes happened if you had scrolled while zoomed in or out, or dragged the map with the middle mouse button."
+        }
+      ]
+    },
+    {
       "id": "v0.7.1-beta",
       "kind": "release",
       "version": "0.7.1-beta",

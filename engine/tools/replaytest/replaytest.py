@@ -1931,6 +1931,9 @@ def cmd_gate(args) -> int:
     else:
         steps = [("quick suite", ["suite", "--quick"] + data)] + ([("hxsuite", ["hxsuite"] + data)] if args.hx else [])
     gate_dir = RUNS / f"gate_{stamp}"
+    git_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT.parent, capture_output=True,
+                              text=True).stdout.strip()
+    played = engine_tree()
     said = []
     for label, argv in steps:
         out = gate_dir / label.replace(" ", "_").lower()
@@ -1945,7 +1948,29 @@ def cmd_gate(args) -> int:
                                              f"FAILED ({len(kept.get('failed', [])) or 'see the log'})") + f" ({where})")
     failed = any("FAILED" in s for s in said)
     print("\n" + ("gate FAILED: " if failed else "gate: ") + "; ".join(said))
+    # what was gated, so a release can tell whether this run still stands for its commit
+    record = {"commit": git_head, "engine": played, "merge": bool(args.merge),
+              "linux": bool(args.merge and not args.no_linux), "hx": bool(args.hx), "passed": not failed,
+              "said": said, "finished": _dt.datetime.now().isoformat(timespec="seconds")}
+    (gate_dir / "gate.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return 1 if failed else 0
+
+
+def engine_tree() -> str:
+    """engine/ as it is on disk, edits and new files with it, as a tree in git's store: the tree a
+    gate played, which a release compares with its commit's."""
+    RUNS.mkdir(parents=True, exist_ok=True)
+    index = RUNS / f".gate-index-{os.getpid()}"
+    env = dict(os.environ, GIT_INDEX_FILE=str(index))
+    git = lambda *a: subprocess.run(["git", *a], cwd=ROOT.parent, env=env, capture_output=True,
+                                    text=True).stdout.strip()
+    try:
+        git("read-tree", "HEAD")
+        git("add", "-A", "--", "engine")
+        tree = git("write-tree")
+        return git("rev-parse", f"{tree}:engine") if tree else ""
+    finally:
+        index.unlink(missing_ok=True)
 
 
 def cmd_corpus(args) -> int:

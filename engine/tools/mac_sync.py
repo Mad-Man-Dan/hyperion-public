@@ -15,7 +15,7 @@ HYPERION_MAC_KEY stand for --host and --key.
     python tools/mac_sync.py --out <file.tar.gz> --extras [--third]
 
 writes the tar to a file instead, for a Mac that builds from a checkout of the source (the
-release's Mac build on GitHub's runners, .github/workflows/mac-release.yml): --extras leaves out
+release's Mac and Linux builds on GitHub's runners, .github/workflows/release-packages.yml): --extras leaves out
 the tracked files and keeps what a checkout lacks.
 
 On the Mac, then:

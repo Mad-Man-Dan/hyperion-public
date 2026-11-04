@@ -102,10 +102,12 @@ through SDL3 (`modules/render.md`): as Settings saved it ("Display", "Monitor an
 resolution"; borderless full screen until the player chooses), or as `HYPERION_WINDOW` asks
 (`fullscreen`, `windowed`, `background`, `hidden`); a `background` window opens centred on
 the screen `HYPERION_DISPLAY` names, `left`, `right` or a number (1 the primary), so test
-runs keep off the main screen. `HYPERION_RENDERER` picks the presenter: the GPU presenter
-on `vulkan` (the default since 2026-10-18, falling back to the driver SDL picks, Direct3D
-12 on Windows) or `direct3d12` (the default from 2026-10-02), or SDL's renderer (`sdl`, and
-the fallback when no GPU driver starts) (`modules/render.md`). Without it, Settings'
+runs keep off the main screen. `--renderer <name>` or `HYPERION_RENDERER` picks the
+presenter: the GPU presenter on `vulkan` (the default since 2026-10-18, falling back to the
+driver SDL picks, Direct3D 12 on Windows) or `direct3d12` (the default from 2026-10-02), or
+SDL's renderer (`sdl`, and the fallback when no GPU driver starts) or its `software` one, which
+needs no graphics driver. A driver that hangs or crashes in its start is left out of the
+starts after it (`modules/render.md`, `presenter.txt`). Without either, Settings'
 Renderer on Windows (`"renderer"`, `vulkan` or `direct3d12`, 2026-10-20) names the GPU
 presenter's driver, with the same fallbacks; `hyperion_render.log` names the one in use.
 `--install classic|remastered` and `--install-folder <folder>` name the game's files for one

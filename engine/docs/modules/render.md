@@ -75,13 +75,29 @@ defines it.
 ### The two presenters
 
 `PresentCreate` (`port_present.cpp`) picks one at start-up. Without `HYPERION_RENDERER` it
-tries the GPU presenter on `vulkan`, then on whatever driver SDL_GPU picks (Direct3D 12 on
-Windows), and falls back to `SDL_CreateRenderer` with vsync off. `HYPERION_RENDERER` names
-one: `vulkan`, `direct3d12`, `gpu` for SDL_GPU's own choice, or `sdl`. Without it, Settings'
-Renderer on Windows (`"renderer"`: `vulkan`, the default, or `direct3d12`) names the first
-driver tried, with the same fallbacks after it; it takes a restart. SDL's renderer is not
-offered there: Hyperion's menus, Settings among them, need the GPU presenter.
-`hyperion_render.log` names the presenter, the device and the driver version in use. When
+tries the GPU presenter on `vulkan`, then on `direct3d12` on Windows (named, as SDL_GPU's own
+choice falls back from Direct3D 12 to Vulkan), or whatever driver SDL_GPU picks elsewhere. It
+then falls back to `SDL_CreateRenderer` with vsync off, on Direct3D 11, Direct3D 9 or OpenGL
+(Metal or OpenGL on the Mac, OpenGL elsewhere), never SDL's Direct3D 12, Vulkan or GPU
+renderers, which use the drivers that just failed (`SDL_RENDER_DRIVER`, when set, chooses
+instead); and last to SDL's software renderer.
+`--renderer` or `HYPERION_RENDERER` names one: `vulkan`, `direct3d12`, `gpu` for SDL_GPU's
+own choice, `sdl` or `software`; the option comes before the variable. Without
+either, Settings' Renderer on Windows (`"renderer"`: `vulkan`, the default, or `direct3d12`)
+names the first driver tried, with the same fallbacks after it; it takes a restart. SDL's
+renderer is not offered there: Hyperion's menus, Settings among them, need the GPU presenter.
+`hyperion_render.log` names the presenter, the device and the driver version in use.
+
+A driver that hangs or crashes in its start returns no error to fall back on, so each try
+(`vulkan`, `direct3d12`, `gpu`, `sdl`, `software`) is noted in `presenter.txt` in the data folder before
+it starts and cleared when it returns. A start that finds a note not cleared leaves that one
+out, and so does every start after it, until the graphics adapters or their drivers (the
+start-up log's `gpu` line) or Settings' Renderer change. A try that has not returned in 20
+seconds starts Hyperion again (`PortInstanceRestart`) and ends the stuck copy, so the player
+waits once instead of having to start the game again. A presenter named by `--renderer` or
+`HYPERION_RENDERER` is always tried and never restarted; the browser build and the design
+engine do not restart either. `HYPERION_TEST_STARTUP=presenter:stall` stands for a driver
+that hangs. When
 the GPU presenter starts it also starts the GPU scene at its last stage with the software's
 drawing off (`PortSceneDefault`), unless `HYPERION_GPU_SCENE` says otherwise.
 
@@ -569,6 +585,12 @@ exception: while it runs the camera aims at the place the trigger names (`PortVi
 keeps its middle), so the place is in the picture's middle and not to one side. At zoom 1 the
 camera is the game's view, as in 1.17.
 
+That scroll steps in multiples of 8 and holds its trigger until it lands on its target, which is
+on the 8-pixel grid. A zoomed scroll or a middle-button drag can leave the view off that grid,
+where the last 1 to 7 pixels have no step and the trigger, and the scene after it, would wait for
+good; `scroll_update` moves those pixels at once (`ScrollAutoOntoGrid`, `scroll.cpp`). A view
+on the grid scrolls as classic's does.
+
 Under SDL's renderer (a browser's tab, or a PC where no GPU driver starts) there is no GPU
 scene, so the software draws the render view itself (`g_bSoftPass`): into the render view's
 own buffer and a scroll ring of its own size, swapped in for the pass, whole each pass
@@ -604,7 +626,7 @@ image.
 
 | Name | Effect |
 |---|---|
-| `HYPERION_RENDERER=vulkan/direct3d12/gpu/sdl` | the presenter; without it Vulkan, then SDL_GPU's choice, then SDL's renderer |
+| `HYPERION_RENDERER=vulkan/direct3d12/gpu/sdl/software` | the presenter, as `--renderer`; without it Vulkan, then Direct3D 12 (SDL_GPU's choice off Windows), then SDL's renderer, then its software one |
 | `HYPERION_GPU_SCENE=terrain/sprites/map/screen/gpu/off` | how far the GPU draws the map and where the check compares; `gpu` by default with the GPU presenter |
 | `HYPERION_GPU_CHECK=1` | reads every frame back and compares it with the screen, and the GPU's map with the game's |
 | `HYPERION_GPU_SCENE_DUMP=<frame>` | writes the first differing scene frames, and the one named, as raw maps |

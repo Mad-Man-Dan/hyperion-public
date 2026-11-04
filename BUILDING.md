@@ -58,8 +58,8 @@ Then on the Mac:
     python3 tools/package.py --mac
 
 The program is `src117/build/mac-arm64/Hyperion.arm64`. The package is `Hyperion.app` in a zip.
-The release's own Mac package is built on GitHub's Mac runner
-(`.github/workflows/mac-release.yml`).
+The release's own Mac and Linux packages are built on GitHub's runners
+(`.github/workflows/release-packages.yml`).
 
 ## Browser
 

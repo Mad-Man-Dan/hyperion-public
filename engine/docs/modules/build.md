@@ -101,7 +101,7 @@ and prints one line for the commit message; it exits 1 when any run fails.
 | A commit touching drawing | also the suite with `--renderer vulkan --scene screen --gpu-check`: every GPU frame compared with the game's own, a frame that differs failing the run. The build itself refuses a shader uniform block past 4 KB or laid out differently for SPIR-V than for Direct3D (`tools/shader_layout.py`); HD art is not in the check, so a change to it is also looked at in a game under Vulkan |
 | A commit touching Storm, the file layer or the formats | also the port tests, `tools/build_porttest.bat` and `build_porttest_x64.bat`, then `storm_test.exe testrun\storm.dll` and the others the header of the `.bat` lists: each runs the port's code against the original's. On 2026-10-22 all twelve, ten x86 and two x64, gave no difference (`rt_runs/porttest_20261022`); storm_test and smk_test link again with the stubs in `tools/porttest/` (SDL's header, the Remastered archive, the presenter's palette, the WebM player) |
 | A commit that changes comments only | first `python tools/comment_check.py`: the code with the comments stripped is unchanged, and every `/*0xNN*/` offset and `Hyperion` marker is kept; `tools/comment_lint.py` checks the comments against the rules (`overview.md`, Conventions) |
-| A merge to master, or a major update | `gate --merge`: the full set, the archive set (the rest of the SSCAIT 2016 archive), hxsuite, all on both kinds of files, and the Linux x64 (both) and arm64 (the MPQs) builds' quick suites; the user's word to merge |
+| A merge to master, or a major update | `gate --merge`: the full set, the archive set (the rest of the SSCAIT 2016 archive), hxsuite, all on both kinds of files, and the Linux x64 (both) and arm64 (the MPQs) builds' quick suites; the user's word to merge. Its `gate.json` records engine/ as it played, uncommitted files included, for a release to reuse it |
 
 A run passes when it read the files it was given (its `hyperion_init.log`; on Remastered's
 install alone, no file from an MPQ and no name refused, from its file logs), played the
@@ -144,7 +144,16 @@ they copy.
   what git tracks, the shaders and the browser program the Windows builds wrote, the package's
   documents and maps, and `build_origin.json` with the commit, branch and build number, which
   `build_engine_linux.py` reads where there is no git. `--third <folder>` adds a third-party
-  source a new library needs.
+  source a new library needs. `--out <file> --extras --third` writes only what a checkout lacks,
+  the inputs of the release's runner builds.
+- A public release is `tools/release.py` (`prep`, `publish`, `live`, `announce`; the `/release`
+  skill). This machine builds and packages Windows; GitHub's runners build the Mac and both
+  Linux packages from the public checkout (`public/.github/workflows/release-packages.yml`,
+  Linux in the same Ubuntu 22.04 image as `build_engine_linux.py`'s), and their symbols come
+  back into `testrun/share/symbols/`. prep reuses the last merge gate when engine/ as it played
+  differs from the release's commit only in the version, notes and documents, and keeps a
+  build already made from the same engine/ tree (`release-built.txt` beside it). Its steps'
+  logs are in the share folder's `logs/`. The details: `../../../docs/public-release.md`.
 - The full process is in `../../../docs/versioning.md`.
 
 ## Gotchas

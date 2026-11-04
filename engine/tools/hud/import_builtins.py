@@ -30,7 +30,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINE = os.path.normpath(os.path.join(HERE, "..", ".."))
 OUT = os.path.join(ENGINE, "huds")
-DEFAULT_SOURCE = os.path.join(ENGINE, "..", "..", "local-design-center", "public", "hyperion", "04-widescreen-ui")
+DEFAULT_SOURCE = os.path.join(ENGINE, "..", "design", "04-widescreen-ui")
 
 LAYOUTS = ["mech-span", "mech-span-min", "mech-flank", "mech-flank-right", "terran-r9",
            # the replay layouts the four Mech positions name

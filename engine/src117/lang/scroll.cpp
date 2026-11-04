@@ -102,6 +102,16 @@ extern starent_t *sgLayerStars_g[5];
 extern void *sgpStarData_g;
 #endif
 
+// 0x543220 -- the scroll's limit across (cellscrl.cpp).
+#ifndef OC_GLMAPPIXELRGT
+#define OC_GLMAPPIXELRGT
+#ifdef OC_DLL_MODE
+#define glMapPixelRgt (*reinterpret_cast<DWORD *>(OC_VA(0x543220u)))
+#else
+extern DWORD glMapPixelRgt;
+#endif
+#endif
+
 // 0x6A5ED4 -- the auto-scroll flag, a BYTE.
 #ifdef OC_DLL_MODE
   #ifndef sgbAutoScroll_g
@@ -402,6 +412,35 @@ bool ScrollWindowActive(void) {
 // passing &s.x lets the whole struct escape, which is why the oracle reloads
 // the Y shift after that call.
 int cursor_get_scroll_cursor(int *pnScrollX, int *pnScrollY);
+
+// Hyperion: classic's view is always on the 8-pixel grid an auto-scroll's target is on. A zoomed
+// scroll, a drag or a limit off the grid leaves it a few pixels off, and the speed table has no
+// step under 8, so the scroll would stop 1 to 7 pixels short and the centre-view trigger waiting
+// on it would wait for good. Those pixels move at once, and a target past the scroll's limit
+// comes inside it. On the grid nothing moves, so classic's scrolls are as they were.
+static void ScrollAutoOntoGrid() {
+  if (sgAutoScrollX_g > glMapPixelRgt)
+    sgAutoScrollX_g = glMapPixelRgt & ~7u;
+  if (sgAutoScrollY_g > glMapPixelBtm)
+    sgAutoScrollY_g = glMapPixelBtm & ~7u;
+  const LONG nFromX = glScrollPixelX;
+  const LONG nFromY = glScrollPixelY;
+  const LONG nDX = (LONG)sgAutoScrollX_g - glScrollPixelX;
+  const LONG nDY = (LONG)sgAutoScrollY_g - glScrollPixelY;
+  if (nDX > 0 && (nDX & 7) != 0)
+    cell_scroll_rgt(nDX & 7);
+  else if (nDX < 0 && (-nDX & 7) != 0)
+    cell_scroll_lft(-nDX & 7);
+  if (nDY > 0 && (nDY & 7) != 0)
+    cell_scroll_dn(nDY & 7);
+  else if (nDY < 0 && (-nDY & 7) != 0)
+    cell_scroll_up(-nDY & 7);
+  if (glScrollPixelX != nFromX || glScrollPixelY != nFromY) {
+    gamemap_force_redraw();
+    PortViewScrollStep(nFromX, nFromY);
+  }
+}
+
 void scroll_update() {
   struct { int bMoved; int y; int x; } s;
   DWORD dwRow;
@@ -415,6 +454,7 @@ void scroll_update() {
     return;
   if (sgbAutoScroll_g != 0) {
     usel_cancel_drag_evt();
+    ScrollAutoOntoGrid();
   } else {
     if (gbSelectDragging != 0)
       return;

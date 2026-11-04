@@ -124,7 +124,8 @@ a tool mod's channel or the canvas's runs, except over a campaign's mission
 overlay turned on in a skirmish stays hidden (`PortDebugViewShown`). While the overlay is off,
 a button at the top of the game opens it in the canvas, or in a run with `--control` or
 `HYPERION_DEBUG_VIEW`; a skirmish played while a tool mod's channel is open shows no button,
-and F6 opens the overlay there.
+and F6 opens the overlay there. `HYPERION_CAPTURE` leaves
+the button out, for the website's captures (`tools/capture/capture.py`).
 The overlay has four modes, `off`, `window`, `full` and `counter`; F6 goes from one to the
 next and back (Settings' Hotkeys tab changes the key), the channel's `overlay` sets it by
 name, and the panel's buttons do the same. In `window` the game is letterboxed into the
@@ -486,15 +487,16 @@ Use `testrun/hx64` (the harness's and `hxbench`'s folder) or `--data=<folder>` i
 | `HYPERION_PROFILE=1` | `hyperion_profile.log` every 10 seconds, sampled; the channel's `profile` for a moment |
 | `HYPERION_FRAME_LOG=<folder>` | the frame log, `1` for one in the data folder |
 | `HYPERION_DEBUG_VIEW` | Debug Tools' overlay available without the channel |
+| `HYPERION_CAPTURE` | no button opening Debug Tools' overlay at the top of the game, for a capture |
 | `HYPERION_CANVAS_BATTLE=1` | the canvas with two armies and waves |
 | `HYPERION_CONTROL_PORT` | the port the MCP server connects to |
 | `HYPERION_TEST_MOUSE=1` | a background window takes a posted mouse message |
-| `HYPERION_GPU_CHECK=1` | the GPU's frame compared with 1.17's (full colour off under it) |
-| `HYPERION_SNAPTEST=<period>,<back>[,<frame>]` | the rewind self-test, read with `tools/snapdiff.py` |
 | `HYPERION_TEST_CRASH=<kind>[:menus\|game]` | a crash on purpose: `av`, `abort`, `terminate`, `throw`, `invalid` or `purecall`, in the menus (the default) or at a game's start |
 | `HYPERION_TEST_STARTUP=<stage>:fail\|stall` | the start-up step of that name fails, or stops, for the error window and the watchdog |
 | `HYPERION_ERROR_WINDOW=drawn` | the error window drawn with SDL on Windows, as off Windows |
 | `--crash-report <folder>` | the error window for a crash report's folder; what a crashed copy starts |
+| `HYPERION_GPU_CHECK=1` | the GPU's frame compared with 1.17's (full colour off under it) |
+| `HYPERION_SNAPTEST=<period>,<back>[,<frame>]` | the rewind self-test, read with `tools/snapdiff.py` |
 | `HYPERION_SNAPPROBE=<a>,<b>` | `snapprobe.txt` over those game frames, read with `tools/snapprobe.py` |
 | `HYPERION_SYNC_DUMP=<frame>,<folder>` | each hash domain's bytes at that frame, to compare two runs |
 | `HYPERION_WORKERS`, `HYPERION_CORES`, `HYPERION_LOOP_REST`, `HYPERION_LOOP_MARGIN_US`, `HYPERION_FRAMES_AHEAD`, `HYPERION_VISION_AHEAD*` | the performance settings `hxbench.py` measures; `../hyperion-exe.md` has them all |

@@ -4,6 +4,15 @@ What changed in each version of Hyperion, newest first. The game shows the same 
 Patch Notes. Versions are numbered as `docs/versioning.md` says; this page is written from
 `engine/notes/release-notes.json` by `engine/tools/release_notes.py md`.
 
+## v0.7.2-beta, 2026-11-04
+
+**Start-up and campaign scene fixes.** Hyperion now starts on PCs where the graphics driver hangs or fails, and campaign scenes that move the camera now always start.
+
+### Fixed
+
+- **Starting on some graphics drivers.** On some PCs, laptops with two graphics chips in particular, Hyperion stopped at a black screen while starting. If the graphics driver hangs or fails, Hyperion now restarts by itself after 20 seconds and draws another way, down to one that needs no graphics driver at all. You can also choose one yourself: Hyperion.exe --renderer sdl, or --renderer software as the last resort. The start-up report now names your graphics card and its driver.
+- **Campaign scenes that didn't start.** A scene that moves the camera to a place on the map sometimes never started, which held up the mission. This sometimes happened if you had scrolled while zoomed in or out, or dragged the map with the middle mouse button.
+
 ## v0.7.1-beta, 2026-10-30
 
 **Language support, mod system updates and security fixes.** Hyperion and the game in 13 languages, groundwork for mods to bring their own sounds, art and video, better help when Hyperion can't start or crashes, and security fixes.

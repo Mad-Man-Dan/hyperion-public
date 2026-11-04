@@ -306,7 +306,7 @@ void FactLines(const std::vector<Fact> &facts, const Folders &known, std::vector
   const Fact *pCommit = Find(facts, "build", "commit");
   if (pVersion != NULL)
     pMust->push_back("Hyperion " + pVersion->value + (pCommit != NULL ? " (" + pCommit->value + ")" : ""));
-  const char *const kSystem[] = {"os", "cpu", "memory"};
+  const char *const kSystem[] = {"os", "cpu", "memory", "gpu"};
   for (const char *pszName : kSystem)
     if (const Fact *f = Find(facts, "system", pszName))
       pMust->push_back(f->name + ": " + f->value);

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const engine = path.resolve(here, '..', '..');
 const source = process.argv[2] ||
-  path.resolve(engine, '..', '..', 'local-design-center', 'public', 'hyperion', '04-widescreen-ui');
+  path.resolve(engine, '..', 'design', '04-widescreen-ui');
 const exe = path.join(engine, 'src117', 'build', 'x64', 'Hyperion.exe');
 
 const DESIGNS = [

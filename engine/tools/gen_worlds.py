@@ -18,9 +18,7 @@ import sys
 ENGINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(ENGINE)
 OUT = os.path.join(ENGINE, "src117", "port", "front", "port_world_table.h")
-SOURCES = [os.path.join(REPO, "design", "11-front-end", "worlds.js"),
-           os.path.join(os.path.dirname(REPO), "local-design-center", "public", "hyperion", "11-front-end",
-                        "worlds.js")]
+SOURCES = [os.path.join(REPO, "design", "11-front-end", "worlds.js")]
 
 # worlds.js wants a window; give it one, then print every world and state with its defaults
 NODE = r"""

@@ -1,0 +1,123 @@
+# Builds a release's Mac and Linux packages on GitHub's runners and attaches them to the
+# release. The release's maintainer starts it once the release exists as a draft with
+# build-inputs.tar.gz attached: what a checkout lacks (the shaders the Windows build compiles,
+# the browser build, the test maps, the third-party sources and the build's origin), written
+# by engine/tools/mac_sync.py --out <file> --extras --third. Each job keeps its program's
+# symbols as a workflow artifact, for reading crash reports. The inputs are removed after.
+name: Release packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "the release's tag, for example v0.7.2-beta"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Tools
+        run: brew install ninja cmake || brew upgrade cmake ninja || true
+
+      - name: Inputs
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern build-inputs.tar.gz --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/build-inputs.tar.gz"
+
+      - name: Build
+        working-directory: engine
+        run: python3 tools/build_engine_linux.py
+
+      - name: Package
+        working-directory: engine
+        run: python3 tools/package.py --mac --out "$RUNNER_TEMP/out"
+
+      - name: Starts
+        run: |
+          app=$(find "$RUNNER_TEMP/out" -name Hyperion.app -maxdepth 3 -type d | head -1)
+          if [ -n "$app" ]; then
+            codesign --verify --deep --strict "$app"
+            otool -L "$app/Contents/MacOS/"Hyperion* | head -20
+          fi
+
+      - name: Attach
+        run: |
+          zip=$(find "$RUNNER_TEMP/out" -name "Hyperion-*-mac-arm64.zip" | head -1)
+          test -n "$zip"
+          shasum -a 256 "$zip"
+          gh release upload "$TAG" "$zip" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: symbols-mac-arm64
+          path: engine/testrun/share/symbols
+
+  # in the image the local Linux builds use (Ubuntu 22.04, clang 18), so the program needs the
+  # same glibc; the ARM runner builds natively
+  linux:
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Inputs
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern build-inputs.tar.gz --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/build-inputs.tar.gz"
+
+      - name: Image
+        run: docker build -t hyperion-linux engine/tools/linux
+
+      - name: Build and package
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/src" -w /src/engine hyperion-linux sh -c \
+            "python3 tools/build_engine_linux.py && python3 tools/package.py --linux ${{ matrix.arch }} --out /src/out"
+
+      - name: Starts
+        run: |
+          prog=$(find engine/src117/build/linux-${{ matrix.arch }} -maxdepth 1 -name "Hyperion.*" -type f | head -1)
+          test -n "$prog"
+          docker run --rm -v "$PWD:/src" hyperion-linux sh -c "ldd /src/$prog; ! ldd /src/$prog | grep 'not found'"
+
+      - name: Attach
+        run: |
+          tgz=$(find out -name "Hyperion-*-linux-${{ matrix.arch }}.tar.gz" | head -1)
+          test -n "$tgz"
+          sha256sum "$tgz"
+          gh release upload "$TAG" "$tgz" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: symbols-linux-${{ matrix.arch }}
+          path: engine/testrun/share/symbols
+
+  # only when every package is attached, so a run started again after a failure has its inputs
+  done:
+    needs: [mac, linux]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Remove the inputs
+        run: gh release delete-asset "$TAG" build-inputs.tar.gz --repo "$GITHUB_REPOSITORY" --yes

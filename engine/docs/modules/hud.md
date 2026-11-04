@@ -458,8 +458,9 @@ Hotkeys tab (`gameplay.md`).
 ## Hyperion's selection
 
 `HX_OPT_SELECTION` (0x40, `hxrules.h`), recorded by every new game by Hyperion's rules but one on
-an EUD map, whose triggers read 1.17's arrays. A game over the network plays the classic rules
-and so selects 12. A replay or save without the option selects 12 as recorded.
+an EUD map, whose triggers read 1.17's arrays. A room's match by Hyperion's rules (since
+v0.6.8-beta) takes it too; one by the classic rules selects 12. A replay or save without the
+option selects 12 as recorded.
 
 - **Storage.** `SelectionWide()` is true for such a game, and `SelectionMax()` is 255. The
   selections, groups and the console's units are rows of the port's own (`port_selwide.cpp`),

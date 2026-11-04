@@ -29,7 +29,7 @@ the game makes of it, which replays record, so a change here must keep every rep
 | Linux x64 | built and on master since 2026-10-16, the full replay suite identical. `tools/build_engine_linux.py` into `src117/build/linux-x64/Hyperion.x86_64` |
 | Linux arm64 | the same, `Hyperion.aarch64`, the suite identical under emulation and played on a Jetson Orin NX |
 | browser (Emscripten) | 64-bit WebAssembly, `tools/build_engine_web.py` into `src117/build/web/`. Threads are fibers, the picture is SDL's renderer on WebGL, and Hyperion's own menus need the GPU presenter, so 1.17's menus show |
-| Mac | arm64 for macOS 13 on, on `hx-mac`: `tools/build_engine_linux.py` run on the Mac, into `src117/build/mac-arm64/Hyperion.arm64`; the quick suite identical. Packaged as `Hyperion.app`, signed ad hoc (below) |
+| Mac | arm64 for macOS 13 on: `tools/build_engine_linux.py` run on the Mac, into `src117/build/mac-arm64/Hyperion.arm64`, drawn through Metal; the quick suite identical. Packaged as `Hyperion.app`, signed ad hoc, not by Apple (`tools/package.py --mac`, Open items) |
 
 ## Key files
 

@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const engine = path.resolve(here, '..', '..');
 const source = process.argv[2] ||
-  path.resolve(engine, '..', '..', 'local-design-center', 'public', 'hyperion', '04-widescreen-ui');
+  path.resolve(engine, '..', 'design', '04-widescreen-ui');
 
 const ctx = { console, Math, JSON, Object, Array, Number, String };
 ctx.window = ctx;
