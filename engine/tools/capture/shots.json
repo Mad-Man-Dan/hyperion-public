@@ -1,0 +1,1890 @@
+{
+  "scenes": {
+    "bgh-bench": {
+      "title": "Eight computers on Big Game Hunters, Terran and Protoss, by Hyperion's rules",
+      "map": "E:/StarCraft/Maps/BroodWar/WebMaps/(8)Big Game Hunters.scm",
+      "frames": 24000,
+      "races": "ttppttpp",
+      "args": [
+        "--rules=hyperion"
+      ]
+    },
+    "hudfight": {
+      "title": "The HUD moment: a staged game by Hyperion's rules, the local Terran's army of 25 in a Protoss base, saved at frame 15120",
+      "made_by": "stage_fight.py 8202 15000 hudfight",
+      "file": "hudfight.snx"
+    }
+  },
+  "recipes": {
+    "home": {
+      "kind": "still",
+      "title": "The home screen",
+      "args": [],
+      "wait": 10,
+      "steps": []
+    },
+    "hud-classic": {
+      "kind": "still",
+      "title": "Classic",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "classic"
+        }
+      }
+    },
+    "hud-mech-span": {
+      "kind": "still",
+      "title": "Mech",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      }
+    },
+    "hud-mech-min": {
+      "kind": "still",
+      "title": "Mech, size min",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "min",
+          "material": "gunmetal"
+        }
+      }
+    },
+    "hud-mech-flank": {
+      "kind": "still",
+      "title": "Mech, flank",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "flank",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      }
+    },
+    "hud-mech-flank-right": {
+      "kind": "still",
+      "title": "Mech, flank right",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "flank-right",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      }
+    },
+    "hud-mech-graphite": {
+      "kind": "still",
+      "title": "Mech, graphite",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "graphite"
+        }
+      }
+    },
+    "hud-mech-blackout": {
+      "kind": "still",
+      "title": "Mech, blackout",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "blackout"
+        }
+      }
+    },
+    "hud-r9": {
+      "kind": "still",
+      "title": "R9",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "r9"
+        }
+      }
+    },
+    "hud-light": {
+      "kind": "still",
+      "title": "Mech, an orange light",
+      "notes": "The HUD moment: hudfight.snx, a staged game by Hyperion's rules, the local Terran's army fighting in a Protoss base, selected.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "sleep": 2
+        }
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal",
+          "mech.light": "#ff8a2a",
+          "mech.selection": "light"
+        }
+      }
+    },
+    "hud-tooltip": {
+      "kind": "still",
+      "title": "A command card button's tooltip",
+      "notes": "hudfight.snx, Mech span: a Barracks selected, the pointer over Train Marine.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 3584,
+          "y": 3320
+        },
+        {
+          "cmd": "select",
+          "x": 3584,
+          "y": 3440,
+          "player": 4,
+          "radius": 40
+        },
+        {
+          "cmd": "resume"
+        },
+        {
+          "sleep": 1
+        },
+        {
+          "cmd": "click",
+          "x": 1500,
+          "y": 700,
+          "move": true
+        },
+        {
+          "sleep": 0.5
+        },
+        {
+          "cmd": "click",
+          "x": 1625,
+          "y": 830,
+          "move": true
+        },
+        {
+          "sleep": 0.3
+        },
+        {
+          "cmd": "click",
+          "x": 1630,
+          "y": 834,
+          "move": true
+        },
+        {
+          "sleep": 2
+        },
+        {
+          "cmd": "hud_tip",
+          "place": 0
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1520,
+        680,
+        400,
+        400
+      ]
+    },
+    "hud-tab": {
+      "kind": "still",
+      "title": "Settings, the HUD tab",
+      "notes": "Settings over the home screen on the HUD tab, Mech chosen, its live picture.",
+      "args": [],
+      "env": {
+        "HYPERION_FRONT_SETTINGS": "hud"
+      },
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "wait": 10,
+      "steps": []
+    },
+    "mp-windows": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. ",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "title": "The music player's three windows"
+    },
+    "mp-skin-mech": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. ",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "title": "The player in Mech's skin"
+    },
+    "mp-skin-classic": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. ",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "classic"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "title": "The player under Classic"
+    },
+    "mp-skin-blackout": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. ",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "blackout"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "title": "The player in Mech blackout"
+    },
+    "mp-skin-r9": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. ",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "r9"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "title": "The player in R9's skin"
+    },
+    "mp-source": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. The Source menu open, its soundtrack submenu.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "menu:source"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:39"
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "title": "The Source menu",
+      "crop": [
+        1350,
+        4,
+        566,
+        404
+      ]
+    },
+    "mp-eq": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. The equalizer on, Rock's curve, Presets open.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "cmd": "music",
+          "action": "eq",
+          "on": true,
+          "bands": [
+            5,
+            3,
+            -3,
+            -5,
+            -2,
+            2,
+            5,
+            7,
+            7,
+            7
+          ]
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "menu:presets"
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "title": "The equalizer's presets",
+      "crop": [
+        1340,
+        230,
+        576,
+        320
+      ]
+    },
+    "mp-menu": {
+      "kind": "still",
+      "notes": "hudfight.snx with the music player up at size 200, docked down the right edge, the game's soundtrack playing. The player's menu, Options open as its submenu.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "menu:main"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:40"
+        },
+        {
+          "cmd": "music",
+          "action": "view",
+          "do": "key:39"
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "title": "The player's menu",
+      "crop": [
+        1350,
+        4,
+        566,
+        440
+      ]
+    },
+    "mp-hotkeys": {
+      "kind": "still",
+      "title": "Settings, the Hotkeys tab's Addons rows",
+      "notes": "Settings over the home screen on the Hotkeys tab, scrolled to the end.",
+      "args": [],
+      "env": {
+        "HYPERION_FRONT_SETTINGS": "hotkeys",
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 10,
+      "steps": [
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "move": true
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "cmd": "click",
+          "x": 1100,
+          "y": 600,
+          "wheel": -1200
+        },
+        {
+          "sleep": 1
+        }
+      ]
+    },
+    "mp-callup": {
+      "kind": "clip",
+      "title": "The music player called up over a game",
+      "seconds": 8,
+      "notes": "hudfight.snx playing on, Mech span: the player shown, the soundtrack playing, the map scrolled under it, the player put away.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "resume"
+        },
+        {
+          "sleep": 0.5
+        }
+      ],
+      "during": [
+        [
+          1.0,
+          {
+            "cmd": "music",
+            "action": "play",
+            "index": 0,
+            "show": true
+          }
+        ],
+        [
+          2.6,
+          {
+            "cmd": "scroll",
+            "dir": "right",
+            "ms": 1600
+          }
+        ],
+        [
+          4.4,
+          {
+            "cmd": "scroll",
+            "dir": "left",
+            "ms": 1600
+          }
+        ],
+        [
+          6.6,
+          {
+            "cmd": "music",
+            "action": "stop",
+            "show": false
+          }
+        ]
+      ]
+    },
+    "mp-sizes": {
+      "kind": "clip",
+      "title": "The player's sizes",
+      "seconds": 10,
+      "notes": "hudfight.snx paused: the player from 75 to 200 a step at a time, back to 100, Double size on and off.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            700,
+            24
+          ],
+          "eq": [
+            700,
+            140
+          ],
+          "pl": [
+            700,
+            256
+          ],
+          "scale": 75
+        }
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "during": [
+        [
+          0.8,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:100"
+          }
+        ],
+        [
+          1.8,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:125"
+          }
+        ],
+        [
+          2.8,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:150"
+          }
+        ],
+        [
+          3.8,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:175"
+          }
+        ],
+        [
+          4.8,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:200"
+          }
+        ],
+        [
+          6.0,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "size:100"
+          }
+        ],
+        [
+          7.0,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "double:on"
+          }
+        ],
+        [
+          8.6,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "double:off"
+          }
+        ]
+      ]
+    },
+    "mp-shade": {
+      "kind": "clip",
+      "title": "Window shade",
+      "seconds": 8,
+      "crop": [
+        1350,
+        4,
+        566,
+        944
+      ],
+      "notes": "hudfight.snx paused, the player docked at size 200: the player shaded, the playlist too, both opened again.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "game"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 0,
+          "show": true
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "during": [
+        [
+          1.0,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "shade:main"
+          }
+        ],
+        [
+          2.6,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "shade:pl"
+          }
+        ],
+        [
+          4.4,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "unshade:main"
+          }
+        ],
+        [
+          6.0,
+          {
+            "cmd": "music",
+            "action": "view",
+            "do": "unshade:pl"
+          }
+        ]
+      ]
+    },
+    "hud-tab-tour": {
+      "kind": "clip",
+      "title": "The HUD tab",
+      "seconds": 12,
+      "notes": "Settings over the home screen on the HUD tab: Classic to Mech, its layouts, its materials, R9, back to Mech span.",
+      "args": [],
+      "env": {
+        "HYPERION_FRONT_SETTINGS": "hud",
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "settings": {
+        "hud": {
+          "design": "classic",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "wait": 10,
+      "steps": [
+        {
+          "cmd": "click",
+          "x": 1500,
+          "y": 900,
+          "move": true
+        }
+      ],
+      "during": [
+        [
+          0.8,
+          {
+            "cmd": "click",
+            "x": 870,
+            "y": 340
+          }
+        ],
+        [
+          2.2,
+          {
+            "cmd": "click",
+            "x": 1206,
+            "y": 596
+          }
+        ],
+        [
+          3.4,
+          {
+            "cmd": "click",
+            "x": 1344,
+            "y": 596
+          }
+        ],
+        [
+          4.6,
+          {
+            "cmd": "click",
+            "x": 1082,
+            "y": 596
+          }
+        ],
+        [
+          5.8,
+          {
+            "cmd": "click",
+            "x": 1204,
+            "y": 750
+          }
+        ],
+        [
+          7.0,
+          {
+            "cmd": "click",
+            "x": 1320,
+            "y": 750
+          }
+        ],
+        [
+          8.2,
+          {
+            "cmd": "click",
+            "x": 1082,
+            "y": 750
+          }
+        ],
+        [
+          9.4,
+          {
+            "cmd": "click",
+            "x": 870,
+            "y": 470
+          }
+        ],
+        [
+          10.8,
+          {
+            "cmd": "click",
+            "x": 870,
+            "y": 340
+          }
+        ]
+      ]
+    },
+    "mp-mymusic": {
+      "kind": "still",
+      "notes": "hudfight.snx with the player docked at size 200: My music, twelve tracks made for the captures (make_tracks in the capture folder's music\\), the fourth playing, the Add menu open.",
+      "args": [
+        "--load",
+        "{scenes}/hudfight.snx"
+      ],
+      "settings": {
+        "hud": {
+          "design": "mech",
+          "layout": "span",
+          "size": "full",
+          "material": "gunmetal"
+        }
+      },
+      "music": {
+        "windows": {
+          "main": [
+            1358,
+            12
+          ],
+          "eq": [
+            1358,
+            244
+          ],
+          "pl": [
+            1358,
+            476
+          ],
+          "scale": 200
+        }
+      },
+      "env": {
+        "HYPERION_TEST_MOUSE": "1"
+      },
+      "wait": 1,
+      "steps": [
+        {
+          "until_frame": 1,
+          "timeout": 60
+        },
+        {
+          "cmd": "pause"
+        },
+        {
+          "cmd": "camera",
+          "x": 843,
+          "y": 3820
+        },
+        {
+          "cmd": "select",
+          "x": 843,
+          "y": 3856,
+          "player": 4,
+          "radius": 340
+        },
+        {
+          "cmd": "music",
+          "action": "add",
+          "path": "{data}/music"
+        },
+        {
+          "sleep": 2
+        },
+        {
+          "cmd": "music",
+          "action": "source",
+          "source": "mine"
+        },
+        {
+          "cmd": "music",
+          "action": "play",
+          "index": 3,
+          "show": true
+        },
+        {
+          "sleep": 3
+        },
+        {
+          "cmd": "click",
+          "x": 1500,
+          "y": 700,
+          "move": true
+        },
+        {
+          "sleep": 0.3
+        },
+        {
+          "cmd": "click",
+          "x": 1413,
+          "y": 898
+        },
+        {
+          "sleep": 0.5
+        },
+        {
+          "cmd": "click",
+          "x": 1720,
+          "y": 1040,
+          "move": true
+        },
+        {
+          "sleep": 1
+        }
+      ],
+      "crop": [
+        1350,
+        4,
+        566,
+        1000
+      ],
+      "title": "My music"
+    },
+    "hud-own": {
+      "kind": "still",
+      "title": "A player's own design in the HUD tab",
+      "notes": "Settings over the home screen on the HUD tab, the design center's detached pods design as a player's own (testrun/capture/huds/pods: its hud.json named Pods, Mech's graphite style.json) listed after the built-ins and chosen.",
+      "args": [],
+      "env": {
+        "HYPERION_FRONT_SETTINGS": "hud"
+      },
+      "settings": {
+        "hud": {
+          "design": "user:pods"
+        }
+      },
+      "wait": 10,
+      "steps": []
+    }
+  }
+}

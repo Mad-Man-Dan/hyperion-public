@@ -38,6 +38,7 @@
 #include "../gameplay/port_ai.h"             // AiProfilesSave, AiProfilesRecorded
 #include "../gameplay/port_handicap.h"       // HandicapsSave, HandicapsRecorded
 #include "../gameplay/port_mutators.h"       // MutatorsSave, MutatorsRecorded
+#include "../data/port_mode.h"               // PortModeSave, PortModeRecorded
 #include "../gameplay/port_richbases.h"      // RichBasesRecord, RichBasesRecorded
 #include "../platform/port_settings.h"       // "keepReplays", "checkModFingerprint"
 #include "port_observe.h"  // ObserveFrameDone
@@ -59,6 +60,7 @@ const DWORD kRace = 'ECAR';  // "RACE": the slots' races, a mod's, when a slot h
 const DWORD kAiLv = 'VLIA';  // "AILV": the computers' levels and styles
 const DWORD kHcap = 'PACH';  // "HCAP": the slots' handicaps
 const DWORD kMuts = 'STUM';  // "MUTS": the game's mutators
+const DWORD kMode = 'EDOM';  // "MODE": the game's mode, its settings and the run's seed
 const DWORD kRich = 'HCIR';  // "RICH": the resources that turned rich, unit indices (rich bases)
 const DWORD kStrs = 'SRTS';  // "STRS": a benchmark's stress run, its armies and pools
 const DWORD kUnts = 'STNU';  // "UNTS": the unit table, when it is not the slots'
@@ -111,7 +113,9 @@ const char *const kDataFiles[] = {
 
 bool g_noted;
 bool g_haveSlots, g_haveColors, g_haveRgbs;
-PlayerData g_slots[PLAYER_SLOTS_MAX];
+PlayerData g_slots[PLAYER_SLOTS_MAX];       // the replay being played
+PlayerData g_startSlots[PLAYER_SLOTS_MAX];  // the game being recorded, as it started
+bool g_haveStartSlots;
 ColorRecord g_colors[PLAYER_SLOTS_MAX];
 RgbRecord g_rgbs[PLAYER_SLOTS_MAX];
 
@@ -178,15 +182,23 @@ bool ReplayHxNoted() {
   return g_noted;
 }
 
+void ReplayHxKeepSlots() {
+  for (int s = PLAYER_SLOTS_117; s < PLAYER_SLOTS_MAX; s++)
+    g_startSlots[s] = gPlayerData[s];
+  g_haveStartSlots = true;
+}
+
 int ReplayHxWrite(void *pFile) {
   FILE *f = static_cast<FILE *>(pFile);
   RuleRecord rule;
   ReplayHxRuleMake(&rule);
 
+  // as the game started, as classic's header has its twelve: by the end a player who left or
+  // was defeated has no slot, and the playback would seat nobody there
   PlayerData aSlots[PLAYER_SLOTS_MAX];
   int nSlots = 0;
   for (int s = PLAYER_SLOTS_117; g_hxPlayers && s < PlayerSlots(); s++)
-    aSlots[nSlots++] = gPlayerData[s];
+    aSlots[nSlots++] = g_haveStartSlots ? g_startSlots[s] : gPlayerData[s];
 
   ColorRecord aColors[PLAYER_SLOTS_MAX];
   const int nColors = PlayerSlots();
@@ -212,6 +224,8 @@ int ReplayHxWrite(void *pFile) {
   HandicapsSave(abHandicaps);
   BYTE abMutators[MUTATOR_RECORD_BYTES];
   MutatorsSave(abMutators);
+  BYTE abMode[PORT_MODE_RECORD_BYTES];
+  PortModeSave(abMode);
   std::vector<unsigned int> rich;
   RichBasesRecord(&rich);
   const PortBenchStress stress = PortBenchStressGame();
@@ -224,6 +238,7 @@ int ReplayHxWrite(void *pFile) {
       && ((g_hxRuleOptions & HX_OPT_AI_LEVELS) == 0 || Put(f, kAiLv, abLevels, PLAYER_SLOTS_MAX, AI_PROFILE_BYTES))
       && ((g_hxRuleOptions & HX_OPT_HANDICAP) == 0 || Put(f, kHcap, abHandicaps, PLAYER_SLOTS_MAX, 1))
       && ((g_hxRuleOptions & HX_OPT_MUTATORS) == 0 || Put(f, kMuts, abMutators, 1, MUTATOR_RECORD_BYTES))
+      && ((g_hxRuleOptions & HX_OPT_MODE) == 0 || Put(f, kMode, abMode, 1, PORT_MODE_RECORD_BYTES))
       && (!RichBasesInGame() || Put(f, kRich, rich.empty() ? NULL : &rich[0], static_cast<DWORD>(rich.size()), 4))
       && ((g_hxRuleOptions & HX_OPT_STRESS) == 0 || Put(f, kStrs, &rStress, 1, sizeof rStress))
       && (dwUnits == 0 || Put(f, kUnts, &dwUnits, 1, 4))
@@ -248,6 +263,7 @@ int ReplayHxRead(void *pFile) {
   AiProfilesRecorded(NULL, 0);
   HandicapsRecorded(NULL, 0);
   MutatorsRecorded(NULL, 0);
+  PortModeRecorded(NULL, 0);
   RichBasesRecorded(NULL);
   PortBenchStressRecorded(NULL);
   PoolsUnitsRecorded(0);
@@ -313,6 +329,18 @@ int ReplayHxRead(void *pFile) {
       if (fread(abMutators, s.dwRecordSize, 1, f) != 1)
         return 0;
       MutatorsRecorded(abMutators, static_cast<int>(s.dwRecordSize));
+    } else if (s.dwId == kMode && s.dwCount == 1 && PortModeRecordBytesRead(static_cast<int>(s.dwRecordSize))) {
+      BYTE abMode[PORT_MODE_RECORD_BYTES];
+      if (fread(abMode, s.dwRecordSize, 1, f) != 1)
+        return 0;
+      PortModeRecorded(abMode, static_cast<int>(s.dwRecordSize));
+      // a mode this build has not installed, or at another version, would play another game
+      if (const char *pszWhy = PortModeRecordRefusal()) {
+        g_status.nState = REPLAY_SYNC_REFUSED;
+        Reason(pszWhy);
+        Log("refused: %s", pszWhy);
+        return 0;
+      }
     } else if (s.dwId == kRich && s.dwRecordSize == 4 && s.dwCount <= POOL_UNITS_STORE) {
       std::vector<unsigned int> rich(s.dwCount);
       if (s.dwCount && fread(&rich[0], 4, s.dwCount, f) != s.dwCount)
@@ -472,10 +500,14 @@ const ReplayHxSyncStatus *ReplayHxSync() {
 }
 
 void ReplayHxAssignSlots() {
-  if (!gPlayback || !g_haveSlots || !g_hxPlayers)
+  if (!gPlayback)
+    return;
+  g_haveStartSlots = false;  // not the last recorded game's
+  if (!g_haveSlots || !g_hxPlayers)
     return;
   for (int s = PLAYER_SLOTS_117; s < PLAYER_SLOTS_MAX; s++)
-    gPlayerData[s] = g_slots[s];
+    gPlayerData[s] = g_startSlots[s] = g_slots[s];
+  g_haveStartSlots = true;  // a replay written from this one seats them as it did
 }
 
 void ReplayHxColors() {

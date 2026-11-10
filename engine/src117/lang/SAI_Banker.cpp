@@ -52,6 +52,8 @@ typedef unsigned short      WORD;
                            // scratch buffer for the legacy record
 #include "../h/port_hxsave.h"  // Hyperion: HxSaveLoading
 #include "../port/gameplay/port_ai.h"    // Hyperion: AiDifficulty
+#include "../port/data/port_moddata.h"   // Hyperion: ModRaceAiUnit
+#include "../h/typelimits.h"           // Hyperion: UnitTypeValid
 #include "../gen/globals117.h"
 
 // The two globals this TU declares itself. Both are debts rather than a
@@ -487,7 +489,7 @@ void __fastcall aiscript_defensebuild_aa(int nation, unsigned count, unsigned un
   WORD *arr = gAIBanker[nation].aDefenseBuildAA;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -508,7 +510,7 @@ void __fastcall aiscript_defensebuild_ga(int nation, unsigned count, unsigned un
   WORD *arr = gAIBanker[nation].aDefenseBuildGA;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -529,7 +531,7 @@ void __fastcall aiscript_defensebuild_ag(int nation, unsigned count, unsigned un
   WORD *arr = gAIBanker[nation].aDefenseBuildAG;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -550,7 +552,7 @@ void __fastcall aiscript_defensebuild_gg(int nation, unsigned count, unsigned un
   WORD *arr = gAIBanker[nation].aDefenseBuildGG;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -859,7 +861,7 @@ void __fastcall aiscript_defenseuse_aa(int nation, unsigned count, unsigned unit
   WORD *arr = gAIBanker[nation].aDefenseUseAA;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -880,7 +882,7 @@ void __fastcall aiscript_defenseuse_ga(int nation, unsigned count, unsigned unit
   WORD *arr = gAIBanker[nation].aDefenseUseGA;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -901,7 +903,7 @@ void __fastcall aiscript_defenseuse_ag(int nation, unsigned count, unsigned unit
   WORD *arr = gAIBanker[nation].aDefenseUseAG;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -922,7 +924,7 @@ void __fastcall aiscript_defenseuse_gg(int nation, unsigned count, unsigned unit
   WORD *arr = gAIBanker[nation].aDefenseUseGG;
   if (count > 10)
     return;
-  if (unitType >= 228)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
   unsigned i = 0;
   while (arr[i] != 0) {
@@ -1500,7 +1502,7 @@ void __fastcall set_harass(unsigned nation, unsigned count, unsigned unitType)
     return;
   if (count >= 0x3F)
     return;
-  if (unitType >= 0xE4)
+  if (!UnitTypeValid(unitType))  // Hyperion: the classic 228, and a mod's units
     return;
 
   unsigned i = 0;
@@ -1577,9 +1579,10 @@ void __fastcall aiscript_quick_attack(int nation, int delay) {
 // Written `nRace == 0 ? 41 : 64` it is `mov eax,40h / mov edx,29h / cmove`,
 // which is the oracle. Same semantics either way; only one is the same bytes.
 __declspec(noinline) int __fastcall get_player_worker_type(int nPlayer) {
+  // Hyperion: a mod's race's stand-in for its base's worker
   if (gPlayerData[nPlayer].nRace == 1)     // 1 == Terran
-    return 7;
-  return gPlayerData[nPlayer].nRace == 0 ? 41 : 64;
+    return ModRaceAiUnit(nPlayer, 7);
+  return ModRaceAiUnit(nPlayer, gPlayerData[nPlayer].nRace == 0 ? 41 : 64);
 }
 
 // The same source shape as
@@ -1587,9 +1590,10 @@ __declspec(noinline) int __fastcall get_player_worker_type(int nPlayer) {
 // 0x6E == 110 == Terran Refinery, 0x95 == 149 == Zerg Extractor, 149+8 == 157 == Protoss
 // Assimilator.
 __declspec(noinline) int __fastcall get_player_refinery_type(int nPlayer) {
+  // Hyperion: a mod's race's stand-in for its base's gas building
   if (gPlayerData[nPlayer].nRace == 1)     // 1 == Terran
-    return 110;
-  return gPlayerData[nPlayer].nRace ? 157 : 149;
+    return ModRaceAiUnit(nPlayer, 110);
+  return ModRaceAiUnit(nPlayer, gPlayerData[nPlayer].nRace ? 157 : 149);
 }
 
 // Two mirrored paths (completion vs

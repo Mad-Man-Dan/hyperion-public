@@ -4,6 +4,7 @@
 #ifndef PORT_FRONTSCREENS_H
 #define PORT_FRONTSCREENS_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,11 @@ struct SkirmishRoomSetUp {
   int nKey = 0, nSpeed = 6, nPlayers = 0;
   bool bHyperion = false;  // the match plays by Hyperion's rules, the host's choice
   MutatorSet mut;          // and its mutators, the host's
+  // and the game mode it is played in, the host's too (port_mode.h): its id, "" for none, every
+  // setting off the mode's own defaults as JSON object text, and the run's seed, 0 for one every
+  // seat draws from the game's own
+  std::string mode, modeSettings;
+  uint32_t modeSeed = 0;
   std::vector<SkirmishRoomSeat> seats;
 };
 // The host's set-up as the room should have it; false before a map is chosen.

@@ -5,10 +5,9 @@
 // players, 8 for 64). A game of more than 2,047 units takes wide unit ids, and
 // its sprites the draw order's wide key.
 //
-// The unit table: a game past 1.17's limits, or with a supply cap past 200, holds
-// the map's own units and, for each of its players, its supply cap in units and 100 for its
-// buildings, rounded up to 1,700s; the unit limit (MutatorSet::nUnits) takes it to at least
-// its count. The other pools follow the table in 1.17's proportions, and the AI's pools with
+// The unit table: a game by Hyperion's rules holds the most, POOL_UNITS_MAX, so no unit is
+// refused for want of room; a unit limit (MutatorSet::nUnits, from the command line or a
+// room) names another count. The other pools follow the table in 1.17's proportions, and the AI's pools with
 // them (h/aipools.h). A replay and a save record a table other than the slots' (UNTS, HXUN),
 // since a save does not read its map again.
 #include "../../h/poollimits.h"
@@ -39,14 +38,16 @@ int g_nMapUnits;                        // the map's UNIT records, as its first 
 int g_nUnitsRecorded;                   // a replay's or save's table, 0 for the slots'
 int g_nUnitsOfSlots = POOL_UNITS_117;   // the game's table by its slots alone
 
-// The game's unit table: the slots' nSlots, a replay's or save's own, or the automatic one at
-// least the unit limit, for nPlayers players.
+// The game's unit table: a replay's or save's own, the unit limit's when one is named, the
+// most in a game by Hyperion's rules, and else the slots' nSlots.
 int UnitsForGame(int nSlots, int nPlayers, bool bWide) {
   if (gPlayback || gpLoadGameFile != NULL)
     return g_nUnitsRecorded > 0 ? g_nUnitsRecorded : nSlots;
   const MutatorSet &m = MutatorsOfGame();
   if (m.nUnits > 0)
     return m.nUnits > nSlots ? m.nUnits : nSlots;
+  if (HxRules())
+    return POOL_UNITS_MAX;
   // no cap counts as 1,000 supply
   const int nCap = m.nSupplyCap == 0 ? 1000 : m.nSupplyCap;
   if (!bWide && nCap <= 200)

@@ -34,6 +34,7 @@
 #include "../h/CUnitSearches.h"  // UnitCanReachGroundTarget
 
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The dual spelling, for the unit-type rows this TU reads that are not recorded in
 // re/globals117.json. OC_DLL_MODE only switches spellings inside src117/gen/globals117.h,
@@ -886,6 +887,7 @@ int CUnit::FlingyMaxSpeedWithModifiers()
 // meaning none), and failing that the stock name comes from status_get_str at type + 1 --
 // that table is 1-based. Both arms are tail jumps, as a return f(x); produces.
 #include "../port/data/port_moddata.h"  // Hyperion: ModUnitName, ModUnitEditName
+#include "../port/data/port_modstatus.h"  // Hyperion: ModStatusSpeed
 
 const char *__fastcall get_unit_name_from_type(WORD wUnitType)
 {
@@ -1202,6 +1204,7 @@ BOOL CUnit::IsBeaconType()
 // 0x95, one per race by inference.
 BOOL __fastcall IsBuiltRefineryType(WORD wUnitType)
 {
+  wUnitType = static_cast<WORD>(ModRulesGasType(wUnitType));  // Hyperion: or a mod's
   return wUnitType == 0x6E || wUnitType == 0x9D || wUnitType == 0x95;
 }
 
@@ -1236,15 +1239,18 @@ int CUnit::ModifyGivenMovementSpeed(DWORD dwSpeed)
 
   if (nMod > 0) {
     if (wType == 0x46 || wType == 0x50 || wType == 0x58)
-      return 0x6AB;
-
-    dwSpeed += dwSpeed / 2;
-    if (dwSpeed < 0x355)
-      dwSpeed = 0x355;
+      dwSpeed = 0x6AB;  // Hyperion: kept for the statuses below, where classic returned it
+    else {
+      dwSpeed += dwSpeed / 2;
+      if (dwSpeed < 0x355)
+        dwSpeed = 0x355;
+    }
   } else if (nMod < 0) {
     dwSpeed /= 2;
   }
 
+  if (g_hxModGame)  // Hyperion: a mod's statuses
+    return ModStatusSpeed(this, dwSpeed);
   return dwSpeed;
 }
 

@@ -61,6 +61,13 @@ const unsigned short *ModUnitTree(unsigned nType);
 // A mod's tech's use requirements in the same form (Allowed.cpp's sgTechUseTree), from its
 // record's "use_requires"; null for a tech that is not the mod's, or in a game without it.
 const unsigned short *ModTechUseTree(unsigned nTech);
+// The classic order whose own handler runs a mod's order nOrder of tech nTech: its base's, for
+// the spell orders that do their work themselves (Recall, Scanner Sweep, Defensive Matrix,
+// Hallucination, Mind Control, Feedback); MOD_ORDER_STIM when its tech is Stim Packs or made
+// from it, which has no order of its own; else 0, and the order fires its weapon
+// (DispatchClickAbility). Either way it pays its own tech's energy.
+enum { MOD_ORDER_STIM = 0x100 };
+int ModOrderHandler(unsigned nOrder, unsigned nTech);
 // A mod's tech's research requirements, in 1.17's tree form, when the game has the mod and
 // the tech is researched ("requires" in its record); else null.
 const unsigned short *ModTechResearchTree(unsigned nTech);
@@ -105,8 +112,26 @@ struct ModCardButton {
   bool bUpgrade;         // the button upgrades wTech, an upgrade
   bool bUnitIcon;        // it gives no icon: wUnit's own (ModUnitArtFrame), set for each game
   unsigned char bAi;     // a computer casts it: 1 + the finder (kModAiFinders), or 0, it does not
+  unsigned char bPlace;  // a build menu's button that places wUnit: MOD_PLACE_*, or 0 for a train
+  bool bWords;           // it adds nothing: it changes the words of the card's own button at wPos
+  unsigned short wMatch; // that button's unit, tech or upgrade (its w0E), or 0xFFFF the first there
+  short nWords;          // its new text and hotkey (ModCardWordsString), or -1 it keeps them
+  // the mod's own finder ("ai": {"call", "every"}): the function's place in ModCardAiCall, -1
+  // for none, and how often a caster is asked, in frames
+  short nAiCall;
+  unsigned short wAiEvery;
 };
+// How a build menu's button places its building, by the menu's race.
+enum { MOD_PLACE_NONE, MOD_PLACE_TERRAN, MOD_PLACE_PROTOSS, MOD_PLACE_ZERG };
+// The workers' build menus "cards" may name, classic cards past the units': the Drone's, the SCV's
+// and the Probe's basic structures, then their advanced ones.
+enum { MOD_BUILD_MENU_FIRST = 238, MOD_BUILD_MENUS = 6 };
 const ModCardButton *ModCardButtons(int *pnCount);
+// The function a button's "ai" names by its nAiCall; null for a button with none.
+const char *ModCardAiCall(short n);
+// The text of a button that changes an original button's words (nWords), as the console reads it:
+// the new hotkey or the original's, the original's kind, the new text or the original's.
+unsigned short ModCardWordsString(int nWords, const char *pszOriginal);
 
 // The targets a computer's caster looks for, by the names a cast button's "ai" gives: 1.17's
 // own finders, each of the spell it chooses targets for (ai_update_unit_spells), and last
@@ -149,9 +174,23 @@ void ModRacesRecorded(const unsigned char *pbRaces, int nSlots);
 // A slot's race in the game being played, 0 for one of the three.
 int ModRaceOf(int nSlot);
 
+// The race whose console (nWhat 0) or music (1) the local player's race of the mod takes ("console",
+// "music" in its record), 0 zerg, 1 terran, 2 protoss; nRace, the player's own, when it names none.
+// Read while a game is set up as well as while it runs.
+int ModRaceLook(int nWhat, int nRace);
+// A race's building rules and its advisor (port_modrules.h), null for one of the three.
+struct ModRaceRules;
+const ModRaceRules *ModRaceRulesOf(int nRace);
+// The game's opening track for the local player's race: a classic race's track moved to the same
+// place among the tracks of the race whose music the mod's race takes.
+int ModRaceMusicTrack(int nTrack);
+
 // The unit a player's AI makes and counts where 1.17's AI scripts name nType: a mod's race
 // says what stands in for a unit it goes without ("ai" in its record); else nType.
 int ModRaceAiUnit(int nPlayer, int nType);
+// Its reverse, for the AI's tests of a unit's role (worker, town hall, gas building and the
+// rest): the classic unit a stand-in of the player's race takes the place of; else nType.
+int ModRaceAiClassic(int nPlayer, int nType);
 // And the tech or upgrade it researches where they ask for one of 1.17's.
 int ModRaceAiTech(int nPlayer, int nTech);
 int ModRaceAiUpgrade(int nPlayer, int nUpgrade);
@@ -211,5 +250,45 @@ bool ModArtOwnFrame(int nKind, unsigned nFrame);
 // statwire_init), or in a game of a mod with art of its own a group with the mod's frames,
 // pLoaded freed. The group returned is freed as pLoaded would have been.
 GROUP *ModConsoleGroup(int nKind, GROUP *pLoaded);
+
+// A look types.json names for the marks a mod's scripts draw (docs/mod-data.md, "The looks a
+// mark wears"), by the name it was given; null for a name no mod loaded declares. And the names
+// declared, separated by ", ", for saying what there is.
+struct PortMarkLook;
+const PortMarkLook *ModMarkLook(const char *pszId);
+const char *ModMarkLookNames();
+
+// The seats a mode's enemy is looked for among, in the order they are seated: what sits in each
+// and the team it is on. The teams count from 1, and 0 is a seat on no team at all, which plays
+// against every other; the set-up's rows count from 0, so a row goes in as its team and one
+// more, the way the launch fills the game's own player data.
+enum PortSeatKind { PORT_SEAT_NOBODY, PORT_SEAT_COMPUTER, PORT_SEAT_PERSON };
+struct PortSeat {
+  int nKind = PORT_SEAT_NOBODY;
+  int nTeam = 0;
+};
+
+// The seat a mode treats as the enemy base: the first computer the first person plays against,
+// and the first computer of all where no person is seated. -1 for seats it cannot come out of.
+// bTeams says whether the teams count: false and every computer plays against the person,
+// whatever team the seats name, as a melee game does, so the set-up and the launch each say so
+// for themselves rather than guessing it from the teams. The answer is a place in pSeats, so
+// the set-up is given one of its rows and the launch one of the game's players.
+int PortModeEnemyOf(const PortSeat *pSeats, int nSeats, bool bTeams);
+// The same over the game's own player data, for the game being launched, and -1 in a game with
+// no computer. The local player is not read, so a game and a replay of it pick the same one.
+// It is what a mode's generate is given as ctx.enemy, and the player a mode plays itself
+// (PortModeEnemySlot).
+int PortModeEnemyFind();
+
+// A line for hyperion_mods.log, and for --mod-check's report while a check is running: what a
+// load let through but would rather the mod author knew, from the loaders in the other files.
+// A char pointer rather than a string, so this header keeps its include closure at platform.h
+// for the 263 game TUs that take it.
+void ModDataNote(const char *pszWhat);
+
+// The image a sprite's row names, from the loader's own copy of sprites.dat: the game's table
+// is not written until a game starts, so a load cannot read it. -1 for a row it has none for.
+int ModDataSpriteImage(int nSprite);
 
 #endif

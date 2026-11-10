@@ -234,6 +234,7 @@ A replay, a game or a saved game can be started from the command line, without t
     Hyperion.exe --map <file> --ai-levels <l,l,...>
     Hyperion.exe --map <file> --handicaps <p,p,...>
     Hyperion.exe --map <file> --mutators <preset|name=value,...>
+    Hyperion.exe --map <file> --mode <id> [--mode-settings <preset|name=value,...>] [--mode-seed <n>]
     Hyperion.exe --mod <id> [any of the above]
     Hyperion.exe --load <file>
     Hyperion.exe --canvas[=<tileset>]
@@ -289,6 +290,18 @@ errors:` or `refused:`; the exit code is 0 with no error, 1 with one, 2 when no 
 It skips the check for another running Hyperion, and its logs go to the data folder's
 `mod-check\`.
 
+    Hyperion.exe --mode-roll <id> [<out.json>] [--map <file>] [--mode-settings <...>]
+                 [--mode-seed <n>] [--race <race>] [--players <n>]
+
+rolls a game mode's `generate` once and writes what it returned as a JSON object, with no game
+and no window (`../../docs/mod-data.md`, "A game mode";
+`src117/port/data/port_modcheck.cpp`): the mode, its version, the map, the players, the race,
+the seed and every setting's value, and then either `run` and `records` or `error`. Without
+`--map` it rolls on the first of the install's maps by name; `--players` is how many seats play,
+the first a person and the rest computers of `--race`, the last of them the mode's enemy base.
+The exit code is 0 when it rolled, 1 when it did not and 2 when no mode has the id. Like the
+check it starts beside a running Hyperion, and its logs go to the data folder's `mode-roll\`.
+
     Hyperion.exe --hud-check <layout.json | folder | package.hud> [--style <style.json>]
                  [--pick <option>=<value>]... [--light #rrggbb] [--layout <W>x<H>] [--out <report.json>]
 
@@ -296,7 +309,7 @@ checks a HUD design without a game (`modules/hud.md`, `hud-format.md`): a layout
 its style, a design's folder (its `hud.json`, its `style.json`, its parts files) or a `.hud`
 package, unpacked as a game unpacks it. It prints JSON with `plays`, `errors`, `warnings`,
 `panels` and `timelines`, and with `--layout` the panels' boxes at that screen size, for the
-comparison with the design center's player (`tools/hud/hudgolden.mjs`). The exit code is 0 when
+comparison with the design pages' player (`tools/hud/hudgolden.mjs`). The exit code is 0 when
 the design plays, 1 when it has errors, 2 when a file does not read.
 `HYPERION_HUD=<layout.json>[;<style.json>]` plays a design straight from its files in place of
 Settings' choice, for its maker; its files are read again within a second of being saved.
@@ -552,6 +565,28 @@ fog=none,build=x0.5,tech=all` or `--mutators rich=radius,radius=64,chance=75`. A
 other than 1.17's
 plays by Hyperion's rules with the option `HX_OPT_MUTATORS`, and the replay (`MUTS`) and the
 save (`HXMU`) hold the set; `hyperion_mutators.log` names it.
+`--mode` plays the game with a game mode, by the id of a mode mod installed
+(`../../docs/mod-data.md`, "A game mode"); the skirmish set-up's Game type list, where every mode
+installed is a type of its own, is the other way to it. `--mode-settings` takes a preset's id, or values by name separated by commas, each
+read as its setting takes it: a toggle as `on` or `off`, a number or a seed as a number, a list
+as the items it turns off separated by `+` (`elites=none`), and a choice by its id, e.g.
+`--mode-settings difficulty=insane,push=off` or `--mode-settings holdout`. A setting the mode
+does not have is named in `hyperion_mods.log` and left out, and every setting the command line
+does not give takes its base. `--mode-settings @<file.json>` reads a whole JSON object of
+settings from that file, which is the way to give one: a command line cannot carry the object
+itself, since the quotes inside it are taken as the word's own and every value arrives empty.
+A settings text that does not read as an object leaves every setting at its base and says so in
+`hyperion_mods.log`. `--mode-seed` is the run's seed, a number; 0, or none, draws the
+game's own, which every machine in the game has. A game with a mode plays by Hyperion's rules
+with the option `HX_OPT_MODE`, and the replay (`MODE`) and the save (`HXMD`) hold the mode's id,
+version, a fingerprint of the data it loaded, every setting and the seed, so both roll the same
+run; `hyperion_mods.log` names the mode, its settings and its seed, says what its generate rolled
+and keeps the lines the mode said. `--mod-check <id>` checks a mode mod as it checks any other,
+and rolls its generate; `--mode-roll <id>` rolls it once and writes the run for a tool to read.
+`--mode-trace` has the trace of what the scripts do on from the first frame, which the live
+channel's `script_trace` reads (`modules/data.md`, "The trace of what the scripts do"); it
+changes nothing the game plays.
+
 `--rules` sets the rules a new game plays by
 (`src117/h/hxrules.h`): Hyperion's, the default since 2026-10-22, unless it or the
 `"hyperion"` section of `settings.json` (`"rules"`) says `classic`, 1.17's to the frame; a game

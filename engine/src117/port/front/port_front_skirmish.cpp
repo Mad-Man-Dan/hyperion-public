@@ -35,6 +35,7 @@
 #include "../../h/playerlimits.h"  // g_hxPlayers, PlayerSlots
 #include "port_frontkit.h"
 #include "port_frontlobby.h"  // the lobby's pieces, a map's picture
+#include "port_front_modes.h"     // the modes, each a game type of its own
 #include "port_front_mutators.h"  // the Mutators tab
 #include "port_front_colours.h"   // the colours a row may take
 #include "port_frontscreens.h"
@@ -122,6 +123,10 @@ struct GameType {
   std::string name;
   TGAMEPARAMS params;
   bool bTeamMatch = false;  // Hyperion's Team Match: Free For All's template, with teams
+  // a mod's game type (port_front_modes.h): the mode's id, the tag for the list's note (the mod
+  // it comes from, unless the mode says another word), and what it is for the row's tip. A
+  // classic type leaves them empty and means no mode.
+  std::string mode, tag, line, about;
 };
 
 // The map the set-up is for, held apart from the list, which is made again as the browser
@@ -170,7 +175,12 @@ int g_nSpeed = 6;
 int g_nWatchMul = 1;  // a watched game's speed past Fastest, x2 to x16 (port_watchgame.h)
 int g_nRules = -1;                  // the Rules pulldown: 1 Hyperion, 0 classic, -1 not read yet
 MutatorSet g_mut;                   // the mutators, 1.17's when none is chosen (port_mutators.h)
+PortModeChoice g_mode;              // the game mode and its settings (port_mode.h); no id for none
+bool g_bModeRead;                   // the mode last played has been read from the settings
 int g_nView;                        // the right column's tab: 0 Game Options and the map, 1 Mutators
+// how far the options scroll and how far they can, which the last frame's layout says: with a
+// mode's settings in it the column holds more than it is tall
+float g_fOpts, g_fOptsMax;
 int g_nDensity;                     // the slot list: 0 auto, 1 rows, 2 compact
 bool g_bFolded;                     // the players' frame folded
 bool g_bBrowse;                     // Change Map's browser, over the set-up
@@ -224,6 +234,17 @@ bool Seated(const Slot &s)
 bool Mine(const Slot &s)
 {
   return s.nKind == KIND_YOU || (s.nKind == KIND_PERSON && s.bYou);
+}
+
+// How many players the game seats, every seat counted. What a mode is measured by is this less
+// the seat a mode that plays a player of its own claims, which ModesPlayers works out, since
+// only the mode knows whether it claims one.
+int SeatedCount(void)
+{
+  int n = 0;
+  for (const Slot &one : g_slots)
+    n += Seated(one) ? 1 : 0;
+  return n;
 }
 
 // Skirmish's own set-up, not a host's, may make the player's seat a computer's: the player
@@ -450,7 +471,7 @@ void ShowSetUpMap(void)
 
 // The row's details, read once (Play Custom reads them when a row is picked). 1.17's
 // count of a map's players stops at 8; the slots a Hyperion map gives past them are its
-// HXPL's, read with it, which count as CountValidSlots counts.
+// HXPL's, read with it: its seats, the slots open to a player that have a start location.
 void ReadRow(Row &r)
 {
   if (!IsMap(r) || r.p->dwLoaded != 0)
@@ -458,10 +479,8 @@ void ReadRow(Row &r)
   ReadScenarioInfo(r.p);
   r.nPast8 = 0;
   if (g_hxPlayers && r.p->dwLoading == 0)
-    for (int s = 8; s < PlayerSlots(); ++s) {
-      const unsigned char bOwner = PlayersMapSlot(s)->bOwner;
-      r.nPast8 += s != 11 && (bOwner == 3 || bOwner == 4 || bOwner == 5 || bOwner == 6 || bOwner == 7);
-    }
+    for (int s = 8; s < PlayerSlots(); ++s)
+      r.nPast8 += PlayersMapSeat(s);
 }
 
 int Players(const Row &r)
@@ -539,6 +558,59 @@ void ListSubs(void)
     IterateLeagueTemplates(g_types[g_nType].params.bCategory, g_types[g_nType].params.bSub, AddSub);
 }
 
+// A mod's game types, after the classic ones: one for every mode installed (port_front_modes.h).
+// Each plays on the template of the classic type its declaration names, Melee unless it says
+// another, so the rest of the set-up and the launch read it as they read that type. A type this
+// map does not offer falls back to Melee, which every map has.
+void AddModeTypes(void)
+{
+  const std::vector<ModeType> modes = ModesTypes();
+  if (modes.empty())
+    return;
+  const size_t nClassic = g_types.size();
+  // the classic type by the game header's number, among the ones this map offers; Hyperion's
+  // Team Match is left out, since it is Free For All's template with teams
+  auto byPlays = [nClassic](int nPlays) {
+    for (size_t i = 0; i < nClassic; ++i)
+      if (g_types[i].params.bCategory == nPlays && !g_types[i].bTeamMatch)
+        return i;
+    return nClassic;
+  };
+  for (const ModeType &m : modes) {
+    size_t nOn = byPlays(m.plays);
+    if (nOn >= nClassic)
+      nOn = byPlays(2);
+    if (nOn >= nClassic)
+      continue;  // not even Melee: a mode has nothing to play on
+    GameType t;
+    t.name = m.name;
+    t.params = g_types[nOn].params;
+    t.mode = m.id;
+    t.tag = m.tag;
+    t.line = m.line;
+    t.about = m.about;
+    g_types.push_back(t);
+  }
+}
+
+// The mode the chosen game type is, "" for a classic one.
+const std::string &TypeMode(void)
+{
+  static const std::string kNone;
+  return g_nType < static_cast<int>(g_types.size()) ? g_types[g_nType].mode : kNone;
+}
+
+// The game type a mode is listed as, or -1 when it is not installed.
+int TypeOfMode(const std::string &id)
+{
+  if (id.empty())
+    return -1;
+  for (size_t i = 0; i < g_types.size(); ++i)
+    if (g_types[i].mode == id)
+      return static_cast<int>(i);
+  return -1;
+}
+
 bool UseMapSettings(void)
 {
   return g_nType < static_cast<int>(g_types.size()) && g_types[g_nType].params.bCategory == 10;
@@ -589,6 +661,28 @@ bool HasTeams(void)
 {
   return TeamsOffered() && g_teamNames.size() > 1;
 }
+
+// The row a mode that plays a player of its own will claim, by the one rule the launch settles
+// it with (PortModeEnemyOf, port_moddata.h), so the set-up says what the game will do rather
+// than its own idea of it. A row goes in as its team and one more, since the teams count from 1
+// there and 0 is a seat on no team, which is how Launch fills the game's player data as well.
+// -1 for a set-up the enemy cannot come out of, which subtracts nothing.
+int ModeEnemySeat(void)
+{
+  std::vector<PortSeat> seats(g_slots.size());
+  for (size_t i = 0; i < g_slots.size(); ++i) {
+    const int nKind = g_slots[i].nKind;
+    seats[i].nKind = nKind == KIND_COMPUTER                              ? PORT_SEAT_COMPUTER
+                     : nKind == KIND_YOU || nKind == KIND_PERSON ? PORT_SEAT_PERSON
+                                                                : PORT_SEAT_NOBODY;
+    seats[i].nTeam = g_slots[i].nTeam + 1;
+  }
+  return PortModeEnemyOf(seats.empty() ? NULL : &seats[0], static_cast<int>(seats.size()), HasTeams());
+}
+
+// Whether such a seat is there at all, which is what the modes are told: the seat's own place is
+// the launch's business and not the set-up's.
+bool ModeEnemySeated(void) { return ModeEnemySeat() >= 0; }
 
 // The map's starts known for every row: then starts by slot and layouts from the map.
 bool StartsKnown(void)
@@ -850,12 +944,61 @@ void SetUp(int nRow)
   NoteSlots(g_map.name.c_str());
 }
 
+// The mode the set-up starts with, read once: the command line's where it names one, else the
+// one last played (port_front_modes.h).
+void ModeRead(void)
+{
+  if (g_bModeRead)
+    return;
+  g_bModeRead = true;
+  g_mode = PortModeChosen().id.empty() ? ModesRemembered() : PortModeChosen();
+}
+
+void NoteMode(void);
+
+// A mode is a game type, so the two are kept together. The type leads where the player has just
+// chosen one: a mod's type turns its mode on, keeping the settings it was last set up with, and a
+// classic type turns the mode off.
+void ModeFromType(void)
+{
+  ModeRead();
+  if (g_mode.id != TypeMode()) {
+    ModesChoose(&g_mode, TypeMode());
+    g_fOpts = 0.0f;  // the column starts at its top on the mode chosen
+    // a mode chosen opens its own tab, since its settings are there; a classic type has none, so
+    // the tab gives way to the options
+    g_nView = ModesChosen(g_mode) ? 2 : g_nView == 2 ? 0 : g_nView;
+    NoteMode();
+  }
+}
+
+// The mode leads where it was read from the settings, the command line or a room: it takes its own
+// entry in the list, and a mode this set-up does not list (a room's types) is dropped.
+void TypeFromMode(void)
+{
+  ModeRead();
+  const int n = TypeOfMode(g_mode.id);
+  if (n >= 0) {
+    if (g_nType != n) {
+      g_nType = n;
+      ListSubs();
+    }
+  } else if (!g_mode.id.empty() || !TypeMode().empty()) {
+    ModesChoose(&g_mode, TypeMode());
+    NoteMode();
+  }
+}
+
 // Why the game must play by Hyperion's rules (h/hxrules.h), or "" when either
 // will do.
 std::string ForcedWhy(void)
 {
   if (ModDataId()[0] != '\0')
     return PortTextF("the mod {0}, which brings its own data", {ModDataId()});
+  // a mode that changes what the game computes; one that does not leaves the rules alone
+  if (ModesChosen(g_mode) && PortModeFind(g_mode.id)->sim)
+    // {0} the mode's name
+    return PortTextF("the {0} game mode, which changes what the game does", {ModesChosenName(g_mode)});
   if (g_slots.size() > 8)
     return PortTextF("{0} players (the original allows 8)", {std::to_string(g_slots.size())});
   if (g_map.w > 256 || g_map.h > 256)
@@ -870,12 +1013,6 @@ std::string ForcedWhy(void)
   for (const Slot &s : g_slots)
     if (Seated(s) && s.nHandicap < 100)
       return PortText("a handicap (the original has none)");
-  // the unit limit (Game Options) alone, or with other mutators
-  MutatorSet rest = g_mut;
-  rest.nUnits = 0;
-  if (MutatorsStandard(rest) && g_mut.nUnits > 0)
-    return PortTextF("a unit limit of {0} (the original holds 1,700)",
-                     {MutatorUnitLimitName(MutatorUnitLimitOf(g_mut.nUnits))});
   if (!MutatorsStandard(g_mut))
     return PortTextF("mutators ({0})", {MutatorsText(g_mut, true)});
   return "";
@@ -976,6 +1113,13 @@ void StartGame(void)
     g_note = PortText("That map is no longer there.");
     return;
   }
+  // a mod's game type: the game must fit its mode, which the players seated may have changed
+  // since it was chosen (port_front_modes.h)
+  const std::string whyMode = ModesWhyNot(g_mode.id, SeatedCount(), ModeEnemySeated());
+  if (!whyMode.empty()) {
+    g_note = whyMode;
+    return;
+  }
   const SkirmishGame g = SkirmishRecord(nComputers);
   char szDir[0x104];
   SStrCopy(szDir, g_map.dir.c_str(), sizeof szDir);
@@ -991,6 +1135,8 @@ void StartGame(void)
     ProfileSetLastRace(RaceKeep(nMine));
   else
     PortWatchBegin(g.nSpeed, g.nWatchMul);  // the game is made, then watched as its replay
+  // the game mode the game starts with, which the mode's own half then loads (port_mode.h)
+  PortModeChoose(g_mode);
   // the choices, which the session keeps (port_session.h); then the player's race in its slot,
   // or in melee the races Play Custom keeps for SinglePlayerMeleeInitGame (player, 7 computers)
   PortLaunchSkirmishChoices(g);
@@ -1005,11 +1151,11 @@ void StartGame(void)
       byte_526547_g[r - 1] = PortLaunchRaceBase(g.seats[r].nRace);
   }
   const bool bTeamColours = g.bColours && g_nColourBy == 1 && HasTeams();
-  FrontLog("skirmish: %s, %s, speed %d, %d computers, race %d, %s rules, %d teams, starts %s, colours by %s%s\n",
+  FrontLog("skirmish: %s, %s, speed %d, %d computers, race %d, %s rules, %d teams, starts %s, colours by %s%s, mode %s\n",
            g_map.name.c_str(), g.type.c_str(), g_nSpeed, nComputers, nMine,
            g.bHyperion ? "Hyperion" : "classic", HasTeams() ? static_cast<int>(g_teamNames.size()) : 0,
            g_nStartsBy == 1 ? "by slot" : "random", bTeamColours ? "team" : "player",
-           g.bObserve ? ", watched" : "");
+           g.bObserve ? ", watched" : "", g_mode.id.empty() ? "none" : g_mode.id.c_str());
   g_bPlayed = true;
   g_nResult = FRONT_SKIRMISH_STARTED;
 }
@@ -2706,9 +2852,39 @@ MutatorsSetUp MutatorsOfSetUp(void)
   return s;
 }
 
-// The options, h high; with bSummary, the mutators in a word at their foot (a set-up with no box
-// of the host's under them).
+// What the mode's settings in the options read from the set-up.
+ModeSetUp ModeOfSetUp(void)
+{
+  ModeRead();
+  ModeSetUp s;
+  s.pChoice = &g_mode;
+  s.bMine = !Guest();
+  // the map's own file, which the mode's read opens for what a setting works out on this map
+  static char s_szMap[0x104];
+  static std::string s_of;
+  if (s_of != g_map.name) {
+    s_of = g_map.name;
+    if (!FindMapFile(g_map.name.c_str(), s_szMap, sizeof s_szMap))
+      s_szMap[0] = '\0';
+  }
+  s.pszMapFile = s_szMap;
+  s.pszMapTitle = g_map.title.c_str();
+  // the map as the tab's own box draws it
+  s.pMap = g_pic.of == g_map.name ? &g_pic : NULL;
+  s.nMapW = g_map.w;
+  s.nMapH = g_map.h;
+  s.nTileset = g_map.tileset;
+  // whether a seat holds the start it chose, which a preview's places mean nothing without. A
+  // map that sets its own players' starts holds them as surely as a slot does
+  s.bStartsFixed = UseMapSettings() || (g_nStartsBy == 1 && StartsOffered() && StartsKnown());
+  s.nPlayers = ModesPlayers(g_mode, SeatedCount(), ModeEnemySeated());
+  return s;
+}
+
+// The options, h high; with bSummary, the mode and the mutators in a word at their foot (a set-up
+// with no box of the host's under them).
 void NoteMutators(void);
+void NoteMode(void);
 
 void OptionsBox(float x, float y, float h, bool bSummary)
 {
@@ -2723,16 +2899,61 @@ void OptionsBox(float x, float y, float h, bool bSummary)
   Open(t);
   Text(PortText("GAME OPTIONS"), UI_FACE_WIDE, Fs(16), 0.04f, kScInkHead);
   Close();
-  std::vector<std::string> types;
-  for (const GameType &gt : g_types)
-    types.push_back(gt.name);
-  const int nTypeWas = g_nType;
-  Option(PortText("Game type"), "sktype", types, &g_nType,
-         Watching() && g_types[g_nType].params.bCategory == 2 && FreeForAll() >= 0
-             ? PortText("Free For All while you watch")
-             : NULL);
-  if (g_nType != nTypeWas)
+  // a mod's game type puts a card of what its mode has changed under the Game type row, which
+  // can take the column past its height: everything under the title scrolls together
+  const bool bMode = ModesChosen(g_mode);
+  if (bMode) {
+    Decl scroll = Box("skoptsclip");
+    scroll.d.layout.sizing.width = Grow();
+    scroll.d.layout.sizing.height = Grow();
+    scroll.d.clip.vertical = true;
+    g_fOpts += WheelPixels(Over(scroll.d.id), Sc(90));
+    g_fOpts = SDL_clamp(g_fOpts, 0.0f, g_fOptsMax);
+    scroll.d.clip.childOffset.y = -g_fOpts;
+    Open(scroll);
+    Decl inner = Box("skoptsinner");
+    inner.d.layout.layoutDirection = CLAY_TOP_TO_BOTTOM;
+    inner.d.layout.sizing.width = Grow();
+    inner.d.layout.childGap = Gap(Fs(4));
+    Open(inner);
+  }
+  // the game types: the classic ones, then a mod's, each with the mod it comes from at its right
+  // and greyed with the reason where this game cannot be played in its mode
+  const ModeSetUp modeUp = ModeOfSetUp();
+  std::vector<PulldownRow> types;
+  for (const GameType &gt : g_types) {
+    PulldownRow row;
+    row.text = gt.name;
+    if (!gt.mode.empty()) {
+      // {0} the mod the mode comes from
+      row.note = gt.tag.empty() ? std::string(PortText("from a mod")) : PortTextF("from {0} mod", {gt.tag});
+      row.title = gt.name;
+      row.tip = gt.about.empty() ? gt.line : gt.about;
+      row.why = ModesWhyNot(gt.mode, SeatedCount(), ModeEnemySeated());
+    }
+    types.push_back(row);
+  }
+  Open(OptionRow(kOptionHeight));
+  OptionName(PortText("Game type"),
+             Watching() && g_types[g_nType].params.bCategory == 2 && FreeForAll() >= 0
+                 ? PortText("Free For All while you watch")
+                 : NULL);
+  const int nPick = PulldownRows("sktype", 0, 188, types, g_nType, Guest() ? PD_LOCKED : PD_ON, 330);
+  if (Guest())
+    TipOn(Id("sktype"), PortText("Game type"), PortText("The host chooses it."));
+  else if (ModesAny())
+    TipOn(Id("sktype"), PortText("Game type"),
+          PortText("The classic types, then one for every mode a mod brings: a mode changes what the game does, how it "
+                   "is won and what comes at you, and its own settings appear here under the type."));
+  if (nPick >= 0 && nPick != g_nType) {
+    g_nType = nPick;
     ListSubs();
+    ModeFromType();
+  }
+  Close();
+  // what the mode has changed, and the way to its own tab (port_front_modes.h)
+  if (bMode && ModesSummary(modeUp))
+    g_nView = 2;
   if (TeamsOffered())
     TipOn(Id("sktype"), PortText("Team Match"),
           PortText("Players on teams: teammates are allied, share vision and win together, and every other team is an enemy. "
@@ -2765,7 +2986,8 @@ void OptionsBox(float x, float y, float h, bool bSummary)
   // the rules: either, unless the game is past 1.17's limits or a mod brings its own data
   const std::string forced = ForcedWhy();
   Open(OptionRow(kOptionHeight));
-  OptionName(PortText("Rules"), NULL);
+  // a mode that changes what the game computes holds the rules at Hyperion's, and the row says so
+  OptionName(PortText("Rules"), bMode ? ModesRulesNote(g_mode) : std::string());
   const std::vector<std::string> rules = {PortText("Classic"), "Hyperion"};
   // a guest's shows the host's choice
   const int nRule = Pulldown("skrules", 0, 188, rules, forced.empty() ? (g_nRules == 1 ? 1 : 0) : 1,
@@ -2783,27 +3005,6 @@ void OptionsBox(float x, float y, float h, bool bSummary)
     // {0} why the game must play by Hyperion's rules
     TipOn(Id("skrules"), PortText("Hyperion rules, required"),
           Keep(PortTextF("Because of {0}. The original never had such games, so there is nothing to match.", {forced})));
-  Close();
-
-  // the unit limit, held with the mutators (port_mutators.h): a guest's shows the host's
-  Open(OptionRow(kOptionHeight));
-  OptionName(PortText("Unit limit"), NULL);
-  std::vector<std::string> limits;
-  for (int i = 0; i < MutatorUnitLimits(); ++i)
-    limits.push_back(MutatorUnitLimitName(i));
-  const int nLimit = Pulldown("skunits", 0, 188, limits, MutatorUnitLimitOf(g_mut.nUnits), Guest() ? PD_LOCKED : PD_ON);
-  if (nLimit >= 0 && MutatorUnitLimit(nLimit) != g_mut.nUnits) {
-    g_mut.nUnits = MutatorUnitLimit(nLimit);
-    NoteMutators();
-  }
-  if (Guest())
-    TipOn(Id("skunits"), PortText("Unit limit"), PortText("The host chooses the most units the game holds."));
-  else
-    TipOn(Id("skunits"), PortText("Unit limit"),
-          PortText("The most units the game holds at once, every player\xe2\x80\x99s and the map\xe2\x80\x99s minerals and "
-                   "geysers together. The original holds 1,700. Automatic: the original\xe2\x80\x99s in a game it could "
-                   "play, and in a bigger game or with a supply cap past 200, room for the map\xe2\x80\x99s own and for each "
-                   "player\xe2\x80\x99s whole supply cap in units. A number plays by Hyperion\xe2\x80\x99s rules."));
   Close();
 
   Open(OptionRow(kOptionHeight));
@@ -2840,6 +3041,19 @@ void OptionsBox(float x, float y, float h, bool bSummary)
     Close();
   }
 
+  if (bMode) {
+    Close();  // the column
+    Close();  // its clipping box
+    // how far it scrolls, from this frame's layout for the next
+    const Clay_ElementData in = Clay_GetElementData(Id("skoptsinner"));
+    const Clay_ElementData out = Clay_GetElementData(Id("skoptsclip"));
+    g_fOptsMax = in.found && out.found && in.boundingBox.height > out.boundingBox.height
+                     ? in.boundingBox.height - out.boundingBox.height
+                     : 0.0f;
+    if (g_fOpts > g_fOptsMax)
+      g_fOpts = g_fOptsMax;
+  }
+
   Decl lock = Box("sklock");
   lock.d.layout.sizing.height = Fixed(Sc(54));
   lock.d.layout.padding = Pad(Fs(10), 0, 0, 0);
@@ -2857,10 +3071,15 @@ void OptionsBox(float x, float y, float h, bool bSummary)
   TipOn(Id("sklock"), PortText("Lock teams"),
         PortText("Keeps players from changing team in a multiplayer lobby. Not available yet."));
   if (bSummary) {
-    Decl room;
-    room.d.layout.sizing.height = Grow();
-    Open(room);
-    Close();
+    // the room left over, so the mutators' word sits at the box's foot; with a mode the rows'
+    // own box has taken it already, and a second box that grows would halve it
+    if (!bMode) {
+      Decl room;
+      room.d.layout.sizing.height = Grow();
+      Open(room);
+      Close();
+    }
+    // the mutators in a word, with the way to their tab
     if (MutatorsSummary(MutatorsOfSetUp()))
       g_nView = 1;
   }
@@ -2907,6 +3126,15 @@ void InfoBox(float x, float y, float w, float h)
 void NoteMutators(void)
 {
   FrontLog("skirmish: mutators: %s\n", MutatorsStandard(g_mut) ? "classic" : MutatorsText(g_mut).c_str());
+}
+
+// The game mode (port_mode.h) is a game type of its own in the options' list
+// (port_front_modes.h). A mode changes what the game does, so a game with one plays by
+// Hyperion's rules (ForcedWhy).
+void NoteMode(void)
+{
+  FrontLog("skirmish: mode: %s%s%s, seed %u\n", g_mode.id.empty() ? "none" : g_mode.id.c_str(),
+           g_mode.settings.empty() ? "" : " ", g_mode.settings.c_str(), g_mode.seed);
 }
 
 void SetupStep(void)
@@ -2979,15 +3207,21 @@ void SetupStep(void)
     TipOn(Id("skchange"), PortText("The map"), PortText("The host chooses the map."));
   Close();
 
-  // The right column is two tabs (the design's take A2, 2026-10-26): Game Options with the map,
-  // and Mutators, which takes the column. A host's own box (a room's, the trainer's) stays under
-  // the options and the map; with none, the options say at their foot which mutators are on.
+  // The right column is tabs (the design's take A2, 2026-10-26): Game Options with the map and
+  // Mutators, each taking the column. A host's own box (a room's, the trainer's) stays under the
+  // options and the map; with none, the options say at their foot which mutators are on.
   SlotsBox(13, 93, fOptsX - 10 - 13, fFootY - 10 - 93);
   const float fColTop = 93 + 46, fBottom = fFootY - 10, fColW = 438 + 10 + fInfoW;
   const bool bShared = g_pHost != NULL && g_pHost->pfnBox != NULL;
   const float fBoxH = bShared ? 462 : fBottom - fColTop;
   const MutatorsSetUp setUp = MutatorsOfSetUp();
-  if (g_nView == 1) {
+  if (g_nView == 2 && ModesChosen(g_mode)) {
+    // the mode's own tab, in the options' place, with the map and the setting briefed beside it
+    const ModeSetUp mode = ModeOfSetUp();
+    if (ModesTab(fOptsX, fColTop, 438, fBottom - fColTop, mode))
+      NoteMode();
+    ModesTabBox(fInfoX, fColTop, fInfoW, fBottom - fColTop, mode);
+  } else if (g_nView == 1) {
     if (MutatorsTab(fOptsX, fColTop, fColW, fBottom - fColTop, setUp))
       NoteMutators();
   } else {
@@ -2998,8 +3232,13 @@ void SetupStep(void)
       g_pHost->pfnBox(fOptsX, fBoxY, fColW, fBottom - fBoxY);
     }
   }
-  // the tabs after the boxes, so they draw over the boxes' rims
-  const int nView = MutatorsViewTabs(fOptsX, 93, fColW, g_nView, g_mut);
+  // the tabs after the boxes, so they draw over the boxes' rims; the mode's own is there while a
+  // mod's mode is the game type
+  const PortModeDecl *pModeTab = ModesChosen(g_mode) ? PortModeFind(g_mode.id) : NULL;
+  const int nView = MutatorsViewTabs(fOptsX, 93, fColW, g_nView, g_mut, NULL, NULL,
+                                     pModeTab != NULL ? ModesTypeName(g_mode) : NULL,
+                                     pModeTab != NULL ? pModeTab->typeTag.c_str() : NULL,
+                                     pModeTab != NULL ? ModesChanged(ModeOfSetUp()) : 0);
   if (nView >= 0)
     g_nView = nView;
 
@@ -3116,6 +3355,7 @@ void SkirmishOpen(int nSpeed, const SkirmishHost *pHost)
   // the host's own set-up in place of the one shown
   const char *pszWas = g_pHost != NULL ? g_pHost->pszId : "";
   const char *pszNow = pHost != NULL ? pHost->pszId : "";
+  ModeRead();
   std::string typeHeld;
   int nSubHeld = -1;
   if (strcmp(pszWas, pszNow) != 0) {
@@ -3132,6 +3372,7 @@ void SkirmishOpen(int nSpeed, const SkirmishHost *pHost)
   g_lbOpen.clear();
   g_bBrowse = false;
   g_bEnlarge = false;
+  g_fOpts = 0.0f;
   // 1.17's speed for a first set-up; one that waits keeps its own
   if (g_map.name.empty())
     g_nSpeed = nSpeed >= 0 && nSpeed <= 6 ? nSpeed : 6;
@@ -3165,6 +3406,9 @@ void SkirmishOpen(int nSpeed, const SkirmishHost *pHost)
     for (size_t i = g_types.size(); i-- > 0;)
       if (g_types[i].bTeamMatch || (g_types[i].params.bCategory != 2 && g_types[i].params.bCategory != 3))
         g_types.erase(g_types.begin() + static_cast<std::ptrdiff_t>(i));
+  // then a mod's game types: one for every mode installed, each on Melee's template, which is
+  // the game a mode's rules are laid over (port_front_modes.h)
+  AddModeTypes();
   g_nType = 0;
   for (size_t i = 0; i < g_types.size(); ++i)
     if (typeWas.empty() ? g_types[i].params.bCategory == 2 : g_types[i].name == typeWas)
@@ -3172,6 +3416,8 @@ void SkirmishOpen(int nSpeed, const SkirmishHost *pHost)
   ListSubs();
   if (nSubWas < static_cast<int>(g_subs.size()))
     g_nSub = nSubWas;
+  // the mode read before the list was made takes its own entry in it
+  TypeFromMode();
   // 1.17's list is made again (a game empties it). The screen comes back on the set-up after a
   // game it made, a host's after any: the trainer's after a session from a file or from here
   g_pic.of.clear();
@@ -3201,6 +3447,20 @@ void SkirmishOpen(int nSpeed, const SkirmishHost *pHost)
           break;
         }
       }
+      // HYPERION_FRONT_MODE=<n>[:<id>] with it: the mode by its id, as its own game type, its own
+      // tab up with the nth of its settings taken by the arrows (Up and Down's order), or Game
+      // Options for -
+      if (const char *pszMode = SDL_getenv("HYPERION_FRONT_MODE"))
+        if (g_nStep == STEP_SETUP) {
+          g_bModeRead = true;
+          const char *pszId = strchr(pszMode, ':');
+          if (pszId != NULL && PortModeFind(pszId + 1) != NULL)
+            ModesChoose(&g_mode, pszId + 1);
+          TypeFromMode();
+          ModesTabAt(SDL_atoi(pszMode));
+          g_nView = pszMode[0] == '-' || !ModesChosen(g_mode) ? 0 : 2;
+          NoteMode();
+        }
       // HYPERION_FRONT_WATCH=<speed>[:<level>,...] with it: the player's seat a computer's, the
       // speed 0 to 10 (7 to 10 Fastest x2 to x16), the seats' levels in order (port_ai.h), and
       // Start Game, to watch the game (port_watchgame.h)
@@ -3265,6 +3525,11 @@ bool SkirmishGameNow(SkirmishGame *pOut)
     g_note = PortText("A session needs at least one computer.");
     return false;
   }
+  const std::string whyMode = ModesWhyNot(g_mode.id, SeatedCount(), ModeEnemySeated());
+  if (!whyMode.empty()) {
+    g_note = whyMode;
+    return false;
+  }
   char szPath[0x104];
   if (MapEntry() == NULL || !FindMapFile(g_map.name.c_str(), szPath, sizeof szPath)) {
     g_note = PortText("That map is no longer there.");
@@ -3307,6 +3572,11 @@ bool SkirmishRoomNow(SkirmishRoomSetUp *pOut)
   }
   r.bHyperion = HyperionRules();
   r.mut = g_mut;
+  // the game mode the match is played in, every seat's alike (port_front_modes.h)
+  ModeRead();
+  r.mode = g_mode.id;
+  r.modeSettings = g_mode.settings;
+  r.modeSeed = g_mode.seed;
   *pOut = r;
   return true;
 }
@@ -3396,6 +3666,22 @@ void SkirmishGuestSetUp(const SkirmishRoomSetUp &r)
   g_nSpeed = r.nSpeed >= 0 && r.nSpeed <= 6 ? r.nSpeed : 6;
   g_nRules = r.bHyperion ? 1 : 0;
   g_mut = r.mut;
+  g_mut.nUnits = 0;  // the set-up asks for no unit limit, so one kept from before is dropped
+  // the host's mode, which the guest's set-up shows and does not change; read here rather than
+  // from the settings file, so the column opens on it. A mode is a game type, so the type follows
+  // it where the guest has the mode installed.
+  g_bModeRead = true;
+  if (g_mode.id != r.mode || g_mode.settings != r.modeSettings || g_mode.seed != r.modeSeed) {
+    g_mode.id = r.mode;
+    g_mode.settings = r.modeSettings;
+    g_mode.seed = r.modeSeed;
+    const int nMode = TypeOfMode(g_mode.id);
+    if (nMode >= 0 && g_nType != nMode) {
+      g_nType = nMode;
+      ListSubs();
+    }
+    NoteMode();
+  }
   SkirmishRoomSeats(r.seats);
 }
 
@@ -3457,6 +3743,23 @@ bool SkirmishKeys(void)
   if (Key('U')) {
     g_nView = 1;
     return true;
+  }
+  // the mode's own tab, while a mod's mode is the game type
+  if (Key('M') && ModesChosen(g_mode)) {
+    g_nView = g_nView == 2 ? 0 : 2;
+    return true;
+  }
+  if (g_nView == 2 && ModesChosen(g_mode)) {
+    bool bChanged = false;
+    if (ModesTabKeys(ModeOfSetUp(), &bChanged)) {
+      if (bChanged)
+        NoteMode();
+      return true;
+    }
+    if (Key(VK_ESCAPE)) {
+      g_nView = 0;
+      return true;
+    }
   }
   if (g_nView == 1) {
     bool bChanged = false;

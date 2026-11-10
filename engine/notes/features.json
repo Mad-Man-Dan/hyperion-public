@@ -1,0 +1,832 @@
+{
+  "about": "Every feature the manual lists and where it stands, for players to read: available (since a release), in progress, planned or parked. The port keeps it (engine/notes/, beside the release notes); the site copies it (npm run sync:manual). A feature's tracker ids name the tracker's items it follows. No take numbers or internal names.",
+  "updated": "2026-10-24",
+  "version": "0.6.11-beta",
+  "features": [
+    {
+      "id": "free-starcraft",
+      "page": "getting-started",
+      "title": "Plays from today's free StarCraft",
+      "summary": "The free StarCraft on Battle.net is all Hyperion needs.",
+      "status": "available",
+      "since": "0.5.0-beta"
+    },
+    {
+      "id": "no-exe",
+      "page": "getting-started",
+      "title": "No StarCraft.exe needed",
+      "summary": "Only the game's data files, from 1.17 or Remastered.",
+      "status": "available",
+      "since": "0.4.0-beta"
+    },
+    {
+      "id": "install-choice",
+      "page": "getting-started",
+      "title": "Your choice of install",
+      "summary": "StarCraft from Battle.net or a classic install, in Settings' Game files.",
+      "status": "available",
+      "since": "0.6.2-beta"
+    },
+    {
+      "id": "quick-setup",
+      "page": "getting-started",
+      "title": "Quick setup",
+      "summary": "One download for each system, with everything in it.",
+      "status": "planned",
+      "progress": "Packages are built for testing; a one-step setup comes later."
+    },
+    {
+      "id": "patch-notes",
+      "page": "whats-new",
+      "title": "Patch notes in the game",
+      "summary": "Menu, Patch Notes: the same notes as this site.",
+      "status": "available"
+    },
+    {
+      "id": "gpu",
+      "page": "graphics",
+      "title": "Drawn on the graphics card",
+      "summary": "Full colour at any resolution, through Vulkan or Direct3D 12.",
+      "status": "available",
+      "since": "0.2.0-beta"
+    },
+    {
+      "id": "renderer-choice",
+      "page": "graphics",
+      "title": "Choose the renderer",
+      "summary": "Vulkan or Direct3D 12, in Settings.",
+      "status": "available",
+      "since": "0.5.1-beta",
+      "platforms": [
+        "windows"
+      ]
+    },
+    {
+      "id": "fit-screen",
+      "page": "graphics",
+      "title": "Fills your screen",
+      "summary": "Games fill a wide screen by default; View shape keeps 4:3 or 16:9.",
+      "status": "available",
+      "since": "0.3.9-beta"
+    },
+    {
+      "id": "zoom",
+      "page": "graphics",
+      "title": "Camera zoom",
+      "summary": "Pull the camera back over a battle and back in.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "hd-art",
+      "page": "graphics",
+      "title": "HD art",
+      "summary": "StarCraft: Remastered's HD art for owners of Remastered.",
+      "status": "parked",
+      "progress": "Held by decision: no file on a player's computer shows that they own Remastered, so its HD art and re-recorded voices stay off.",
+      "tracker": [
+        "hd-ownership-local",
+        "hd-owner-step"
+      ]
+    },
+    {
+      "id": "hd-minimap",
+      "page": "graphics",
+      "title": "A sharper minimap",
+      "summary": "The minimap drawn at a higher resolution.",
+      "status": "planned",
+      "tracker": [
+        "hd-minimap"
+      ]
+    },
+    {
+      "id": "lit-units",
+      "page": "graphics",
+      "title": "Lit units and tiles",
+      "summary": "Lights from units, spells and buildings over the map.",
+      "status": "planned",
+      "tracker": [
+        "take34-lit-units"
+      ]
+    },
+    {
+      "id": "weather",
+      "page": "graphics",
+      "title": "Weather",
+      "summary": "Snow, rain, ash and fog over the tiles.",
+      "status": "planned",
+      "tracker": [
+        "take35-weather"
+      ]
+    },
+    {
+      "id": "hud-designs",
+      "page": "hud",
+      "title": "HUD designs",
+      "summary": "Mech, R9 and Classic, chosen in Settings.",
+      "status": "available",
+      "since": "0.6.6-beta",
+      "tracker": [
+        "hud-designs-mech-r9-classic-and-players"
+      ]
+    },
+    {
+      "id": "hud-options",
+      "page": "hud",
+      "title": "Layouts, sizes and materials",
+      "summary": "Mech across the foot or down a side, full or small, in three materials.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-light",
+      "page": "hud",
+      "title": "Your own light colour",
+      "summary": "Any design's light, and the selection boxes, in a colour you choose.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-preview",
+      "page": "hud",
+      "title": "A live picture in Settings",
+      "summary": "Every change shows on a map before you accept it.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-own",
+      "page": "hud",
+      "title": "Designs of your own",
+      "summary": "Put a design's folder in huds and it is listed with the others.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-remastered",
+      "page": "hud",
+      "title": "A HUD in Remastered's style",
+      "summary": "A design after StarCraft: Remastered's console.",
+      "status": "parked",
+      "tracker": [
+        "fy2r311l4g0l3xw6x8kg"
+      ]
+    },
+    {
+      "id": "hud-browser",
+      "page": "hud",
+      "title": "HUD designs in the browser",
+      "summary": "The designs in the browser build too.",
+      "status": "parked",
+      "tracker": [
+        "hud-designs-in-the-browser-build-and-und"
+      ]
+    },
+    {
+      "id": "music-player",
+      "page": "music-player",
+      "title": "The music player",
+      "summary": "Ctrl+F9 in a game: a player, an equalizer and a playlist.",
+      "status": "available",
+      "since": "0.6.11-beta",
+      "platforms": [
+        "windows",
+        "linux",
+        "mac"
+      ],
+      "tracker": [
+        "the-music-player-hyperion-s-first-addon"
+      ]
+    },
+    {
+      "id": "mp-soundtrack",
+      "page": "music-player",
+      "title": "The game's soundtrack",
+      "summary": "StarCraft's or Brood War's, as the game you play, in Remastered's recordings where your install has them.",
+      "status": "available",
+      "since": "0.6.11-beta"
+    },
+    {
+      "id": "mp-own",
+      "page": "music-player",
+      "title": "Your own music",
+      "summary": "MP3, Ogg Vorbis, FLAC and WAV, from the Data folder or anywhere.",
+      "status": "available",
+      "since": "0.6.11-beta",
+      "platforms": [
+        "windows",
+        "linux",
+        "mac"
+      ]
+    },
+    {
+      "id": "mp-apps",
+      "page": "music-player",
+      "title": "Your other apps",
+      "summary": "Play, pause and skip what Spotify, a browser or another app plays.",
+      "status": "available",
+      "since": "0.6.11-beta",
+      "platforms": [
+        "windows"
+      ]
+    },
+    {
+      "id": "mp-itunes",
+      "page": "music-player",
+      "title": "iTunes and its playlists",
+      "summary": "iTunes listed while it is open, with its playlists to open and play.",
+      "status": "available",
+      "since": "0.6.11-beta",
+      "platforms": [
+        "windows"
+      ]
+    },
+    {
+      "id": "mp-apps-linux",
+      "page": "music-player",
+      "title": "Other apps on Linux",
+      "summary": "What other apps play, through Linux's media controls.",
+      "status": "planned",
+      "platforms": [
+        "linux"
+      ],
+      "tracker": [
+        "the-music-player-hyperion-s-first-addon"
+      ]
+    },
+    {
+      "id": "mp-skin",
+      "page": "music-player",
+      "title": "Wears your HUD",
+      "summary": "The windows take the style of the HUD you play with.",
+      "status": "available",
+      "since": "0.6.11-beta"
+    },
+    {
+      "id": "mp-windows",
+      "page": "music-player",
+      "title": "Sizes, docking and window shade",
+      "summary": "Sizes from 75% to 200% and Double size, windows that snap together, and a bar each folds to.",
+      "status": "available",
+      "since": "0.6.11-beta"
+    },
+    {
+      "id": "players-32",
+      "page": "bigger-games",
+      "title": "Games for 32 players",
+      "summary": "Skirmishes and maps for up to 32, such as Big Game Hunters 3x3.",
+      "status": "available",
+      "since": "0.2.0-beta"
+    },
+    {
+      "id": "players-64",
+      "page": "bigger-games",
+      "title": "64 players, experimental",
+      "summary": "Big Game Hunters 4x4 (512 tiles) and 8x8 (1,024 tiles), in the maps' Experimental folder.",
+      "status": "available"
+    },
+    {
+      "id": "past-limits",
+      "page": "bigger-games",
+      "title": "Past 32 players and 512 tiles",
+      "summary": "Larger games and maps for everyone.",
+      "status": "parked",
+      "progress": "Held at 32 players and 512 tiles for now; 64 plays on the experimental maps."
+    },
+    {
+      "id": "maps-512",
+      "page": "bigger-games",
+      "title": "Maps up to 512 by 512",
+      "summary": "Twice the side of 1.17's largest, four times its area.",
+      "status": "available",
+      "since": "0.2.0-beta"
+    },
+    {
+      "id": "selection-255",
+      "page": "bigger-games",
+      "title": "Selections of 255",
+      "summary": "Selections and control groups of up to 255, by Hyperion's rules.",
+      "status": "available",
+      "since": "0.6.6-beta",
+      "tracker": [
+        "selections-and-control-groups-of-255-bui"
+      ]
+    },
+    {
+      "id": "subgroups",
+      "page": "bigger-games",
+      "title": "Buildings together, and subgroups",
+      "summary": "Select buildings together and Tab through the kinds, as in StarCraft II.",
+      "status": "available",
+      "since": "0.6.6-beta",
+      "tracker": [
+        "selections-and-control-groups-of-255-bui"
+      ]
+    },
+    {
+      "id": "units-22100",
+      "page": "bigger-games",
+      "title": "Thousands of units",
+      "summary": "1,700 units for every 8 players: 6,800 in a game of 32, 13,600 in one of 64; the benchmark's stress run goes to 22,100.",
+      "status": "available",
+      "since": "0.6.2-beta"
+    },
+    {
+      "id": "team-match",
+      "page": "skirmish",
+      "title": "Team Match",
+      "summary": "Teams in skirmish, with quick layouts.",
+      "status": "available",
+      "since": "0.3.2-beta"
+    },
+    {
+      "id": "ai-levels",
+      "page": "skirmish",
+      "title": "Computer levels",
+      "summary": "Very Easy to Elite, and three Cheater levels.",
+      "status": "available",
+      "since": "0.3.3-beta"
+    },
+    {
+      "id": "handicaps",
+      "page": "skirmish",
+      "title": "Handicaps",
+      "summary": "A handicap for each player, as in StarCraft II.",
+      "status": "available",
+      "since": "0.6.8-beta",
+      "tracker": [
+        "handicaps-for-skirmishes-and-rooms-as-sc"
+      ]
+    },
+    {
+      "id": "mutators",
+      "page": "skirmish",
+      "title": "Mutators",
+      "summary": "Starting workers, a supply boost and more.",
+      "status": "available",
+      "since": "0.6.9-beta",
+      "tracker": [
+        "mutators-the-skirmish-set-up-s-mutators"
+      ]
+    },
+    {
+      "id": "hyperion-rules",
+      "page": "skirmish",
+      "title": "Hyperion's rules",
+      "summary": "New games by Hyperion's rules, with Remastered's order fixes; replays as recorded.",
+      "status": "available",
+      "since": "0.6.5-beta",
+      "tracker": [
+        "rules-stay-classic-new-games-by-hyperion"
+      ]
+    },
+    {
+      "id": "score-screen",
+      "page": "skirmish",
+      "title": "A new score screen",
+      "summary": "Every player of the game, up to 32.",
+      "status": "available",
+      "since": "0.6.1-beta",
+      "tracker": [
+        "score-screen"
+      ]
+    },
+    {
+      "id": "score-remastered",
+      "page": "skirmish",
+      "title": "Score screen in Remastered's look",
+      "summary": "The score screen dressed as Remastered's.",
+      "status": "planned",
+      "tracker": [
+        "score-screen-remastered"
+      ]
+    },
+    {
+      "id": "replays-117",
+      "page": "replays",
+      "title": "1.17's replays, exactly",
+      "summary": "Every replay plays frame for frame as it did.",
+      "status": "available",
+      "since": "0.1.0-beta"
+    },
+    {
+      "id": "replays-remastered",
+      "page": "replays",
+      "title": "Remastered's own replays",
+      "summary": "Replays recorded in StarCraft: Remastered 1.21 and later.",
+      "status": "parked",
+      "progress": "Not played: Hyperion's rules stay those of 1.17 and the versions before it.",
+      "tracker": [
+        "remastered-replays",
+        "rules-stay-classic-new-games-by-hyperion"
+      ]
+    },
+    {
+      "id": "replay-tv",
+      "page": "replays",
+      "title": "Replay TV",
+      "summary": "Replays playing one after another.",
+      "status": "available",
+      "tracker": [
+        "replay-tv-default"
+      ]
+    },
+    {
+      "id": "trainer",
+      "page": "trainer",
+      "title": "The trainer",
+      "summary": "Go back to any moment of a game and try it again.",
+      "status": "available",
+      "since": "0.3.4-beta"
+    },
+    {
+      "id": "tape",
+      "page": "trainer",
+      "title": "The Tape",
+      "summary": "Every try side by side, with the figures at that moment.",
+      "status": "available",
+      "since": "0.3.4-beta"
+    },
+    {
+      "id": "saves-big",
+      "page": "replays",
+      "title": "Saves of big games",
+      "summary": "Save and load games past 1.17's limits, with the checks a replay has.",
+      "status": "available"
+    },
+    {
+      "id": "menus",
+      "page": "menus",
+      "title": "Hyperion's own menus",
+      "summary": "Home, Skirmish, Replays, Settings and the rest, new.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "remastered-settings",
+      "page": "menus",
+      "title": "Remastered's settings",
+      "summary": "Mouse sensitivity, voices and subtitles, console skins, a chat filter.",
+      "status": "available",
+      "since": "0.3.7-beta"
+    },
+    {
+      "id": "helpers-off",
+      "page": "menus",
+      "title": "Turn the helpers off",
+      "summary": "A Settings tab to turn Hyperion's gameplay helpers off.",
+      "status": "planned",
+      "tracker": [
+        "a-settings-tab-to-turn-hyperion-s-gamepl"
+      ]
+    },
+    {
+      "id": "hotkeys",
+      "page": "hotkeys",
+      "title": "Hotkeys of your own",
+      "summary": "A profile's own keys, and the command card's keys as Classic or Grid.",
+      "status": "available"
+    },
+    {
+      "id": "ingame-screens",
+      "page": "menus",
+      "title": "Hyperion's own in-game screens",
+      "summary": "The in-game menus, new.",
+      "status": "planned",
+      "tracker": [
+        "take36-ingame-screens"
+      ]
+    },
+    {
+      "id": "lan-rooms",
+      "page": "lan",
+      "title": "Rooms on your network",
+      "summary": "Host a room; players join from Hyperion or a browser.",
+      "status": "available",
+      "since": "0.3.5-beta"
+    },
+    {
+      "id": "lan-console",
+      "page": "lan",
+      "title": "The host's console",
+      "summary": "The room, its devices and what each costs the host.",
+      "status": "available",
+      "since": "0.3.5-beta"
+    },
+    {
+      "id": "lan-watch",
+      "page": "lan",
+      "title": "Watch matches live",
+      "summary": "A few seconds behind, the camera finding the fights.",
+      "status": "available",
+      "since": "0.3.5-beta"
+    },
+    {
+      "id": "lan-installs",
+      "page": "lan",
+      "title": "The game from the host",
+      "summary": "The host hands out each system's install.",
+      "status": "planned"
+    },
+    {
+      "id": "tournaments",
+      "page": "lan",
+      "title": "Tournaments",
+      "summary": "Brackets run from the host's console.",
+      "status": "planned"
+    },
+    {
+      "id": "browser-join",
+      "page": "browser",
+      "title": "Join from a browser",
+      "summary": "A phone or a PC joins from the page the host serves.",
+      "status": "available",
+      "since": "0.3.5-beta"
+    },
+    {
+      "id": "browser-hyperion",
+      "page": "browser",
+      "title": "Hyperion in a browser tab",
+      "summary": "The game itself, running in the browser.",
+      "status": "progress",
+      "progress": "Plays and watches in a tab; Hyperion's own menus need the graphics card path, which the browser build lacks."
+    },
+    {
+      "id": "browser-rejoin",
+      "page": "browser",
+      "title": "Rejoin a match",
+      "summary": "Come back to a browser match within a grace time.",
+      "status": "planned",
+      "tracker": [
+        "browser-rejoin"
+      ]
+    },
+    {
+      "id": "webgpu",
+      "page": "browser",
+      "title": "WebGPU in the browser",
+      "summary": "Zoom, lights and effects on the graphics card in a browser.",
+      "status": "parked",
+      "tracker": [
+        "webgpu-browser"
+      ]
+    },
+    {
+      "id": "online-play",
+      "page": "online",
+      "title": "Online play",
+      "summary": "Matchmaking, a ladder and a relay.",
+      "status": "parked",
+      "progress": "Waits on questions about identity and leaderboards.",
+      "tracker": [
+        "online-play"
+      ]
+    },
+    {
+      "id": "leaderboards",
+      "page": "online",
+      "title": "Leaderboards",
+      "summary": "Which boards, and what counts.",
+      "status": "parked",
+      "tracker": [
+        "leaderboards-first",
+        "leaderboards-117",
+        "leaderboards-bots",
+        "leaderboards-upload"
+      ]
+    },
+    {
+      "id": "windows",
+      "page": "platforms",
+      "title": "Windows",
+      "summary": "64-bit Windows, the main build.",
+      "status": "available",
+      "since": "0.1.0-beta",
+      "platforms": [
+        "windows"
+      ]
+    },
+    {
+      "id": "linux-x64",
+      "page": "platforms",
+      "title": "Linux on x86-64",
+      "summary": "Every replay plays identically to Windows.",
+      "status": "available",
+      "since": "0.3.1-beta",
+      "platforms": [
+        "linux"
+      ]
+    },
+    {
+      "id": "linux-arm64",
+      "page": "platforms",
+      "title": "Linux on ARM64",
+      "summary": "Played on a Jetson Orin.",
+      "status": "available",
+      "since": "0.3.1-beta",
+      "platforms": [
+        "linux"
+      ]
+    },
+    {
+      "id": "mac",
+      "page": "platforms",
+      "title": "Mac",
+      "summary": "Hyperion.app, for Apple silicon and macOS 13 on.",
+      "status": "available",
+      "since": "0.6.0-beta",
+      "platforms": [
+        "mac"
+      ],
+      "tracker": [
+        "mac-package",
+        "remastered-mac-untested"
+      ]
+    },
+    {
+      "id": "cores",
+      "page": "performance",
+      "title": "Large games on every core",
+      "summary": "The work of a large game spread over the processor's cores.",
+      "status": "available",
+      "since": "0.3.6-beta"
+    },
+    {
+      "id": "fast-big",
+      "page": "performance",
+      "title": "Big games, much faster",
+      "summary": "Faster drawing and playing for the largest games.",
+      "status": "available",
+      "since": "0.6.2-beta"
+    },
+    {
+      "id": "threading",
+      "page": "performance",
+      "title": "The game's update on many threads",
+      "summary": "The game's own update past one thread.",
+      "status": "planned",
+      "progress": "Next: the game's own update, starting with path searches answered ahead on other threads, while replays stay identical. The research has begun.",
+      "tracker": [
+        "the-game-s-update-past-one-thread-the-th"
+      ]
+    },
+    {
+      "id": "benchmark",
+      "page": "benchmark",
+      "title": "The benchmark",
+      "summary": "Games of computers, measured, with an overlay.",
+      "status": "available",
+      "since": "0.3.2-beta"
+    },
+    {
+      "id": "ai-lab",
+      "page": "benchmark",
+      "title": "The AI lab",
+      "summary": "Games of computers by the hundred in the background.",
+      "status": "available",
+      "since": "0.3.8-beta"
+    },
+    {
+      "id": "ai-lab-agents",
+      "page": "benchmark",
+      "title": "Agents in the AI lab",
+      "summary": "A seat for a program of your own, and a builder for its data.",
+      "status": "planned",
+      "tracker": [
+        "lab-milestones"
+      ]
+    },
+    {
+      "id": "mods",
+      "page": "mods",
+      "title": "Mods",
+      "summary": "New units, weapons and races on top of the originals.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "new-races",
+      "page": "mods",
+      "title": "New units, races and spells as data",
+      "summary": "A mod's units, races, spells, techs and upgrades, and computers that play them.",
+      "status": "available"
+    },
+    {
+      "id": "mod-push",
+      "page": "mods",
+      "title": "Changes while a game runs",
+      "summary": "A mod's data sent to the running game.",
+      "status": "available"
+    },
+    {
+      "id": "debug-tools",
+      "page": "mods",
+      "title": "Debug Tools",
+      "summary": "A mod with a sandbox map, units placed at a click, an overlay of figures, and the live channel.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "creation-suite",
+      "page": "mods",
+      "title": "The creation suite",
+      "summary": "A mod for making mods, inside the game.",
+      "status": "progress",
+      "progress": "Designed in full; building it is next.",
+      "tracker": [
+        "the-creation-suite-a-mod-for-making-mods"
+      ]
+    },
+    {
+      "id": "mod-buttons",
+      "page": "mods",
+      "title": "HUD buttons for mods",
+      "summary": "A mod's own actions as buttons on the HUD.",
+      "status": "parked",
+      "tracker": [
+        "custom-hud-buttons-for-mods-actions-regi"
+      ]
+    },
+    {
+      "id": "addons",
+      "page": "addons",
+      "title": "Addons",
+      "summary": "Programs beside the game that add to it; the music player the first.",
+      "status": "available",
+      "since": "0.6.11-beta"
+    },
+    {
+      "id": "hud-format",
+      "page": "hud-designs",
+      "title": "The HUD format",
+      "summary": "A design's layout and style as files.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-reload",
+      "page": "hud-designs",
+      "title": "Edit while it plays",
+      "summary": "Save a design's file and the game shows it within a second.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hud-check",
+      "page": "hud-designs",
+      "title": "A checker",
+      "summary": "Check a design's files without starting a game.",
+      "status": "available",
+      "since": "0.6.6-beta"
+    },
+    {
+      "id": "hxm",
+      "page": "map-makers",
+      "title": "Hyperion maps",
+      "summary": "The .hxm format: larger maps and more players.",
+      "status": "available",
+      "since": "0.2.0-beta"
+    },
+    {
+      "id": "live-channel",
+      "page": "map-makers",
+      "title": "Test from your editor",
+      "summary": "Send a map from an editor to the running game.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "story-scenes",
+      "page": "map-makers",
+      "title": "Story scenes from your editor",
+      "summary": "Camera moves, captions and transmissions, played in the running game.",
+      "status": "available",
+      "since": "0.3.0-beta"
+    },
+    {
+      "id": "triggers-all-players",
+      "page": "map-makers",
+      "title": "Triggers for every player",
+      "summary": "Triggers that name the players past 8.",
+      "status": "available"
+    },
+    {
+      "id": "remastered-maps",
+      "page": "map-makers",
+      "title": "Maps saved by Remastered",
+      "summary": "Maps from StarCraft: Remastered's editor, their UTF-8 text included.",
+      "status": "available"
+    },
+    {
+      "id": "eud-maps",
+      "page": "map-makers",
+      "title": "EUD maps",
+      "summary": "EUD maps play as StarCraft: Remastered plays them.",
+      "status": "available",
+      "since": "0.6.3-beta",
+      "tracker": [
+        "eud-maps-play-as-starcraft-remastered-pl"
+      ]
+    }
+  ]
+}

@@ -11,6 +11,10 @@
 // (PortModChain). Only the first mode is used for now; a mode Hyperion does not know leaves
 // the mod without a main button. A folder whose mod.json is missing or does not read is
 // skipped; hyperion_mods.log says why.
+//
+// "kind": "mode" makes the mod a game mode (port_mode.h): its "mode" block declares the
+// settings the set-up draws with the game's options, and its data sits at its own root ("data": "./",
+// which a mode takes when it names none).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +25,7 @@
 #include "../platform/port_util.h"  // PortReadFile
 #include "../platform/port_json.h"
 #include "port_mods.h"
+#include "port_modlang.h"  // ModLangModPage
 #include "../platform/port_settings.h"
 #include "../tools/port_canvas.h"  // PORT_CANVAS_TILESET
 #include "../front/port_text.h"    // PT_
@@ -95,11 +100,15 @@ void Installed(void) {
     m.by = j["by"].Str("an unnamed author");
     m.version = j["version"].Str("0");
     m.line = j["line"].Str();
+    ModLangModPage(folder, j, &m.name, &m.line);
     for (size_t i = 0; i < j["holds"].size(); ++i)
       m.holds.push_back(j["holds"].At(i).Str());
     m.rules = j["rules"].Str("standard");
     m.world = j["world"].Str("char");
     m.folder = folder;
+    m.kind = j["kind"].Str("content");
+    if (m.kind == "mode" && j["mode"].kind == PortJson::OBJECT)
+      m.modeBlock = PortJsonWrite(j["mode"]);
     m.data = j["data"].Str();
     // a folder inside the mod's: none that climbs out of it or names another drive
     if (m.data.find("..") != std::string::npos || m.data.find(':') != std::string::npos ||
@@ -107,6 +116,10 @@ void Installed(void) {
       ModsLog("mods: %s: \"data\" is a folder inside the mod's; its new types are left out", folder.c_str());
       m.data.clear();
     }
+    // a mode keeps its types.json, scripts and looks at its own root, so "./" names the
+    // mod's own folder, and a mode that names no folder takes it
+    if (m.data == "." || m.data == "./" || m.data == ".\\" || (m.data.empty() && m.kind == "mode"))
+      m.data = ".\\";
     if (!m.data.empty() && m.data.back() != '/' && m.data.back() != '\\')
       m.data += '\\';
     // each one an id, or {"id", "version"} with the least version it needs

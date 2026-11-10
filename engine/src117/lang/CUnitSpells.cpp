@@ -502,7 +502,9 @@ BOOL CUnit::sub_434B80(int a1, int a2, int a3, WORD *pCost) {
     upos_t wY = pTarget->pSprite->wPosY;
     upos_t wX = pTarget->pSprite->wPosX;
     if (sub_434130(a1, pTarget, 0xE4, PosS(wX), PosS(wY), (WORD *)&a3)) {
-      *pCost = (WORD)(techdata_energy_g[(WORD)a1] << 8);
+      // Hyperion: a mod's order pays its own tech's energy
+      *pCost = OrderTypeMod(bOrderId) ? get_order_tech_energy_cost(bOrderId)
+                                      : (WORD)(techdata_energy_g[(WORD)a1] << 8);
       if (!NeedsMoreEnergy(*pCost))
         return sub_4350B0(a2);
 

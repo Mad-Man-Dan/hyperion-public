@@ -104,6 +104,9 @@
 #include "../h/WeaponGndEx.h"    // CUnit::GetWeaponGndEx's inline body
 #include "../h/typelimits.h"  // Hyperion: a mod's types
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../port/data/port_moddata.h"  // Hyperion: g_hxModGame
+#include "../port/data/port_modstatus.h"  // Hyperion: a mod's statuses and action blocks
+#include "../port/data/port_modlua.h"  // Hyperion: a mod's scripts
 
 // 0x536720, the expansion gate; unregistered, spelled as gametype.cpp does.
 #ifndef gbIsExpansion
@@ -1571,6 +1574,10 @@ void CUnit::DispatchTurretGuard()
 // a loop.
 void CUnit::FireSpell(weapon_id_t bWeaponId)
 {
+  if (g_hxModGame && ModLuaCast(this))  // Hyperion: a mod's toggle or channel in its weapon's place
+    return;
+  if (g_hxModGame && ModStatusCast(this))  // Hyperion: a mod's order's blocks run in its weapon's place
+    return;
   MakeBullet(bWeaponId);
   if (gnWeapLaunch[bWeaponId] == 2)
     MakeBullet(bWeaponId);
@@ -1796,6 +1803,8 @@ BYTE CUnit::GetWeaponCD(weapon_id_t bWeapon)
     nCooldown += nCooldown >> 2;
   else if (nModifier > 0)
     nCooldown >>= 1;
+  if (g_hxModGame)  // Hyperion: a mod's statuses
+    nCooldown = ModStatusCooldown(this, nCooldown);
 
   nCooldown = (nCooldown < 250) ? nCooldown : 250;
   return (nCooldown < 5) ? 5 : nCooldown;
@@ -3118,6 +3127,13 @@ void CUnit::Damage(int nDamage, weapon_id_t bWeapon, int nDivisor, BYTE bShieldE
     nDamage = 0;
   if (dwFlags & 0x40000000)
     nDamage += nDamage;
+  if (g_hxModGame) {  // Hyperion: the attacker's and the unit's statuses, and the unit's script
+    nDamage = ModStatusDamageDealt(pSource, nDamage);
+    nDamage = ModStatusDamageTaken(this, nDamage);
+    nDamage = ModLuaDamaged(this, bWeapon, pSource, nSourcePlayer, nDamage);
+    if (lHitPoints == 0)
+      return;
+  }
   int nTotal = (bCrunchyCount << 8) + (DWORD)nDamage / (DWORD)nDivisor;
   if (nTotal < 0x80)
     nTotal = 0x80;
@@ -3141,6 +3157,8 @@ void CUnit::Damage(int nDamage, weapon_id_t bWeapon, int nDivisor, BYTE bShieldE
   if (wpn_wpnType_g[bWeapon] != 4) {
     WORD wT = wType;
     int nArmor = (ArmorUpgrades() + gubUnitArmor_g[wT]) << 8;
+    if (g_hxModGame)  // Hyperion: the statuses' armour
+      nArmor = ModStatusArmor(this, nArmor);
     nTotal -= nTotal > nArmor ? nArmor : nTotal;
   }
   int nHit = damage_by_unit_size(nTotal, wpn_wpnType_g[bWeapon], gubUnitArmorClass_g[wType]);
@@ -3153,6 +3171,10 @@ void CUnit::Damage(int nDamage, weapon_id_t bWeapon, int nDivisor, BYTE bShieldE
       CreateShieldEffect(bShieldEffect);
   }
   tai_assign_unit_strength(this);
+  if (g_hxModGame) {  // Hyperion: the status the weapon puts on what it damages, and the hit's script
+    ModStatusWeaponHit(this, bWeapon, pSource, nSourcePlayer);
+    ModLuaHit(this, bWeapon, pSource, nSourcePlayer, nDamage, nHit + nShields);
+  }
 }
 
 // CUnit::AtMoveTarget inlined against the caller's sprite x. y is read only

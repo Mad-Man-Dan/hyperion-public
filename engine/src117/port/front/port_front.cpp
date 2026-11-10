@@ -38,6 +38,9 @@
 #include "../lan/port_lanfeed.h"     // a LAN match watched
 #include "../data/port_mods.h"
 #include "../platform/port_settings.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 #include "../gameplay/port_trainer.h"     // TrainerSetup, PortTrainerFromMenus
 #include "../gameplay/port_scoregame.h"   // ScoreRead, ScoreStandIn
 #include "port_ui.h"
@@ -909,7 +912,11 @@ void RunScreen(int nWindowW, int nWindowH, float fRefresh)
       WorldSetView("campaign", false);
       LanOpen();
     }
-    if (PortControlFrontCanvas(&g_frontCanvas) || !g_frontCanvas.empty() || !g_frontMap.empty()) {
+    if (PortControlFrontCanvas(&g_frontCanvas) || !g_frontCanvas.empty() || !g_frontMap.empty()
+#ifdef HX_DESIGN
+        || DesignLaunchPending()  // a scenario's game
+#endif
+    ) {
       g_nChoice = PORT_FRONT_MODE;
       break;
     }
@@ -1633,6 +1640,10 @@ void PortFrontLaunchNext(const char *pszCanvas, const char *pszMap, bool bUms)
 
 int PortFrontStartMode(void)
 {
+#ifdef HX_DESIGN
+  if (DesignLaunchPending())
+    return DesignLaunch();  // a scenario's game
+#endif
   // a LAN match watched, its replay as it is so far (port_lanfeed.cpp)
   if (LanWatchReady())
     return LanWatchLaunch();

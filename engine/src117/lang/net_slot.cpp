@@ -774,6 +774,12 @@ void ShuffleStartSlots(BYTE *pMask)
 
   memset(bDefault, 1, sizeof bDefault);
   bDefault[PLAYER_NEUTRAL] = 0;
+  // Hyperion: of a Hyperion map's slots past 7 only its seats are shuffled; an owner no one
+  // plays, or a slot with no start location, keeps its place and takes no player
+  if (pMask == NULL && g_hxPlayers)
+    for (int s = PLAYER_LOBBY_117; s < PLAYER_SLOTS_MAX; s++)
+      if (s != PLAYER_NEUTRAL)
+        bDefault[s] = PlayersMapSeat(s) ? 1 : 0;
 
   if (pMask == NULL) {
     pMask = bDefault;

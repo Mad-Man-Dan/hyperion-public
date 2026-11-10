@@ -47,3 +47,15 @@ int TypeNameFind(const char *pszTable, const char *pszName) {
   }
   return -1;
 }
+
+const char *TypeNameOf(const char *pszTable, int n) {
+  for (const NamedTable &t : kNamed) {
+    if (strcmp(t.psz, pszTable) != 0)
+      continue;
+    for (int i = 0; i < t.nNames; ++i)
+      if (t.pNames[i].n == n && t.pNames[i].n < t.nRows)
+        return t.pNames[i].psz;
+    return nullptr;
+  }
+  return nullptr;
+}

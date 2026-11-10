@@ -17,6 +17,7 @@
 #include "../h/select.h"        // ours: select_form_t, AllowedErr
 #include "../h/statbtn.h"       // ours: OrderAllowed
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../port/render/port_view.h"  // Hyperion: PortViewScreenToMap
 #include "../h/selectlimits.h"  // Hyperion: SELECTION_MAX
 
@@ -129,7 +130,8 @@ int rclick_query_scv(CUnit *pUnit, int nX, int nY, CUnit **ppTarget, WORD wUnitT
   if ((pTarget->dwFlags & 2) != 0 && (pTarget->dwFlags & 1) == 0) {
     if (pTarget->bPlayer == pUnit->bPlayer && pTarget->GetRace() == 1 &&
         (gulUnitTypeFlags[pTarget->wType] & 2) == 0 &&
-        (pTarget->pUnion80 == NULL || pTarget->pUnion80->pOrderTarget != pTarget))
+        (pTarget->pUnion80 == NULL || pTarget->pUnion80->pOrderTarget != pTarget) &&
+        !ModRulesBuildsItself(pTarget))  // Hyperion: one warping in has no builder to take over from
       return 0x21;
   } else if (sgbAlliances_g[pUnit->bPlayer][pTarget->bPlayer] >= 1) {
     if ((gulUnitTypeFlags[pTarget->wType] & 1) == 0 && pTarget->IsATransport() &&

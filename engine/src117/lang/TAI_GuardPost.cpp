@@ -22,6 +22,7 @@
 #include "../h/TAI_GuardPost.h"
 #include "../gen/globals117.h"
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../port/gameplay/port_ai.h"  // Hyperion: AiModeKeeps: a unit classic's AI leaves alone
 
 // Hyperion: banker_demand_guard_unit and banker_captain_for_request read a guard through SAI_Request
 // (SAI_Banker.h), on both widths.
@@ -78,6 +79,10 @@ BOOL guard_unit_is_soldier(CUnit *pUnit)
 
 // True when the unit is a computer player's and still wants a guard record.
 void CUnit::AttachAiRecord() {
+  // Hyperion: a unit the game's mode has taken is the mode's to play (hx.own), so it gets no
+  // record of the computer's: no town, no guard post and no banker
+  if (AiModeKeeps(this))
+    return;
   if (PlayerIsLobby(this->bPlayer)) {  // Hyperion: bPlayer < 8 in 1.17
     banker_register_medic(this);
 
@@ -569,6 +574,13 @@ void guard_update_posts(int nPlayer) {
     }
 
     CUnit *pUnit = p->pUnit;
+
+    // Hyperion: a unit the mode has taken leaves its post and keeps its own record of none
+    // (hx.own); the post is left for another unit to crew, as one whose unit died is
+    if (pUnit != NULL && AiModeKeeps(pUnit)) {
+      SAI_RemoveUnit(pUnit, 0);
+      continue;
+    }
 
     if (pUnit != NULL) {
       if ((pUnit->dwFlags & 0x40000000) == 0)

@@ -12,6 +12,7 @@
 #include "CUnitTerran.h"
 #include "TrigEnum.h"
 #include "CImage.h"
+#include "../port/data/port_modrules.h"  // Hyperion: ModRulesAddOnOffset
 #include "point16.h"
 // collide.h (reached through CUnitBuild.h) declares mtx_query_place_bldg with
 // the body's int nType; this TU calls it through the WORD view below, so the
@@ -595,7 +596,8 @@ void CUnit::DispatchPlaceMine() {
 }
 
 void CUnit::DispatchPlaceScanner() {
-  WORD wCost = techdata_energy_g[4] << 8;
+  // Hyperion: a mod's order pays its own tech's energy
+  WORD wCost = OrderTypeMod(bOrderId) ? get_order_tech_energy_cost(bOrderId) : techdata_energy_g[4] << 8;
   if (NeedsMoreEnergy(wCost)) {
     char *pszMsg = status_get_str(count_race(wType) + 0x360);
     map_msg_target_self(pszMsg, bPlayer);
@@ -614,7 +616,7 @@ void CUnit::DispatchPlaceScanner() {
   }
   pScanner->FinishedMaking();
   gamesnd_play(0x184, this, 1, 0);
-  SubtractEnergy(techdata_energy_g[4] << 8);
+  SubtractEnergy(wCost);
   EndDispatchOrder();
 }
 
@@ -797,8 +799,8 @@ int CUnit::DisplayLandingOverlay(int nUnitType) {
   point16_t pos;
   pos.x = -(gUnitPlaceboxSize[wType].x / 2);
   pos.y = -(gUnitPlaceboxSize[wType].y / 2);
-  pos.x -= gUnitAddOnOffset[wType - 106].x;
-  pos.y -= gUnitAddOnOffset[wType - 106].y;
+  pos.x -= ModRulesAddOnOffset(wType).x;
+  pos.y -= ModRulesAddOnOffset(wType).y;
   pos.x += gUnitPlaceboxSize[(WORD)nUnitType].x / 2;
   pos.y += gUnitPlaceboxSize[(WORD)nUnitType].y / 2;
   WORD wImage = guwSpriteImage[guwFlingySprite[gubUnitFlingy[(WORD)nUnitType]]];

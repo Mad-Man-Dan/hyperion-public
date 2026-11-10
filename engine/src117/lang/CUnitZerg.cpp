@@ -37,6 +37,7 @@ extern "C" CUnit *__fastcall find_first_unit_near(int x, int y, int nRadius, int
 #define find_first_unit_near(a0, a1, a2, a3, a4) (find_first_unit_near)(PosU(a0), PosU(a1), (a2), (a3), (a4))
 #undef mtx_query_place_bldg
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../h/typelimits.h"  // Hyperion: a mod's types
 #include "../h/handicap.h"  // Hyperion: a player's handicap
 
@@ -653,7 +654,8 @@ void CUnit::DispatchSpawningLarva()
 // failed spread re-queues the background order.
 void CUnit::DispatchSpreadCreep()
 {
-  if (this->wType == 0x83 || this->wType == 0x84 || this->wType == 0x85)
+  const int nSource = ModRulesCreepType(this->wType);  // Hyperion: a mod's town hall as the Hatchery
+  if (nSource == 0x83 || nSource == 0x84 || nSource == 0x85)
     this->DispatchSpawningLarva();
 
   if (UNIT_CREEP_TIMER(this) != 0)

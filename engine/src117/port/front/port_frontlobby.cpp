@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <math.h>
 #include <string.h>
+#include <algorithm>
 #include <deque>
 #include <string>
 #include <vector>
@@ -15,6 +16,8 @@
 #include "../../gen/globals117.h"  // gUnitBoundBox
 #include "../platform/port_globals117.h"
 #include "../data/port_formats.h"  // PortMegatilesLoad
+#include "../data/port_moddata.h"    // ModDataId
+#include "../data/port_modtileset.h"  // ModTilesetForPicture
 #include "../data/port_stormbase.h"  // PortMemSize
 
 namespace FrontKit {
@@ -295,9 +298,10 @@ void DrawAva(float x, float y, float w, float h, void *pCtx)
 
 // A pulldown (BattlenetSmallPulldown): its face shows the choice, or pszFace, and a click
 // opens its list under it, or over it near the screen's foot; the choice made, or -1. Off, it is greyed (not built yet);
-// locked, it shows its choice in Hyperion's gold.
-int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std::string> &items, int nCur,
-             int nState, const unsigned *pChips, const char *pszFace, float fListWidth)
+// locked, it shows its choice in Hyperion's gold. Both forms draw this: a row may carry a note
+// at its right, a tip, and the word that greys it.
+static int PulldownBody(const char *pszId, int nIndex, float fWidth, const std::vector<PulldownRow> &items, int nCur,
+                        int nState, const unsigned *pChips, const char *pszFace, float fListWidth)
 {
   const std::string key = std::string(pszId) + "#" + std::to_string(nIndex);
   const bool bEnabled = nState == PD_ON;
@@ -318,7 +322,8 @@ int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std:
   Open(face);
   if (pChips != NULL && nCur >= 0 && nCur < static_cast<int>(items.size()))
     Chip(pChips[nCur]);
-  const char *pszShown = pszFace != NULL ? pszFace : nCur >= 0 && nCur < static_cast<int>(items.size()) ? Keep(items[nCur]) : "";
+  const char *pszShown =
+      pszFace != NULL ? pszFace : nCur >= 0 && nCur < static_cast<int>(items.size()) ? Keep(items[nCur].text) : "";
   Text(pszShown, UI_FACE_TEXT, Fs(15), 0.0f,
        nState == PD_OFF ? kScInkOff : nState == PD_LOCKED ? kScInkAccept : kScInkHi);
   int nChosen = -1;
@@ -326,7 +331,8 @@ int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std:
     Decl list;
     list.d.id = Id((std::string(pszId) + "_list").c_str(), nIndex);
     list.d.layout.layoutDirection = CLAY_TOP_TO_BOTTOM;
-    list.d.layout.sizing.width = Fixed(Sc(fmaxf(fListWidth, fWidth > 220 ? fWidth : 220)));
+    const float fListW = fmaxf(fListWidth, fWidth > 220 ? fWidth : 220);
+    list.d.layout.sizing.width = Fixed(Sc(fListW));
     list.d.layout.padding = Pad(0, 0, Fs(4), Fs(4));
     list.d.backgroundColor = Col(kScMenuFill);
     list.d.border = Border(kScMenuRim, 1, 1, 1, 1);
@@ -345,9 +351,11 @@ int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std:
     list.d.floating.zIndex = 90;
     Open(list);
     for (size_t i = 0; i < items.size(); ++i) {
+      const PulldownRow &row = items[i];
+      const bool bOff = !row.why.empty();
       Decl it = Box((std::string(pszId) + "_item").c_str(), nIndex * 64 + static_cast<int>(i));
-      const bool bItemHot = Over(it.d.id);
-      if (Clicked(it.d.id)) {
+      const bool bItemHot = !bOff && Over(it.d.id);
+      if (!bOff && Clicked(it.d.id)) {
         nChosen = static_cast<int>(i);
         g_lbOpen.clear();
       }
@@ -356,18 +364,49 @@ int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std:
       it.d.layout.padding = Pad(Fs(12), Fs(12), 0, 0);
       it.d.layout.childGap = Gap(Fs(8));
       it.d.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
-      if (bItemHot || static_cast<int>(i) == nCur)
+      if (bItemHot || (!bOff && static_cast<int>(i) == nCur))
         it.d.backgroundColor = Col(kScMenuSel);
       Open(it);
       if (pChips != NULL)
         Chip(pChips[i]);
-      Text(Keep(items[i]), UI_FACE_TEXT, Fs(15), 0.0f, bItemHot ? kScInkHi : kScInkButton);
+      Text(Keep(row.text), UI_FACE_TEXT, Fs(15), 0.0f,
+           bOff ? kScInkOff : bItemHot ? kScInkHi : kScInkButton);
+      // where the row comes from, or why it cannot be chosen, at its right: what the row's own
+      // name leaves of the list's width, cut short rather than wrapped under it
+      if (!row.note.empty() || bOff) {
+        const float fRoom =
+            Sc(fListW - 32) - UiTextWidth(UI_FACE_TEXT, roundf(Sc(15)), 0.0f, row.text.c_str()) - Sc(10);
+        Spacer();
+        Text(Keep(Elide(bOff ? row.why : row.note, UI_FACE_TEXT, Fs(13), fmaxf(Sc(30), fRoom))), UI_FACE_TEXT,
+             Fs(13), 0.0f, bOff ? kLbWarn : kScInkOff);
+      }
       Close();
+      if (bOff || !row.tip.empty())
+        TipOn(it.d.id, Keep(row.title.empty() ? row.text : row.title), Keep(bOff ? row.why : row.tip));
     }
     Close();
   }
   Close();
   return nChosen;
+}
+
+int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std::string> &items, int nCur,
+             int nState, const unsigned *pChips, const char *pszFace, float fListWidth)
+{
+  std::vector<PulldownRow> rows;
+  rows.reserve(items.size());
+  for (const std::string &one : items) {
+    PulldownRow row;
+    row.text = one;
+    rows.push_back(row);
+  }
+  return PulldownBody(pszId, nIndex, fWidth, rows, nCur, nState, pChips, pszFace, fListWidth);
+}
+
+int PulldownRows(const char *pszId, int nIndex, float fWidth, const std::vector<PulldownRow> &rows, int nCur,
+                 int nState, float fListWidth)
+{
+  return PulldownBody(pszId, nIndex, fWidth, rows, nCur, nState, NULL, NULL, fListWidth);
 }
 
 // A greyed pulldown showing what 1.17 does, with a tip on what it waits for.
@@ -474,6 +513,7 @@ namespace {
 // tiles in squares. The tileset's files stay loaded for the next map of the same tileset.
 struct TilesetColours {
   int nTileset = -1;
+  std::string mod;              // the loaded mod's id, whose changes to the tileset these have
   std::vector<WORD> cv5;        // 26 words a group, the megatiles from the 11th
   std::vector<DWORD> vx4;       // 16 dwords a megatile: a cell, and whether it is flipped (PortMegatilesLoad)
   std::vector<BYTE> vr4;        // 64 bytes a cell
@@ -544,13 +584,18 @@ bool TilesetReady(int nTileset)
 {
   if (nTileset < 0 || nTileset >= 8)
     return false;
-  if (g_tileset.nTileset != nTileset) {
+  if (g_tileset.nTileset != nTileset || g_tileset.mod != ModDataId()) {
     g_tileset = TilesetColours();
     if (!TilesetFile(nTileset, "cv5", &g_tileset.cv5) || !TilesetMegatiles(nTileset, &g_tileset.vx4) ||
         !TilesetFile(nTileset, "vr4", &g_tileset.vr4) || !TilesetFile(nTileset, "wpe", &g_tileset.wpe) ||
         g_tileset.wpe.size() < 1024)
       return false;
+    // as a game with the loaded mod draws it: its colours, pictures and groups
+    ModTilesetForPicture(nTileset, g_tileset.wpe.data(), g_tileset.cv5.data(), g_tileset.cv5.size() / 26,
+                         reinterpret_cast<unsigned int *>(g_tileset.vx4.data()), g_tileset.vx4.size() / 16,
+                         &g_tileset.vr4);
     g_tileset.nTileset = nTileset;
+    g_tileset.mod = ModDataId();
     g_tileset.megatile.assign(g_tileset.vx4.size() / 16, 0);
   }
   return true;
@@ -812,13 +857,20 @@ namespace {
 // The map's picture: its minimap, in the map's shape, and its starts numbered where they
 // are; until the minimap is made, its tileset's colour and a grid.
 
+// Every field has its own starting value, since the shapes make this a struct that cannot be
+// cleared with a memset.
 struct PreviewLook {
-  UiColor fill;
-  bool bMinimap;
-  float fx0, fy0, fx1, fy1;  // the minimap's place in the box, 0 to 1
-  float fMapW, fMapH;        // the map's size in pixels
-  bool bAllUnits;            // Use Map Settings, which keeps the players' units too
-  const MapPicture *pPic;
+  UiColor fill = {0.0f, 0.0f, 0.0f, 0.0f};
+  bool bMinimap = false;
+  float fx0 = 0, fy0 = 0, fx1 = 0, fy1 = 0;  // the minimap's place in the box, 0 to 1
+  float fMapW = 0, fMapH = 0;                // the map's size in pixels
+  bool bAllUnits = false;   // Use Map Settings, which keeps the players' units too
+  const MapPicture *pPic = NULL;
+  // what a caller draws over the picture, in the map's pixels, with the scale and offset that
+  // bring them into the box: the shapes are kept here rather than pointed at, since the caller's
+  // list is gone by the time the layout draws
+  std::vector<MapShape> shapes;
+  float fScale = 0, ox = 0, oy = 0;
 };
 std::deque<PreviewLook> g_looks;  // the frame's, alive until its layout is drawn
 
@@ -830,6 +882,136 @@ void MapPreviewFrame(void)
 }
 
 namespace {
+
+// ---- the shapes over the picture (MapShape) -------------------------------------------------
+// A caller's shapes, in the map's own pixels, brought into the box by the picture's own scale.
+// Each is filled where it asks for a fill and then stroked, and the stroke is never thinner than
+// a pixel, so a shape still reads on a picture a few inches wide.
+
+const int kShapeDashesMost = 96;  // the dashes a stroke is cut into, however long it is
+
+// A stroke from one point to another, cut into dashes of fDash with gaps to match.
+void ShapeLine(float x0, float y0, float x1, float y1, UiColor c, float fWidth, float fDash)
+{
+  if (fDash <= 0.0f) {
+    UiLine(x0, y0, x1, y1, c, fWidth);
+    return;
+  }
+  const float dx = x1 - x0, dy = y1 - y0;
+  const float fLen = sqrtf(dx * dx + dy * dy);
+  if (fLen <= 0.0f)
+    return;
+  // a dash shorter than a pixel would cut the stroke into more pieces than the picture has
+  // pixels to show them in, so it is drawn whole instead
+  const float fStep = fmaxf(fDash, 1.0f) * 2.0f;
+  if (fLen / fStep > kShapeDashesMost) {
+    UiLine(x0, y0, x1, y1, c, fWidth);
+    return;
+  }
+  for (float at = 0.0f; at < fLen; at += fStep) {
+    const float to = fminf(at + fStep * 0.5f, fLen);
+    UiLine(x0 + dx * at / fLen, y0 + dy * at / fLen, x0 + dx * to / fLen, y0 + dy * to / fLen, c, fWidth);
+  }
+}
+
+// A circle's edge: in one piece, which is rounder than any number of chords, unless it is
+// dashed, when it is drawn as chords with every other one left out.
+void ShapeCircle(float cx, float cy, float r, UiColor c, float fWidth, float fDash)
+{
+  if (r <= 0.0f)
+    return;
+  if (fDash <= 0.0f) {
+    UiRing(cx - r, cy - r, r * 2.0f, r * 2.0f, c, r, fWidth);
+    return;
+  }
+  const float fStep = fmaxf(fDash, 1.0f) * 2.0f;
+  int n = static_cast<int>(6.2831853f * r / fStep);
+  n = n < 4 ? 4 : n > kShapeDashesMost ? kShapeDashesMost : n;
+  for (int i = 0; i < n * 2; i += 2) {
+    const float a0 = 3.1415927f * i / n, a1 = 3.1415927f * (i + 1) / n;
+    UiLine(cx + r * cosf(a0), cy + r * sinf(a0), cx + r * cosf(a1), cy + r * sinf(a1), c, fWidth);
+  }
+}
+
+// A polygon's inside, a row of the picture at a time: the row's crossings in order, filled
+// between every second pair, which is the inside of a shape however it folds.
+void ShapePolyFill(const std::vector<float> &pts, UiColor c)
+{
+  const size_t n = pts.size() / 2;
+  if (n < 3)
+    return;
+  float fTop = pts[1], fFoot = pts[1];
+  for (size_t i = 1; i < n; ++i) {
+    fTop = fminf(fTop, pts[i * 2 + 1]);
+    fFoot = fmaxf(fFoot, pts[i * 2 + 1]);
+  }
+  if (fFoot <= fTop)
+    return;
+  std::vector<float> afCross;
+  for (float y = fTop; y < fFoot; y += 1.0f) {
+    const float fMid = y + 0.5f;
+    afCross.clear();
+    for (size_t i = 0; i < n; ++i) {
+      const size_t j = (i + 1) % n;
+      const float ay = pts[i * 2 + 1], by = pts[j * 2 + 1];
+      if ((ay <= fMid) == (by <= fMid) || ay == by)
+        continue;
+      const float ax = pts[i * 2], bx = pts[j * 2];
+      afCross.push_back(ax + (bx - ax) * (fMid - ay) / (by - ay));
+    }
+    std::sort(afCross.begin(), afCross.end());
+    for (size_t m = 0; m + 1 < afCross.size(); m += 2)
+      if (afCross[m + 1] > afCross[m])
+        UiFill(afCross[m], y, afCross[m + 1] - afCross[m], 1.0f, c);
+  }
+}
+
+void DrawShapes(float x, float y, const PreviewLook &k)
+{
+  for (const MapShape &s : k.shapes) {
+    // the map's pixels into the box: the same scale and offset the starts are placed by
+    const float sx = x + k.ox + s.x * k.fScale, sy = y + k.oy + s.y * k.fScale;
+    const float r = s.r * k.fScale, sw = s.w * k.fScale, sh = s.h * k.fScale;
+    const float fWidth = fmaxf(1.0f, s.fWidth * k.fScale), fDash = s.fDash * k.fScale;
+    const UiColor fill = UiRgb(s.rgb, s.fFill), edge = UiRgb(s.rgb, s.fEdge);
+    std::vector<float> pts;
+    if (s.nShape == MapShape::POLYGON) {
+      pts.reserve(s.points.size());
+      for (size_t i = 0; i + 1 < s.points.size(); i += 2) {
+        pts.push_back(x + k.ox + s.points[i] * k.fScale);
+        pts.push_back(y + k.oy + s.points[i + 1] * k.fScale);
+      }
+    }
+    if (s.fFill > 0.004f) {
+      if (s.nShape == MapShape::CIRCLE && r > 0.0f)
+        UiFill(sx - r, sy - r, r * 2.0f, r * 2.0f, fill, r);
+      else if (s.nShape == MapShape::RECT && sw > 0.0f && sh > 0.0f)
+        UiFill(sx, sy, sw, sh, fill);
+      else if (s.nShape == MapShape::POLYGON)
+        ShapePolyFill(pts, fill);
+    }
+    if (s.fEdge <= 0.004f)
+      continue;
+    if (s.nShape == MapShape::CIRCLE || s.nShape == MapShape::RING) {
+      ShapeCircle(sx, sy, r, edge, fWidth, fDash);
+    } else if (s.nShape == MapShape::RECT) {
+      if (sw <= 0.0f || sh <= 0.0f)
+        continue;
+      ShapeLine(sx, sy, sx + sw, sy, edge, fWidth, fDash);
+      ShapeLine(sx + sw, sy, sx + sw, sy + sh, edge, fWidth, fDash);
+      ShapeLine(sx + sw, sy + sh, sx, sy + sh, edge, fWidth, fDash);
+      ShapeLine(sx, sy + sh, sx, sy, edge, fWidth, fDash);
+    } else if (s.nShape == MapShape::POLYGON) {
+      const size_t n = pts.size() / 2;
+      for (size_t i = 0; i < n && n >= 2; ++i) {
+        const size_t j = (i + 1) % n;
+        ShapeLine(pts[i * 2], pts[i * 2 + 1], pts[j * 2], pts[j * 2 + 1], edge, fWidth, fDash);
+      }
+    } else if (s.nShape == MapShape::LINE) {
+      ShapeLine(sx, sy, x + k.ox + s.x2 * k.fScale, y + k.oy + s.y2 * k.fScale, edge, fWidth, fDash);
+    }
+  }
+}
 
 void DrawPreview(float x, float y, float w, float h, void *pCtx)
 {
@@ -862,6 +1044,7 @@ void DrawPreview(float x, float y, float w, float h, void *pCtx)
       UiFill(x, y + h * i / 8, w, 1.0f, line);
     }
   }
+  DrawShapes(x, y, k);
   UiRing(x, y, w, h, kScWellRim, 0.0f, fmaxf(1.0f, Sc(2)));
 }
 
@@ -893,7 +1076,8 @@ bool LightFill(unsigned rgb)
 }  // namespace
 
 void MapPreview(const char *pszId, const MapPicture *pPic, int nTileset, const char *pszTitle, int nMapW, int nMapH,
-                float fW, float fH, int nZ, bool bBig, bool bAllUnits, const std::vector<MapMark> *pMarks)
+                float fW, float fH, int nZ, bool bBig, bool bAllUnits, const std::vector<MapMark> *pMarks,
+                const std::vector<MapShape> *pShapes)
 {
   Decl pv = Box(pszId);
   pv.d.layout.sizing.width = Fixed(Sc(fW));
@@ -901,7 +1085,6 @@ void MapPreview(const char *pszId, const MapPicture *pPic, int nTileset, const c
   pv.d.layout.childAlignment.x = CLAY_ALIGN_X_CENTER;
   pv.d.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
   PreviewLook look;
-  SDL_zero(look);
   look.fill = pszTitle != NULL ? UiRgb(kTilesetTint[nTileset & 7]) : UiRgb(0x0a1420);
   look.pPic = pPic;
   const bool bRead = pszTitle != NULL && nMapW > 0 && nMapH > 0;
@@ -921,6 +1104,13 @@ void MapPreview(const char *pszId, const MapPicture *pPic, int nTileset, const c
       look.fMapH = fMapH;
       look.bAllUnits = bAllUnits;
       look.fill = UiRgb(0x000000);
+    }
+    // the shapes go with the scale that brings them into the box, which only a map read has
+    if (pShapes != NULL) {
+      look.shapes = *pShapes;
+      look.fScale = fScale;
+      look.ox = ox;
+      look.oy = oy;
     }
   }
   g_looks.push_back(look);

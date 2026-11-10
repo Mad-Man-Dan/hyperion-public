@@ -16,6 +16,7 @@
 #include "../h/net_cmds.h"       // ours: set_allowed_err
 #include "../h/saveload.h"       // ours: get_tech_available / get_tech_researched
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../h/typelimits.h"  // Hyperion: a mod's types
 #include "../port/data/port_moddata.h"  // Hyperion: ModTechUseTree, ModTechResearchTree, ModUpgradeTree, ModTreeEdit
 #include "../h/mutators.h"  // Hyperion: MutatorResearchForbidden, MutatorUpgradesForbidden
@@ -420,6 +421,10 @@ int OrderAllowed(WORD nOrder, int nPlayer, CUnit *pUnit)
     return 0;
   }
 
+  // Hyperion: a worker of a game with a mod places by its race's way, whatever its type
+  const int nRule = ModRulesOrderAllowed(nOrder, pUnit);
+  if (nRule >= 0)
+    return nRule;
   int nIndex = guwOrdDepIndex[(WORD)nOrder];
   if (nIndex == 0) {
     set_allowed_err(0x17);
@@ -564,6 +569,11 @@ int TechUseAllowed(int nTech, int nPlayer, CUnit *pUnit)
   // requirements and is available to every player (ModTechUseTree)
   if (const WORD *pModTree = ModTechUseTree((WORD)nTech))
     return CheckAllowed(nTech, nPlayer, pUnit, pModTree, 1);
+  // Hyperion: and one that names no use requirements may be cast by any unit whose command
+  // card carries the button, which is then the gate: a mode rolls its casters as the game
+  // loads and cannot name them (docs/mod-data.md)
+  if (TechTypeMod((WORD)nTech))
+    return 1;
   if (!get_tech_available(nPlayer, (WORD)nTech) && !(glCheatBits & 0x1000)) {
     set_allowed_err(2);
     return 0;

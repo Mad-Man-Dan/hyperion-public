@@ -130,12 +130,23 @@ struct mrect_t {
 static_assert(sizeof(spos_t) == 4 && sizeof(upos_t) == 4, "a position is 4 bytes on x64");
 static_assert(sizeof(mpoint_t) == 8 && sizeof(mrect_t) == 16, "map points and rectangles of them");
 
+inline mpoint_t MapPoint(int x, int y) { return mpoint_t(x, y); }
+
 #else
 
 typedef short spos_t;
 typedef unsigned short upos_t;
 typedef point16_t mpoint_t;
 typedef rect16_t mrect_t;
+
+// a point from two ints, written alike for both widths (tools/wide_globals.py compiles the
+// port's files at 32 bits as well)
+inline mpoint_t MapPoint(int x, int y) {
+  mpoint_t p;
+  p.x = static_cast<short>(x);
+  p.y = static_cast<short>(y);
+  return p;
+}
 
 #endif
 

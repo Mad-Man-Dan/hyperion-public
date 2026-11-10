@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include "port_subtitles.h"
 #include "port_language.h"            // PortLanguageGame
+#include "port_modlang.h"             // ModLangLanguage
 #include "../front/port_ui.h"        // PortCascRead, UiText
 #include "../render/port_overlay.h"  // PORT_OVERLAY_LAYER
 #include "../platform/port_settings.h"
@@ -189,7 +190,10 @@ void PortSubtitlesBegin(const char *pszFile, const char *pszOwn)
     const size_t nOwnDot = own.rfind('.');
     if (nOwnDot != std::string::npos)
       own.erase(nOwnDot);
-    pText = static_cast<char *>(SDL_LoadFile((own + ".srt").c_str(), &nSize));
+    // the player's language's beside it (intro.deDE.srt), else its own
+    pText = static_cast<char *>(SDL_LoadFile((own + "." + ModLangLanguage() + ".srt").c_str(), &nSize));
+    if (pText == NULL)
+      pText = static_cast<char *>(SDL_LoadFile((own + ".srt").c_str(), &nSize));
   }
   // the game's language's when the font has its letters (it has none of Cyrillic's or the East
   // Asian scripts'), else English's

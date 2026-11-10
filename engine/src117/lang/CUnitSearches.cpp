@@ -46,8 +46,10 @@
 #include <stdio.h>   // Hyperion: HYPERION_FIND_CHECK's log
 #include <stdlib.h>  // Hyperion: getenv
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../h/playervision.h"  // Hyperion: the slots past 7
 #include "../h/hxrules.h"       // Hyperion: HxRules
+#include "../h/typelimits.h"    // Hyperion: UnitTypeMod
 
 // The globals this TU touches that src117/gen/globals117.h does not emit yet,
 // spelled here in the same dual `#ifdef OC_DLL_MODE` form the generated header
@@ -333,6 +335,16 @@ static CUnit *HxNearestDepot(CUnit *pWorker)
   return pBest;
 }
 
+// Hyperion: whether the player has a completed depot among a mod's units, a mod's race's town
+// hall in place of its base's; never in a game without a mod's units.
+static bool HxModDepotCompleted(int nPlayer)
+{
+  for (unsigned t = UNIT_TYPE_MOD_FIRST; UnitTypeMod(t); ++t)
+    if ((gulUnitTypeFlags[t] & 0x1000) != 0 && count_get_completion(static_cast<int>(t), static_cast<BYTE>(nPlayer)))
+      return true;
+  return false;
+}
+
 CUnit *CUnit::sub_431F00()
 {
   int nPlayer = bPlayer;
@@ -341,7 +353,8 @@ CUnit *CUnit::sub_431F00()
       !count_get_completion(0x9A, nPlayer) &&
       !count_get_completion(0x6A, nPlayer) &&
       !count_get_completion(0x84, nPlayer) &&
-      !count_get_completion(0x85, nPlayer))
+      !count_get_completion(0x85, nPlayer) &&
+      !HxModDepotCompleted(nPlayer))  // Hyperion: or a mod's town hall
     return 0;
 
   if (HxRules())
@@ -2449,11 +2462,11 @@ BOOL __fastcall sub_4317D0(CUnit *pCandidate, CUnit *pSource)
   if (PosS(pSrc->wPosX - reinterpret_cast<const point16_t *>(
           reinterpret_cast<const BYTE *>(gUnitPlaceboxSize) + nSrcOff)->x / 2) / 32 ==
       (PosS(pSpr->wPosX - gUnitPlaceboxSize[nType].x / 2) -
-       gUnitAddOnOffset[nType - 106].x) / 32 &&
+       ModRulesAddOnOffset(nType).x) / 32 &&
       PosS(pSrc->wPosY - reinterpret_cast<const point16_t *>(
           reinterpret_cast<const BYTE *>(gUnitPlaceboxSize) + nSrcOff)->y / 2) / 32 ==
       (PosS(pSpr->wPosY - gUnitPlaceboxSize[nType].y / 2) -
-       gUnitAddOnOffset[nType - 106].y) / 32)
+       ModRulesAddOnOffset(nType).y) / 32)
     return TRUE;
   return FALSE;
 }

@@ -10,6 +10,7 @@
 #include "../platform/port_globals117.h"  // oc_dwReplayFrame
 #include "../platform/port_discord.h"     // PortDiscordGameText
 #include "../data/port_mods.h"            // PortMods, PortModActive
+#include "../data/port_mode.h"            // PortModeInGameDecl, PortModeSeedOfGame
 #include "../front/port_front.h"          // PortFrontScreen
 #include "../gameplay/port_mutators.h"    // MutatorsRevisionOf
 #include "../gameplay/port_session.h"     // Session
@@ -31,8 +32,19 @@ void PortCrashNotesGameStart(void)
            PortDiscordGameText().c_str(), static_cast<unsigned>(gwMapWidth), static_cast<unsigned>(gwMapHeight),
            static_cast<unsigned long>(g_LocalNationID), MutatorsRevisionOf(),
            Session().bMutators ? "chosen" : "none", mod.name.c_str(), mod.version.c_str());
-  g_game = sz;
-  PortCrashSession("game", sz);
+  // the mode the game plays, with the seed and the settings its run came out of: a game with a
+  // mode plays by rules of the mode's own, so a report of one is read against them
+  std::string game = sz;
+  const PortModeDecl *pMode = PortModeInGameDecl();
+  if (pMode == NULL) {
+    game += "; mode none";
+  } else {
+    snprintf(sz, sizeof sz, "; mode %s %s, seed %lu, settings %s", pMode->id.c_str(), pMode->version.c_str(),
+             static_cast<unsigned long>(PortModeSeedOfGame()), PortModeSettingsOfGame().c_str());
+    game += sz;
+  }
+  g_game = game;
+  PortCrashSession("game", game.c_str());
 }
 
 void PortCrashNotesGameEnd(void)

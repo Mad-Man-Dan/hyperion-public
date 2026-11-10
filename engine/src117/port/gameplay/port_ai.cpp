@@ -21,6 +21,8 @@
 #include "../../h/playertables.h"  // PlayersSeatSlot
 #include "../../h/playervision.h"  // VisionHxHidden, VisionHxUnexplored
 #include "../../h/net_cmds.h"      // PlayerData
+#include "../data/port_mode.h"     // PortModeEnemySlot: the player the game's mode plays itself
+#include "../data/port_modlua.h"   // ModLuaModeOwns: a unit the mode has taken
 #include "../../h/CUnit.h"
 #include "../../h/CSprite.h"
 #include "../replays/port_snap.h"          // PORT_SNAP_KEEP
@@ -266,8 +268,15 @@ void AiVisionRefresh() {
 }
 
 DWORD AiMeleeScript(int nSlot, DWORD dwClassic) {
-  (void)nSlot;
-  return dwClassic;
+  // the player a mode plays itself has no script of the game's: no town, no workers, no
+  // production and no attacks but the mode's own
+  return nSlot == PortModeEnemySlot() ? 0 : dwClassic;
+}
+
+bool AiModeKeeps(const CUnit *pUnit) {
+  if (pUnit == nullptr)
+    return false;
+  return pUnit->bPlayer == PortModeEnemySlot() || ModLuaModeOwns(pUnit);
 }
 
 BYTE AiThinkFrames(const CUnit *pUnit, BYTE bClassic) {

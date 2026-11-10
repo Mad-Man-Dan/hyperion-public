@@ -17,12 +17,12 @@ import sys
 import urllib.request
 from pathlib import Path
 
-VERSION = "dfe8377"  # dr_mp3 0.7.4, dr_flac 0.13.4, dr_wav 0.14.6 in development (2026-08-31)
-COMMIT = "dfe8377631000664666519fdb83da193fd8037f4"
+VERSION = "b6a9189"  # dr_mp3 0.7.5, dr_flac 0.13.5, dr_wav 0.14.7 (2026-11-09)
+COMMIT = "b6a91899fd5ee9508aab6a41b9f51ff8b4987317"
 FILES = {
-    "dr_mp3.h": "997b7ee18de6e6b81e2a83f1ea9fc62aef25c62b28d48db95635f49e65de0a2f",
-    "dr_flac.h": "111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c",
-    "dr_wav.h": "03e70c1a2d9787cd7ed3e966c075bea7bac6373f759db9cd7ca9ccdfc4ec4493",
+    "dr_mp3.h": "e5e8cc2a449ad312fbb2e97bd8b085aab9362bf99ddd8e34684f317ef048381f",
+    "dr_flac.h": "3f010d3142a5b9df80a0bd8b325de54317468b1aff85abb257c86dbfefe9bd2a",
+    "dr_wav.h": "7c9660d75361ad6175e6217c63a1075c9512445c06bc951197fc479179f76b39",
 }
 
 ENGINE = Path(__file__).resolve().parents[1]

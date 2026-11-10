@@ -11,8 +11,10 @@ license, and every package carries the licenses of what it contains.
 | [StormLib](https://github.com/ladislav-zezula/StormLib) | 9.40 | MIT | MPQ archives, PKWARE implode and explode |
 | [CascLib](https://github.com/ladislav-zezula/CascLib) | 3.0 | MIT | StarCraft: Remastered's CASC storage |
 | [Clay](https://github.com/nicbarker/clay) | 0.14 | zlib | the menus' layout |
+| [Luau](https://github.com/luau-lang/luau) | 0.742 | MIT | the scripts of mods and game modes |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.93.0, docking branch | MIT | the panels of Hyperion Studio and the design engine; not in `Hyperion.exe` |
 | [stb](https://github.com/nothings/stb) | commit `6e9f34d`, with the patches in `engine/tools/stb-patches/` | MIT or public domain | TrueType text, Ogg Vorbis, PNG and TGA |
-| [dr_libs](https://github.com/mackron/dr_libs) | commit `dfe8377` | MIT-0 or public domain | MP3, FLAC and WAV |
+| [dr_libs](https://github.com/mackron/dr_libs) | commit `b6a9189` | MIT-0 or public domain | MP3, FLAC and WAV |
 | [libvpx](https://github.com/webmproject/libvpx), with libwebm | 1.17.0 | BSD-3-Clause, with Google's patent grant | VP8 and VP9 video; its configuration is committed in `engine/tools/libvpx/` |
 | [dav1d](https://github.com/videolan/dav1d) | 1.5.4 | BSD-2-Clause | AV1 video; its configuration is committed in `engine/tools/dav1d/` |
 | [libwebp](https://github.com/webmproject/libwebp) | 1.5.0 | BSD-3-Clause | WebP images |
@@ -24,6 +26,7 @@ license, and every package carries the licenses of what it contains.
 | [plog](https://github.com/SergiusTheBest/plog), [nlohmann/json](https://github.com/nlohmann/json) | as libdatachannel pins them | MIT | libdatachannel's logging and JSON |
 | [OpenH264](https://github.com/cisco/openh264) | as `fetch_webrtc.py` pins it | BSD-2-Clause | video for the streamed seats |
 | [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) | as `fetch_webrtc.py` pins it | Apache-2.0 | encryption for the streamed seats |
+| [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers) | 13.1.15.0 | MIT | the headers of NVIDIA's encoder, which the driver provides, for the streamed seats; headers only |
 | [Opus](https://opus-codec.org/) | as `fetch_webrtc.py` pins it | BSD-3-Clause | sound for the streamed seats |
 
 H.264, H.265 and AAC video are decoded by the system (Media Foundation on Windows, VideoToolbox

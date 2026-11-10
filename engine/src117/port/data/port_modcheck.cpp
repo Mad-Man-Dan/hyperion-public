@@ -21,7 +21,12 @@
 #include "../platform/port_posix.h"  // PortNativePath
 #include "../platform/port_util.h"  // PortReadFile
 #include "port_imagefile.h"  // PortImageDecode
+#include "port_mode.h"  // PortModeFind, PortModeSettingsBase: a mode's own check
 #include "port_modcheck.h"
+#include "port_modlang.h"  // ModLangCheck
+#include "port_modlua.h"  // ModLuaHasFunction: whether a script gives readout(unit)
+#include "../hud/port_readout.h"  // PortReadoutCheck: the mod's readout.json
+#include "../platform/port_json.h"  // a roll's records counted
 #include "port_mods.h"
 #include "port_sound.h"  // PortSoundLoad
 #include "port_video.h"
@@ -195,6 +200,15 @@ std::string Stem(const std::string &name) {
   return s.substr(0, s.rfind('.'));
 }
 
+// A file's stem, a language's subtitles' (intro.deDE.srt) without their language.
+std::string SubtitleStem(const std::string &name) {
+  std::string s = Stem(name);
+  const size_t nDot = s.rfind('.');
+  if (EndsWith(name, ".srt") && nDot != std::string::npos && !ModLangLocale(s.substr(nDot + 1)).empty())
+    s.erase(nDot);
+  return s;
+}
+
 // The cinematics in each data folder's smk\, the active mod's first: a file named as one of the
 // classic cinematics replaces it, the first of the extensions in the order the game tries them.
 void CheckCinematics(const std::vector<int> &chain) {
@@ -220,7 +234,7 @@ void CheckCinematics(const std::vector<int> &chain) {
       continue;
     do {
       if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
-        byStem[Lower(Stem(fd.cFileName))].push_back(folder + fd.cFileName);
+        byStem[Lower(SubtitleStem(fd.cFileName))].push_back(folder + fd.cFileName);
     } while (FindNextFileA(h, &fd));
     FindClose(h);
     for (auto &s : byStem) {
@@ -267,6 +281,155 @@ void CheckCinematics(const std::vector<int> &chain) {
                              "00:00:04,000, and its text");
     }
   }
+}
+
+// ---- a mode's own check ----------------------------------------------------------------------
+// A mode's generate is rolled on a map of the install: for each choice of its difficulty, for
+// each race, and one seed twice, which must come out the same. Each roll is told what it cost in
+// records, and a roll that does not run is an error.
+
+// The map the rolls use: the first of the install's maps by name, so the check reads the same one
+// every time. "" when the install has none.
+std::string MapForRolls() {
+  std::vector<std::string> paths;
+  std::vector<std::string> folders(1, std::string(PortDataFolder()) + "maps\\");
+  while (!folders.empty()) {
+    const std::string at = folders.back();
+    folders.pop_back();
+    WIN32_FIND_DATAA fd;
+    const HANDLE h = FindFirstFileA((at + "*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE)
+      continue;
+    do {
+      const std::string name = fd.cFileName;
+      if (name == "." || name == "..")
+        continue;
+      if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+        folders.push_back(at + name + "\\");
+        continue;
+      }
+      const std::string ext = Lower(name.substr(name.rfind('.') == std::string::npos ? name.size() : name.rfind('.')));
+      if (ext == ".scm" || ext == ".scx")
+        paths.push_back(at + name);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+  }
+  std::sort(paths.begin(), paths.end());
+  return paths.empty() ? std::string() : paths.front();
+}
+
+// One roll, named by what was asked of it.
+bool Roll(const std::string &where, const std::string &map, const std::string &settings, unsigned dwSeed,
+          const char *pszRace, std::string *pTypes) {
+  std::string run, why;
+  if (!ModDataModeRoll(map.c_str(), settings.c_str(), dwSeed, pszRace, pTypes, &run, &why)) {
+    g_errors.push_back(where + ": " + why);
+    return false;
+  }
+  return true;
+}
+
+// How many records a roll's text brings, by table.
+std::string RollCounts(const std::string &types) {
+  PortJson j;
+  if (!PortJsonParse(types.c_str(), &j) || j.kind != PortJson::OBJECT)
+    return "no records";
+  std::string out;
+  for (const PortJsonMember &m : j.members) {
+    const size_t n = m.second.kind == PortJson::OBJECT ? m.second.members.size() : m.second.size();
+    if (n > 0)
+      out += (out.empty() ? "" : ", ") + std::to_string(n) + " " + m.first;
+  }
+  return out.empty() ? "no records" : out;
+}
+
+// The mod's readout.json, if it has one: read and checked as a game would, each key that is
+// wrong a warning with the line it was on, since a key left wrong keeps classic's own parameter
+// and the readout still draws (port_readout.h).
+void CheckReadout(const PortMod &mod) {
+  const std::string folder = mod.folder + mod.data;  // the data folder inside the mod's own
+  std::string text;
+  if (folder.empty() || !PortReadFile(folder + "readout.json", &text))
+    return;
+  PortReadoutFile file;
+  std::vector<std::string> warnings;
+  std::string why;
+  if (!PortReadoutCheck(text, &file, &warnings, &why)) {
+    g_errors.push_back(why + ", so the readout is classic's panel");
+    return;
+  }
+  g_notes.push_back("its readout: " + std::to_string(file.fx.size()) + " effects, " +
+                    std::to_string(file.ranks.size()) + " ranks" + (file.add.bLines ? ", lines of its own" : "") +
+                    (file.bInHuds ? ", in the HUD designs too" : ", on the classic console alone"));
+  for (const std::string &s : warnings)
+    g_warnings.push_back(s + ", so that parameter is classic's");
+  // The hook is what fills it in. A readout with no hook draws the parts a mod set and the
+  // unit's own values, which is a readout; one is worth saying all the same.
+  if (!ModLuaHasFunction("readout"))
+    g_notes.push_back("no script gives readout(unit), so the readout shows the unit's own values");
+}
+
+void CheckMode(const PortMod &mod) {
+  const PortModeDecl *pDecl = PortModeFind(mod.id);
+  if (pDecl == nullptr) {
+    g_errors.push_back("its \"mode\" block does not read, so no game can play it; hyperion_mods.log says why");
+    return;
+  }
+  g_notes.push_back("the mode " + pDecl->id + ": " + std::to_string(pDecl->settings.size()) + " settings, " +
+                    std::to_string(pDecl->presets.size()) + " presets, " + std::to_string(pDecl->playersMin) + " to " +
+                    std::to_string(pDecl->playersMax) + " players, " + (pDecl->sim ? "simulation" : "presentation"));
+  if (!pDecl->needsMet) {
+    g_warnings.push_back("it is not available: " + pDecl->whyNot);
+    return;
+  }
+  const std::string map = MapForRolls();
+  if (map.empty()) {
+    g_warnings.push_back("the install has no map, so its generate is not rolled");
+    return;
+  }
+  g_notes.push_back("its generate is rolled on " + Shown(map));
+  const std::string base = PortModeSettingsBase(*pDecl);
+  // every choice of the difficulty, then the other races at the base's
+  std::vector<std::string> values;
+  const PortModeSetting *pHard = nullptr;
+  for (const PortModeSetting &st : pDecl->settings)
+    if (st.id == "difficulty")
+      pHard = &st;
+  if (pHard != nullptr)
+    for (const PortModeItem &it : pHard->items)
+      values.push_back(PortModeSettingsWhole(*pDecl, "{\"difficulty\":" + PortJsonQuote(it.id) + "}"));
+  if (values.empty())
+    values.push_back(base);
+  int nRolls = 0;
+  std::string first;
+  for (size_t i = 0; i < values.size(); ++i) {
+    std::string types;
+    const std::string where = "its generate, settings " + values[i];
+    if (!Roll(where, map, values[i], 1u, "terran", &types))
+      return;
+    ++nRolls;
+    if (i == 0)
+      first = types;
+    g_notes.push_back("a roll of " + (pHard != nullptr ? pHard->items[i].id : std::string("its own settings")) + ": " +
+                      RollCounts(types));
+  }
+  for (const char *pszRace : {"zerg", "protoss"}) {
+    std::string types;
+    if (!Roll(std::string("its generate for ") + pszRace, map, base, 1u, pszRace, &types))
+      return;
+    ++nRolls;
+    g_notes.push_back(std::string("a roll for ") + pszRace + ": " + RollCounts(types));
+  }
+  // the same seed again: a run is the seed's, so the records must be the same to the byte
+  std::string again;
+  if (!Roll("its generate rolled again", map, values[0], 1u, "terran", &again))
+    return;
+  ++nRolls;
+  if (again != first)
+    g_errors.push_back("its generate gives different records for the same seed, so a game of it would not play back; "
+                       "everything a roll reads must come from ctx");
+  else
+    g_notes.push_back(std::to_string(nRolls) + " rolls, and the same seed twice gives the same records");
 }
 
 // The report, and the process's end.
@@ -345,6 +508,10 @@ void PortModCheckRun(void) {
   std::string why;
   if (PortModChain(nMod, &chain, &why))
     CheckCinematics(chain);
+  if (mod.kind == "mode")
+    CheckMode(mod);
+  CheckReadout(mod);
+  ModLangCheck(&g_warnings, &g_notes);
   if (g_nSystem > 0)
     g_warnings.push_back(Count(g_nSystem, "video is H.264 or H.265, or has AAC sound,",
                                "videos are H.264 or H.265, or have AAC sound,") +
@@ -366,4 +533,60 @@ void PortModCheckRun(void) {
   const std::string last = Count(g_errors.size(), "error", "errors") + ", " +
                            Count(g_warnings.size(), "warning", "warnings");
   Finish(g_errors.empty() ? 0 : 1, (g_errors.empty() ? "plays: " : "plays with errors: ") + last);
+}
+
+// ---- a mode's roll on its own ------------------------------------------------------------------
+// Hyperion --mode-roll <id> [<out.json>]: the mode's generate rolled once and written as JSON,
+// with no game played and no window, so a tool can see the run a seed gives before playing it.
+
+void PortModeRollRun(void) {
+  const std::string id = PortCommandOptions()->szModeRoll;
+  const std::string out = PortCommandOptions()->szModeRollOut;
+  // the mod's data, loaded as start-up loads it (ModDataStartUp), so generate has the records
+  // it clones from
+  LoadGraphics();
+  const PortModeDecl *pDecl = PortModeFind(id);
+  std::string map = PortCommandOptions()->szMap;
+  if (!map.empty()) {
+    // --map may name a file or a map of the install's folders, as a game's does
+    char szPath[MAX_PATH];
+    if (GetFileAttributesA(map.c_str()) == INVALID_FILE_ATTRIBUTES &&
+        PortMapFindInFolders(map.c_str(), szPath, MAX_PATH))
+      map = szPath;
+  } else {
+    map = MapForRolls();
+  }
+  const char *pszRace = PortCommandOptions()->szRace[0] != '\0' ? PortCommandOptions()->szRace : "terran";
+  int nPlayers = PortCommandOptions()->szPlayers[0] != '\0' ? atoi(PortCommandOptions()->szPlayers) : 2;
+  nPlayers = nPlayers < 1 ? 1 : nPlayers > 8 ? 8 : nPlayers;
+  const PortModeChoice &choice = PortModeChosen();
+  std::string types, run, why;
+  if (pDecl == nullptr)
+    why = "no mode has the id " + id + " in " + PortNativePath(PortModsFolder().c_str());
+  else if (map.empty())
+    why = "there is no map to roll on: name one with --map";
+  else if (!ModDataModeRoll(map.c_str(), choice.settings.c_str(), choice.seed, pszRace, &types, &run, &why, nPlayers))
+    why = why.empty() ? "its generate did not run" : why;
+  std::string json = "{\"mode\":" + PortJsonQuote(id);
+  if (pDecl != nullptr)
+    json += ",\"version\":" + PortJsonQuote(pDecl->version);
+  json += ",\"map\":" + PortJsonQuote(map) + ",\"players\":" + std::to_string(nPlayers) + ",\"race\":" +
+          PortJsonQuote(pszRace) + ",\"seed\":" + std::to_string(choice.seed) + ",\"settings\":" +
+          (choice.settings.empty() ? "{}" : choice.settings);
+  if (why.empty())
+    json += ",\"run\":" + (run.empty() ? "{}" : run) + ",\"records\":" + (types.empty() ? "{}" : types);
+  else
+    json += ",\"error\":" + PortJsonQuote(why);
+  json += "}\n";
+  FILE *f = !out.empty() ? fopen(out.c_str(), "w") : stdout;
+  if (f == NULL)
+    _Exit(3);
+  fwrite(json.c_str(), 1, json.size(), f);
+  fflush(f);
+  if (f != stdout)
+    fclose(f);
+  // 0 it rolled, 1 it did not, 2 there is no such mode, as the check's codes go
+  const int nCode = why.empty() ? 0 : pDecl == nullptr ? 2 : 1;
+  PortStartupEnded(nCode);
+  _Exit(nCode);
 }

@@ -865,6 +865,11 @@ void Image(Hasher &h, const CImage *pImage) {
   wFlags &= ~1;  // redraw
   memcpy(&c.flags, &wFlags, sizeof wFlags);
   memset(&c.coloringData, 0, sizeof c.coloringData);
+  // a cloaking unit's image is 2 to 4 to a viewer who has not detected it and 5 to 7 to one
+  // who has, and 0 or 6 as CSprite::Show and Hide turn it for the viewer (gdwLocalMask): the
+  // replay's viewer sees what no player did. The cloak itself is the unit's (CUnit's flags).
+  if (c.bPaletteType == 0 || (c.bPaletteType >= 2 && c.bPaletteType <= 7))
+    c.bPaletteType = 0;
   Record(h, SAVE117_CImage, reinterpret_cast<const BYTE *>(&c));
 }
 

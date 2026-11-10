@@ -49,7 +49,9 @@ GEN = ["-std=c++17"] + COMMON + ["-DOC_DLL_MODE"]
 PORT = ["-std=c++20"] + COMMON + ["-DOC_WITH_HELD", "-I" + OUT, "-I" + os.path.join(bel.SDL_SRC, "include"),
                                   "-I" + bel.SHADERS, "-I" + bel.CLAY, "-I" + bel.STB,
                                   "-I" + os.path.join(bel.CASCLIB, "src"), "-DCASCLIB_NO_AUTO_LINK_LIBRARY",
-                                  "-I" + bel.DRLIBS, "-I" + os.path.join(bel.LIBWEBP, "src")]
+                                  "-I" + bel.DRLIBS, "-I" + os.path.join(bel.LIBWEBP, "src"),
+                                  # Luau's C API, for a mod's scripts (port_modlua.cpp)
+                                  "-I" + os.path.join(bel.LUAU, "VM", "include")]
 THIRD = [f for f in bel.THIRD if f != "-fPIC"] + ["-sMEMORY64=1"]
 # what the web build leaves out of tus.txt's list
 NOT_BUILT = []
@@ -236,6 +238,7 @@ def build(a):
     sdl = build_sdl(a.sdl)
     storm, casc = build_libs(a.libs, workers)
     image = bel.build_image_lib(os.path.join(OUT, "libs"), "emcc", "emar", THIRD, a.libs, workers)
+    luau = bel.build_luau_lib(os.path.join(OUT, "libs"), "em++", "emar", THIRD, a.libs, workers)
 
     obj_of = bel.obj_of
     jobs = []
@@ -267,6 +270,10 @@ def build(a):
     # compiled on its own in the other builds; in a browser it is its stubs
     src = port_path("port_lanstream.cpp")
     jobs.append((["em++"] + PORT + ["-o", obj_of(src), src], obj_of(src)))
+    # a mod's scripts read by Luau's parser, which wants C++17; it names no game global
+    src = port_path("port_modlua_lint.cpp")
+    jobs.append((["em++"] + PORT + ["-std=c++17"] + ["-I" + i for i in bel.LUAU_INCLUDES] + ["-o", obj_of(src), src],
+                 obj_of(src)))
     src = os.path.join(ENGINE, "hyperion", "hyperion.cpp")
     jobs.append((["em++", "-std=c++17"] + COMMON + (["-g"] if a.debug else []) + ["-o", obj_of(src), src], obj_of(src)))
     write_resources()
@@ -284,7 +291,7 @@ def build(a):
     bind_globals(game, abs_s)
     run(["emcc", "-sMEMORY64=1", "-c", "-o", os.path.join(OUT, "abs_globals.o"), abs_s], "as abs_globals.s")
     objs.append(os.path.join(OUT, "abs_globals.o"))
-    run(["em++", "-O2", "-o", os.path.join(OUT, "hyperion.js")] + objs + [storm, casc, image, sdl]
+    run(["em++", "-O2", "-o", os.path.join(OUT, "hyperion.js")] + objs + [storm, casc, image, luau, sdl]
         + ["-sMEMORY64=1", "-sASYNCIFY=1", "-Wl,--fatal-warnings", "--profiling-funcs",
            # 1.17 calls through pointers of other types than their functions' (a dialog's
            # procedure returns BOOL, DLGPROC INT_PTR), which x86 allows and WebAssembly traps

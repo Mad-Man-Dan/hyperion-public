@@ -42,7 +42,7 @@ defines it.
 | File | What it holds | Key functions |
 |---|---|---|
 | `src117/port/render/port_present.cpp` | the 8-bit screen, the window's display kind, the screen's cover, the frame rate, the mouse mapping, an input method's place, screenshots | `PortPresentInit`, `PortPresentTextArea`, `PortPresentFrame`, `PortScreenLock`, `PortPresentPalette`, `PortScreenCoverCopied`, `PortFrameDue`, `PortDisplayShow`, `PortScreenshot`, `oc_screen` |
-| `port_gpu.cpp`, `port_gpu.h` | the SDL_GPU device, the present itself, frames ahead, vsync, the check's compare | `PortGpuInit`, `PortGpuFrame`, `PortGpuFrameEnd`, `GpuFrameCmd`, `GpuSubmit`, `PortGpuAheadSet`, `PortGpuVsyncSet`, `PortGpuLetterbox`, `GpuMapMoved`, `GpuWriteLog` |
+| `port_gpu.cpp`, `port_gpu.h` | the SDL_GPU device, the present itself, frames ahead, vsync, the check's compare, the player's screenshot of the window | `PortGpuInit`, `PortGpuFrame`, `PortGpuFrameEnd`, `GpuFrameCmd`, `GpuSubmit`, `PortGpuAheadSet`, `PortGpuVsyncSet`, `PortGpuLetterbox`, `GpuMapMoved`, `PortGpuShotAsk`, `GpuWriteLog` |
 | `port_gpu_internal.h` | what the parts share: the state another part reads, the types and uniform blocks two parts use, the storage-buffer slots, the functions one part calls in another | `PostParams`, `GpuStore`, `SCENE_STORE_*`, `GpuMapMove`, `GpuZoomShown` |
 | `port_gpu_scene.cpp` | the description's uploads and dispatches, the full colour, the scene's check | `GpuSceneInit`, `GpuSceneRelease`, `PortGpuScene`, `GpuSceneCompare`, `GpuFullPrepare`, `PortGpuReadShown` |
 | `port_gpu_hd.cpp` | the frame drawn again from Remastered's art, its terrain, console and console contents | `GpuHdInit`, `GpuHdScene`, `GpuHdDrawFrame`, `GpuHdFit`, `GpuHdFitMatrix`, `GpuHdFitEffect`, `PortGpuHdToggle` |
@@ -61,9 +61,10 @@ defines it.
 | `port_view.cpp` | the view's size and everything derived from it; the render view the camera draws over | `PortViewSet`, `PortViewApply`, `PortViewRenderBegin`/`End`, `PortViewCamera`, `PortViewCameraPlace`, `PortViewScreenToMap` |
 | `port_camera.cpp` | the zoom itself: where it eases to, and when it is held at 1 | `PortCameraZoom`, `PortCameraZoomTo`, `PortCameraWheel`, `PortCameraStep`, `PortCameraForced` |
 | `port_console.cpp` | the console laid out as Remastered's HD one, and what its controls show in HD: the command card, the wireframe and the portrait | `PortConsoleUpdate`, `PortConsoleArtLoaded`, `PortConsoleHdItems`, `PortWireframeCell`, `PortHdPortraitFrame` |
-| `port_minimap.cpp` | the minimap's looks: a dot's colour, 1.17's where none gives one; the active mod's `hud.json` gives one | `PortMinimapAdd`, `PortMinimapDotColour`, `PortMinimapHud` |
+| `port_minimap.cpp` | the minimap's looks: a dot's colour, classic's where none gives one; the active mod's `hud.json` gives one. Also the marks a mod sets drawn on the minimap's own picture, and the size and scale of that picture for a mod asking (below, "The marks on the minimap") | `PortMinimapAdd`, `PortMinimapDotColour`, `PortMinimapHud`, `PortMinimapMarks`, `PortMinimapSized`, `PortMinimapSize` |
 | `port_selection.cpp` | the selection's looks: whether the circles, a teammate's circles and the health bars are drawn, 1.17's where none says; the active mod's `hud.json` gives one | `PortSelectionAdd`, `PortSelectionImageShown`, `PortSelectionHud` |
 | `port_overlay.cpp` | the game timer, actions per minute and frame rate drawn over a game, and the list of layers over the game that the other modules add | `PortOverlayBuild`, `PortOverlayAction`, `PortOverlayFrameShown`, `PortOverlayAdd`, `PortOverlayGameArea`, `PortOverlayHold`, `PortOverlayMouse`, `PortOverlayKey`, `PortOverlayOutside`, `PortOverlayHas` |
+| `port_mapmark.cpp` | the marks a mod's scripts draw on the map: the shapes they set by name, and the fade that reveals one as a unit comes near (below, "The marks on the map") | `PortMapMarkSet`, `PortMapMarkClear`, `PortMapMarkClearAll`, `PortMapMarkShapeOf`, `PortMapMarkWhoOf`, `PortMapMarkRgbOf` |
 | `port_window.cpp` | the window's icon and its square corners | `PortWindowCreated` |
 | `port_hwcursor.cpp`, `port_hwcursor.h` | Settings' Hardware cursor: the game's cursor frame as a system cursor, scaled as the game is, in the screen's colours, kept until the scale or a colour it uses changes; `cur_display_update` (`cur.cpp`) draws nothing while it shows | `PortHwCursorNow`, `PortHwCursorShowing`, `PortHwCursorSet` |
 | `port_motion.cpp`, `port_motion.h` | the game picture's motion: the map's scale, the console's shift, black and cinema bars, eased over time, for the skirmish start, cutscenes and map loads; the presenter and the camera read it | `PortMotionTick`, `PortMotionCover`, `PortMotionRead` |
@@ -411,6 +412,12 @@ In full colour the GPU draws the rest (`scene.hlsl`, `LookColour` and `LookPrim`
   in six steps, and the arms of the crystal's stars reach past its edge.
 - The light, the halo and the plume are drawn in steps with a 4×4 Bayer dither on the map's
   pixels, as 1.17 draws its smoke (`looks.steps`).
+- `SCENE_PRIM_MARK` (14) is a mod's mark painted on the ground (below, "The marks on the map"),
+  which `Apply` leaves alone in the same way. It is recorded where the sprite pass begins, so
+  the sprites cover it, and `MarkPrim` paints it in the full colour from the mark's numbers in
+  the frame's marks bytes: the distance from the shape's edge gives the edge's band, its inside
+  and the softness at every zoom, and the revealing units give a pool of light each. It is the
+  only full-colour primitive that comes from a mod rather than from the game's own drawing.
 
 The live values are `looks` (all of the GPU's part, on by default), `looks.steps`, and
 `looks.clarity`, `looks.shine`, `looks.glow`, `looks.sparkle`, `looks.plume` and `looks.light`,
@@ -422,7 +429,9 @@ each look in it changes the built-in look of its name or is added. It is present
 outside the mod's loader, so it is no part of the mod's fingerprint. A field left out keeps the
 built-in look's value, or a new look's: the gold one's ramp and values, taking every entry
 (`all`), as a crystal, with no images (so all of a sprite's) and no units.
-`hyperion_mods.log` names what does not read.
+`hyperion_mods.log` names what does not read. `units` and `images` take rows by number or by
+their names in `types.json` (`"terran_marine"`, a mod's `"hybrid_reaver"`): a mod's unit is best
+named, since its row moves when a record that sorts before it is added.
 
 ```json
 {"looks": [
@@ -435,6 +444,13 @@ built-in look's value, or a new look's: the gold one's ramp and values, taking e
    "light": {"color": "#40a8ea", "radius": 30, "strength": 0.6, "x": 0, "y": 8}}
 ]}
 ```
+
+A look may say more than the fields above: up to four zones of the colours it takes, the rules
+`none`, `reds`, `golds`, `greys`, `skins`, `hue` and `entries`, the materials `paint` and `glow`,
+a selection circle, and an aura, a line of light round the unit's outline with a glow past it.
+Those are in every build, and `design.md`, "Looks in depth", holds their fields. A unit shows the
+auras of up to three of the looks that name its type, so three looks that each bring one all
+draw; an aura needs the GPU presenter's scene, as the halo and the plume do.
 
 The channel's `looks` lists them, `look {name, ...}` changes one or adds it (the same fields),
 `look_unit {unit, look}` gives a unit one by hand (`"none"` for none, `""` back to the game's),
@@ -485,8 +501,10 @@ by place, so nothing else names them:
 | Place | Layer | Module | Hooks | Flags |
 |---|---|---|---|---|
 | 100 | the picture's black and cinema bars | `port_motion.cpp` | Draw | |
+| 150 | a mod's marks over the map, and those of the ground layer where the scene cannot paint them (below, "The marks on the map") | `port_mapmark.cpp` | Draw | |
 | 200 | a cutscene's words, and the player's input held | `port_cutscene.cpp` | Draw, Hold | |
 | 250 | a cinematic's subtitles | `port_subtitles.cpp` | Draw | out of a game |
+| 280 | a game mode's own parts: its countdown, banner and counters (`data.md`, "What a mode shows") | `port_modeview.cpp` | Draw | |
 | 300 | Debug Tools' overlay | `port_debugview.cpp` | Area, Draw, Mouse, Outside | free cursor, over the cover |
 | 400 | the trainer's strip and Tape | `port_trainerview.cpp` | Area, Draw, Mouse, Key, Outside | |
 | 450 | a game of the AI lab's farm watched, its panel (`lab.md`) | `port_labwatch.cpp` | Draw, Key | its own counters |
@@ -529,6 +547,143 @@ player's takes it over its windows. Every hook but Shown is called whether the l
 answers for itself, so Debug Tools' Overlay button draws while the overlay is off. The
 benchmark's, the trainer's and a watched match's never show together. A new layer, a mod's
 among them, takes a place between these and needs no change anywhere else.
+
+### The marks on the map
+
+A mod's scripts mark ground with `hx.area` (`docs/mod-data.md`, "Marks on the map"), which is
+how a mod shows an area the game's own rules say nothing about: a perimeter to hold, a landing
+zone, a path to take. `port_mapmark.cpp` keeps the marks a mod sets and draws them as layer 150,
+under everything else over the game. A mark is a circle, a ring, a rectangle, a polygon or a
+line, placed in map pixels, with a colour (a player's own or an RGB), an opacity for its inside
+and one for its edge, an edge width, a dash, a glow under the edge and a pulse. The lengths are
+map pixels throughout, so a mark sits on the ground: the camera places it (`PortViewCamera`
+gives the map pixel at the view's top left and the map pixels a pixel of the view), and it moves
+and scales with the map as the view scrolls and zooms. It is clipped to the room the map is
+drawn in, beside a HUD design's side columns (`PortHudSides`) and above the console, so a mark
+never draws over them.
+
+A mark may also fade: mostly hidden, rising to its opacity as a unit comes near its edge and
+falling again as the unit leaves. The fade says whose units reveal it (the player watching by
+default, their allies, every player's, or the players the mod names), how far off a unit begins
+to, the opacity it reaches and the one it rests at, and whether the whole mark shows together or
+only the part of the edge near the unit, which is what it does unless the mod says otherwise. Only units the player watching can see reveal a mark
+(`SpriteSeenBy`), so nothing shows through the fog, and each seat draws its own: the units are
+gathered once a frame and each piece of the edge takes the nearest one's distance.
+
+A mark with no dash and no glow of its own is drawn in one piece, a circle as the kit's ring, so
+it is as round and as crisp as the kit draws; one with either is drawn as its edge cut into
+pieces of about six pixels, each with its own opacity, which is what lets a dash and a glow fall
+on parts of the same edge. A polygon's inside is filled in strips, since the kit fills
+rectangles. A game shows 32 marks at once, and each is replaced by setting one of the same name
+again, so a script may set a mark every tick: the replacement keeps the pulse's beat, and a mark
+cleared fades away over half a second and is dropped at the end of it, so a perimeter lifted
+leaves the screen as a perimeter would. A mark may also name the players who see it, since a
+mode that gives each player their own ground wants each to see their own and not the others'; a
+viewer of no side sees every mark.
+
+A mark says which layer it is on. `over` is the overlay above, drawn over everything on the map.
+`ground`, which is what a mark is on unless it says otherwise, paints it into the map itself: the mark becomes a primitive of the scene
+(`SCENE_PRIM_MARK`, `port_scene.h`), recorded where the sprite pass begins
+(`PortMapMarkRecord`, called from `CSprite::DrawAll` beside the looks' own pass), so every
+sprite drawn after it stands on the paint and the ground's light falls on it with the rest of
+the terrain. It follows a look's ground light exactly: `Apply` returns the pixel unchanged, so
+the index map is as the game drew it and the check still compares like with like, and
+`ApplyColour` paints in the full colour alone (`MarkPrim` in `scene.hlsl`). Each mark's numbers
+-- the shape, its style, the fade and the units that reveal it -- go into the pass's marks bytes
+(`PortSceneMarks`, `SceneFrame`'s `pMarks`), which the store carries after the looks' and the
+primitive's own `nEntry` is a byte offset into; the places are the view's pixels, as a look's
+are, and the lengths map pixels.
+
+On the ground the fade is measured per pixel rather than per piece, so each revealing unit
+lights the ground round itself and the edge brightens where it is met, and a shape's inside is
+filled by its own distance rather than in strips. Only the mark that glows round each unit needs
+the units, and only it carries them; a mark that rises whole rises by one number for the whole
+mark, which `PortMapMarkRecord` works out as the overlay does and hands on as the opacity
+reached, so the two layers agree and the pass does no work per pixel for it. The paint needs the full colour the GPU
+presenter draws by default: with the exact classic colours, or under SDL's renderer, which draws
+neither the scene nor the overlay, nothing is painted and the overlay draws those marks over the
+game instead, so a ground mark is never lost -- `PortGpuFullColourShown` says which, and
+`PortMapMarkRecord` leaves the pass empty when it cannot paint.
+
+Past its edge and its inside, what is drawn of a mark is a look: blocks of light the mod's own
+types.json stacks on it, each with its values (`docs/mod-data.md`, "The looks a mark wears";
+read and checked in `port_moddata.cpp`, which hands `hx.area` the look by name). The engine
+knows no look by name. The blocks are the field standing up the screen from the edge in bands
+that fade toward the top, the cells drifting in it along the edge in rows of their own, the foot
+(the mark's own edge with a glow spilling onto the ground), the tear torn in the field where a
+unit came through, the ripple a crossing sends along the edge, and the light under the player's
+own units standing outside. A look may also ask for the mark's own values -- its edge width, its
+pulse, its curve, what answers a crossing -- which anything the script says itself wins over
+(`PortMarkAsks`).
+
+The blocks that stand are drawn on a wall standing on the edge, at whatever angle the edge runs
+across the map. A band of the field is its own piece of edge swept up that wall, so it leans
+with the edge and is as wide as that sweep covers, and the face is shaded by how much of it
+turns toward the viewer -- `Lit` carries each piece's run, the way out of the mark
+(`OutwardOf`, the shape's own reckoning rather than a winding) and its facing. The view is
+oblique and never turns, and up the screen is both north and tall in it, so a face seen exactly
+edge-on would have no width at all: the field's `lean` leans the wall's top out along the edge's
+normal across the screen, which gives that face its width back and leaves a face already full
+alone, and its `edge_on` says what a turned face is worth to look at (`LeanOf`, `Across`,
+`Shade`). The cells are drawn on that face rather than facing the viewer. The tear and the
+flash are turned by the crossing itself: a crossing keeps the unit's step and how much of it ran
+along the edge, so the tear leans the way the unit went and the flash leans toward the stretch
+it was heading for, on either renderer (`Event::wx`, `fWay`, `MarkBoost`).
+
+The field, the cells and the tear stand above the ground, which the paint cannot do, so they are
+drawn in the layer over the units while the foot and the light outside are painted under them: a
+mark wearing one of those blocks is drawn in both places in the same frame (`DrawMark`'s `bFoot`
+and `PortMarkLook::Stands`). What the paint needs of a look goes into the marks bytes with the
+rest -- the foot's glow and opacity, the warning colour and the ripple's numbers -- so the paint
+and the layer answer a crossing alike. The cells are capped at 256 sets a mark, spread along the
+edge rather than multiplied, so a mark on a huge shape costs no more than one on a small shape.
+
+Presentation only: the simulation never reads a mark, none of them is saved or sent, and a game
+plays and records the same with them or without.
+
+### The marks on the minimap
+
+A mark may also be drawn on the minimap, which is where a player looks to see a perimeter whole
+rather than the stretch of it in front of them. `port_minimap.cpp` draws it into the minimap's
+own picture, between the ground and the dots (`minimap.cpp`, `draw_minimap_body`): a mark is a
+piece of the map there as it is on the map, and a unit's dot is never lost under one. The pass
+is before `sub_46D510`, which resets the dots' own counters, so nothing here is in the walk
+whose counts the multiplayer game's hash takes.
+
+The picture is one 8-bit bitmap that the console blits and the GPU HUD samples as
+`PORT_HUD_SRC_MINIMAP`, so a mark drawn here shows on **every** renderer, SDL's included, where
+the overlay draws nothing and a mark on the map does not show at all. The minimap is the one
+place a mod can count on a perimeter being visible.
+
+Three things follow from the picture being palette indices with no alpha:
+
+- A colour has to become one of 256 entries. A player's is the very pen the minimap already
+  draws that player's dots in (`PortTeamMinimapShown`); any other goes through the game's own
+  nearest-entry finder (`CPalette::find_closest_palette_entry`), which leaves out the entries
+  the tileset cycles, so a mark never takes a colour that walks off under it as the water moves.
+- An opacity is drawn as a part of the pixels rather than a weaker colour, through a sixteen-step
+  ordered threshold. At the minimap's size that reads as a tone. An edge is normally left solid,
+  a dithered line being a dotted one.
+- Nothing fades, pulses or glows here. A mark on the minimap is drawn whole whatever the
+  ground's light is doing, which is what a player wants of it: the perimeter is where it is.
+
+Lengths are the minimap's own pixels and not the map's, since a three-pixel edge asked for in
+map pixels would be a tenth of a pixel here. Places are map pixels, scaled by the map pixels one
+minimap pixel covers (16 on a 64-tile map, 32 at 128, 64 at 256, 32·N past that). A shape may be
+far larger than the picture, a perimeter being as big as the mod makes it, so each stretch of an
+edge is clipped to the picture before it is walked and the dash is counted in the whole length,
+which keeps the dashes of a shape half off the picture the same as the dashes of one that fits.
+
+The minimap redraws on its own timer -- a second in single player, two in multiplayer and once a
+game turn besides -- and `minimap_force_redraw` only asks for a terrain restage at the next
+tick rather than redrawing sooner. So a mark that moves steps on the minimap about once a second,
+exactly as the unit dots do. That cadence is the minimap's and not the marks': a faster one
+would re-run the fog stage and every dot.
+
+`PortMinimapSized` is how the minimap hands the port its size and the map pixels a pixel of it
+covers, as the scale ladder settles them (`sub_46D850`) and again as zero when the minimap is
+taken down. Those are the minimap's own numbers and no other file can read them, so a mod asking
+for them is answered from what is handed over there.
 
 ### Map text
 
@@ -621,6 +776,224 @@ A vsync or frames-ahead change asked for while the menus' frame is open (between
 there took away the image the frame blits into, and the blit crashed. `GpuSwapchainWaiting`
 makes the change at the start of the next frame, the menus' or a game's, before it takes an
 image.
+
+### The player's screenshot
+
+Print Screen saves a dated PNG in the player's data folder (`screen_capture`, `event_Win.cpp`,
+then `PortScreenshot`). Under the GPU presenter the window shows much more than the classic
+8-bit screen does: the map in full colour, HD art, the lights and the grade, the HUD design,
+the layers over the game and a cinematic over the frame. So the shot is of the window, not of
+the screen buffer. The swapchain's picture cannot be read back, so one is drawn again for the
+shot: `PortGpuShotAsk` names the file, `PresentShotFrame` draws a frame for it with the screen,
+the cover and the palette as they stand and with no present and no check, so the GPU's map is
+the one the window is showing, and `GpuFrameShot` takes the window's own steps on a texture of
+the window's size and of the swapchain's format -- the frame in its letterbox
+(`GpuFrameDraw`), a cinematic over it, the HUD design, the overlay. Its download goes in the
+same command buffer, and the frame's submission is waited on so `GpuShotSave` can map the
+pixels and write them (`GpuSavePixels`, in the swapchain's byte order). The texture and its
+transfer buffer are made for the shot and let go with it, as the window's picture is large and
+a shot is rare.
+
+The file is the window's whole client area at its own resolution, the black bars included where
+the window's shape is not the view's: it is what the player sees, and nothing a layer draws
+outside the game's box is cut. The card's work and the save are waited for on the game's
+thread, one frame's worth. Under SDL's renderer, on Hyperion's own menus, which have a frame of
+their own (`PortGpuUiEnd`), and where the card gives no picture, the classic screen is saved as
+before.
+
+### The unit readout
+
+The one unit's readout, the panel that shows the selected unit's wireframe, name, status line,
+kills, icons, life and energy, is drawn from parts a mod may set and add to
+(`port/hud/port_readout.cpp`; the format is `docs/mod-data.md`, "readout.json"). With no mod
+readout nothing of it runs and the panel is classic's, pixel for pixel.
+
+The parts are classic's own controls. `PortReadoutPartRect` is where each one sits, taken from
+`rez\statdata.bin` rather than measured off the console's art, so a part lands where the art has
+a window for it; the readout's own pixels are that dialog's, 270 by 92 at (138, 388) on the
+640 by 480 console, and `PortReadoutPartControl` is the control that draws it:
+
+| Part | Control | Where |
+|---|---|---|
+| `wire` | 1 | (30, 0) 64 × 64 |
+| `name` | -5 | (102, 0) 152 × 14 |
+| `status` | -20 | (106, 16) 144 × 14 |
+| `kills` | -21 | (106, 30) 144 × 14 |
+| `slots` | 9 to 12 | (104, 51) four of 36 × 36, 39 apart (`PortReadoutSlotRect`) |
+| `life` | -7 | (22, 64) 80 × 12 |
+| `energy` | -8 | (22, 76) 80 × 12 |
+
+The words go into those controls: `PortReadoutPartText` answers the text for the name, the status
+line, the kills, the life and the energy, and `statdraw.cpp` puts it in the control classic would
+have written, so the panel keeps classic's font, places and spacing. A part the mod leaves alone
+answers nothing and is drawn as it always was, which is why the life's and the energy's lines are
+classic's own until the file names them: their patterns do not come to what classic writes, where
+each half carries its own colour and a unit with no shields has only one. An empty answer keeps
+the part off, as classic keeps the kills' line off for a unit that cannot attack. The status line
+takes classic's own words first, then the readout's lines, each in turn for `rotate` seconds; the
+lines a mod adds take the kills' line in turn with it, and a status's own line is drawn there
+rather than in the status part, so the statuses are not in both rotations. A status that lands, or
+a kill, takes its line at once and the turns carry on from it (`Turn`, which counts from the last
+time a line took the place), so a status of a few seconds is read rather than waiting out a cycle.
+A pattern is filled from the first value that names its key (`Fill`), so a line's own values go in
+front of the readout's: on a status's line `{name}` is the status, not the unit (`LineWords`).
+
+A colour becomes the nearest of classic's own colour codes (`gds_font.cpp`,
+`font_set_color_tbl`), which classic writes into its own text as well, since the panel's picture
+is palettized; the damage state is classic's own three codes, so a part that follows the life is
+drawn as classic draws it.
+
+One drawing serves both consoles: the readout is in the panel's own picture, 8-bit pixels in the
+game's palette, which the classic console puts on the screen where it always does and a HUD
+design's `selection` slot shows as its pixels (`PortConsoleHudSource`, `PORT_HUD_SRC_SELECTION`,
+`hud.md`). So a mod's readout shows whichever console the player chose, and neither console reads
+the format.
+
+What the palettized panel cannot carry is drawn in colour over it (`port/hud/port_readoutdraw.cpp`):
+the statuses' framed icons, the mark on the wireframe and the rank's pips, the rank's colour exact
+there as it cannot be in the panel. The pips are diamonds in a row just before the rank's own
+words and centred on their line: none for the first rank the file names, whose colour on the name
+already says it, one for the next and one more for each above that, as the design has them. The
+panel centres a line, so the words themselves say where the row starts
+(`PortReadoutPartWords`, the words the panel was last given for a part). The status row under it
+carries the rotating line: the showing status's icon in the gap classic leaves beside it, the
+status's time left as a bar under the words, and which line of how many is showing at the row's
+right end (`PortReadoutRowTurn`, the rotation as the words settled it). The design fades that row
+between turns; classic's text is palettized pixels the overlay cannot dim, so the overlay lays a
+dark veil over the row for the same 0.22 s instead, which reads as the same dip and is left out
+for a player who asked for no motion. One routine draws into whatever surface it is given
+(`port_hud.h`, `PortReadoutSurface`: fills, lines, a kind's glyph, text and its width, in the
+readout's own pixels with (0, 0) at the panel's top left), so the two consoles cannot drift. A
+design's selection slot makes a surface over its own layer, which comes out right under a panel
+the design turns, scales or fades and takes the layer's effects with it; the classic console has no
+layer, so an overlay layer of its own (`PORT_OVERLAY_READOUT`) makes a surface over
+`PortHudReadoutPlace` and draws through the kit. The drawing is registered rather than called
+(`PortHudReadoutSurfaceSet`), so a build without it draws nothing and a game without a mod readout
+costs one null test. SDL's renderer path has no overlay at all, so there the readout is the words
+alone, which is why they carry the statuses and their time left.
+
+The mark on the wireframe is what `status_look` asks for: the corner, the loudest status's icon of
+15 pixels in the wireframe's top left with an 11-pixel one indented under it and the rest as "+n"
+centred under both; a tint of the loudest status's hue; or the kind's pattern, laid down by the
+pattern's own name (bars as bars, cracks as short slants, embers and frost as dots, the rest as a
+slant) rather than as a picture. An icon is the user's framed one, in the design's own colours: a
+near-black disc for a status that helps the unit and a near-black diamond for one that hurts, its
+edge and the kind's glyph inside it in the colour the status named for itself (`bHue`, an
+`#rrggbb` of its own `look`) or in its side's green or red where it named none, the time left as
+an arc round it in the same colour, and the stacks in its corner. A kind's own hue is not drawn
+on an icon: the side is what an icon has to say first, and a kind's hue goes on the pattern and
+the tile's edge mark. The `glyph` style draws the glyph at the whole box's size, having no frame
+to sit inside.
+
+`PortReadoutRoom` is the room the readout has in its own pixels: 92 on the classic console, and a
+HUD slot's own height where that is taller, which is where the lines a mod adds go. On the
+classic console they take the kills' line in turn with it instead, the room classic leaves free.
+`PortReadoutRoomBox` is that room as a rectangle, and the words and the drawing both ask for it,
+so neither can think the room is somewhere else. It is beside the panel where the slot has 110
+spare columns, since a narrower column holds no line worth reading, and under the panel where it
+has 18 spare rows instead; a slot with neither gets none, which is the classic console. In it the
+lines read from the top down, in the design's order: a row for each status first, with its framed
+icon, its words and its time as a bar, since those are what changes while the unit is watched;
+then the hook's own lines in the order it wrote them (the rank, what the unit is, its affixes);
+then what it rolled against the base row, each stat named with its change, green the way the unit
+gains and red the way it loses, wrapped along the row. The sizes are the design's own, in the
+readout's pixels: an 11-pixel row, an 8-pixel icon, words of 7. An effect written on the lines
+(`"part": "lines"`) means wherever a status's line is drawn: these rows, and on the panel the row
+that is showing that line, which is the kills' row where a mod adds lines and the status's own row
+where it does not (`LinesPart`, settled as the game runs since the file is read before the block
+that decides it). Such an effect is matched to the status, as a slide already was: a `slide` runs
+on the row of the status that landed, and a `blink` held while a status runs out dims that row's
+words and its bar -- the test's own figure says which rows it holds for, so a row never blinks for
+a status two rows down. The icon keeps its frame through a blink, a half-lit frame reading as
+another status rather than as one blink.
+A status's time also runs out as an arc round its icon, drawn at the
+frame's own edge so it laps neither the wireframe nor the words, and left off where the icon is
+fewer than twelve of the surface's own pixels across, where an arc is a smudge and the row says
+the time in its words anyway. The rolled changes are also drawn on the console, in the corner of
+the part that carries each stat where the file asks for them there (`DeltaTab`, `delta`: `on the
+icon`): a tab with a chevron for the way the figure went and how far it moved, green where the
+unit gains by it. A tab carries one figure or two, and a weapon's icon carries two, the damage and
+that weapon's cooldown, since the cooldown has no icon of its own and is the weapon's; the life
+takes a tab of its own at the right end of its row, where classic centres its figures and leaves
+the ends clear. The speed has no tab: the panel has no part that is the speed's.
+
+The panel's four icons are the armour, the shields and the two weapons, so three of the six stats
+a hook may give `deltas` for have no icon of their own, and the speed no tab at all. All six are
+read in tooltips as well (`PortReadoutPartTip`, and the cooldown in `PortReadoutSlotTip`): the
+weapon's icon carries that weapon's cooldown in frames with the row it was rolled from, its
+change and what the statuses do to it; the wireframe carries the life and its change; and the
+name carries what the unit was rolled from, the hook's first line, and every rolled change one to
+a line, the speed among them.
+The hook's own `tooltips` for those stats feed those places as the icons' feed theirs. Both new
+tooltips go through the panel's own funnel (`statdata_ctx_show`), so a design's slot shows them
+as the classic console does. The wireframe and the name are an image and a text control, though,
+and `ctrl_text` answers no hit test, so `ctrl_find` never hands them to the panel's hover: the
+cursor's point is what decides them (`statdata_dlg_mouse_moved`, `PortConsoleRollPartTipAt`, in
+the panel's own pixels). Classic shows nothing for either part, so this only adds a bubble where
+there was none.
+
+`PortReadoutRoomLists` says whether the room lists the statuses itself (`in_huds`: there is room
+for a row each and the file asks for one), and the kills' row leaves them out when it does, so a
+status is never read in two places. Every line in the room runs the same patterns through the
+same values as the panel's row (`PortReadoutLineText`: the line's own text, else `each`, or
+`each_short` where the room is narrow), so a mod words both from one file and a brace cannot read
+differently in the two places.
+
+The effects are one op on one part, from an event or held while a test is true, and their clocks
+move on in `PortReadoutFrame`, which the game loop calls where it runs a mod's statuses and
+scripts. The events are watched rather than raised: nothing in the game calls `PortReadoutEvent`.
+`Events` reads the one unit the panel describes each frame and compares it with the frame before
+(life and shields together as one amount, kills, the statuses on it, and what those add up to for
+each stat the icons show), so a presentation-only readout needs no hook in `CUnit::Damage` and a
+replay and a watcher see the same events from the same game. Several hits in one frame come out
+as one, which is what a flash wants.
+
+An effect an event set off is a run on a list, dropped once it has played out and held for as
+long as it asked; one with a `while` test is kept nowhere, since the test is the whole of it and
+is read off the unit where it is asked for (`Holds`: the life as a part of its most, the rank's
+place in the file's order, and a status running out -- on a line, the status that line is showing
+now, so a player sees the one that is going). `PortReadoutRuns` is what the drawing asks: the
+runs on one part, what an event set off before what a test holds, the newest of those first, each
+with its op, how far through it is, its colour as a number and the rest of its parameters. The
+player's Reduce motion is applied there, so the drawing never has to think about it: a motion op
+comes back as the light the same effect carries beside the movement (a `glow`, or the glint of a
+`light`) or not at all, and a blink's rate is capped at three a second for everyone.
+
+Each run is drawn as light over its part's rectangle (`port_readoutdraw.cpp`, `RunLight`), since
+the words in the panel are classic's own eight-bit pixels and cannot be dimmed from the overlay:
+a flash and a `light` wash the part and fade, a `beat` and a `glow` breathe at their rate with a
+band of light round the part rather than over it (`Halo`, so the part still reads), a `blink`
+lights the part on its beat, a `scan` runs a line down it, a `shimmer` and a glint cross it with
+a narrow band (`Streak`), and a `type` fills the line from its start as the words would land.
+Only a `float` moves anything: its own text, rising off the part and fading, drawn after
+everything else so nothing covers it. A `slide` cannot move classic's line, so on the panel it is
+a band of light in from its side; in a HUD's room the status's own row slides with it
+(`SlideOf`, matched by the status that landed). An effect on `slots.<stat>` lights the one icon
+that carries that stat, which `PortReadoutSlotStat` answers for this unit.
+
+A `roll` is the one op that is words rather than light, so it is drawn nowhere: while a roll run
+is live on the life or the energy, `PortReadoutPartText` writes that line itself, the figures
+counted from what the line said before the change to what it says now (`RollOn` and `Counted`,
+the run keeping what the panel showed the frame before, since the events are raised before the
+frame's figures are kept). Where the mod leaves the line classic's it is written as
+`statdraw_draw_hp` writes it, the shields half in the control's own ink and the life half in the
+damage state's colour, and where the mod gives a pattern the counted figures go in at the front
+of its values. Classic has the line back as soon as the count ends, and nothing is written where
+classic blanks the line itself. The life line carries the shields too, so a hit that takes only
+shields still counts. A roll moves no text, so Reduce motion leaves it alone.
+
+The hook is called from `PortReadoutUnit`, when the panel's unit changes or its own values do, and
+runs in a Lua state of its own (`port_modlua.h`, the presentation VM). A key of its answer that
+nothing reads is said once a game in `hyperion_mods.log` with where it was (`SayUnknown`): the
+answer is a table, so a misspelled key would otherwise be accepted and do nothing, which reads
+like a key that works, where the file's own keys are refused as the file is read. The keys read
+are `name`, `rank`, `lines`, `deltas` and `tooltips`, a line's `text`, `colour` and `status`, and
+the six stats' names in the two tables kept by stat. The walk runs where the answer is parsed, so
+it costs a few members beside the call that has just made them. The player's Reduce motion
+(`PortReadoutReduceMotion`, `hyperion`/`reduceMotion`) leaves out the ops that move text and
+halves a flash, and a blink is capped at three a second whichever way the file sets it; a mod
+cannot override either. All of it is presentation: the file is outside the mod's fingerprint, the
+hook reads the game and never sets it, and nothing here is in a save or the state hash.
 
 ## Settings and environment variables
 

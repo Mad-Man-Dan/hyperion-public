@@ -17,6 +17,7 @@
 #include "../h/hxrules.h"  // Hyperion: HxRules, for SpriteGrpWidth
 #include "../port/render/port_lights.h"  // Hyperion: PortLightImage, PortLightsBegin, PortLightsEnd
 #include "../port/render/port_looks.h"  // Hyperion: a unit's look
+#include "../port/render/port_mapmark.h"  // Hyperion: a mod's marks painted on the ground
 #include "../port/render/port_scene.h"  // Hyperion: PortSceneImage
 #include "../port/render/port_selection.h"  // Hyperion: PortSelectionImageShown
 #include "../port/render/port_view.h"  // Hyperion: g_portView
@@ -697,6 +698,7 @@ void CSprite::Draw() {
 void CSprite::DrawAll() {
   PortLightsBegin();  // Hyperion: the 2D lights (port_lights.cpp)
   PortLooksPassBegin();  // Hyperion: the looked units' sprites (port_looks.h)
+  PortMapMarkRecord();  // Hyperion: the ground's marks, which the sprites then cover (port_mapmark.h)
   g_bHpBarsLast = true;  // Hyperion: the health bars after every sprite (above)
   g_nHpBars = 0;
   for (CSprite *pSprite = priority_iter_begin(); pSprite;

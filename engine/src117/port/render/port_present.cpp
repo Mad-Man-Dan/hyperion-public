@@ -44,12 +44,16 @@
 #include "../lab/port_labfarm.h"     // PortLabFarmPump
 #include "../platform/port_discord.h"  // PortDiscordPump
 #include "port_gpu.h"
+#include "../front/port_front.h"  // PortFrontActive
 #include "port_scene.h"
 #include "../platform/port_settings.h"
 #include "../../gen/globals117.h"
 #include "../platform/port_globals117.h"
 #include "../tools/port_startup.h"  // PortStartupStep, PortStartupFail, PortStartupFrame
 #include "../tools/port_sysinfo.h"  // PortSysInfoSet
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 // SDL's string and environment functions, not the C runtime's: when the engine still
 // ran beside 1.17's code, several runtime names were bound to the original's copies,
@@ -196,6 +200,13 @@ static void PresentSetWindowed(void)
   SDL_SetWindowFullscreen(g_window, false);
   SDL_SetWindowBordered(g_window, true);
   SDL_SetWindowResizable(g_window, true);
+#ifdef HX_DESIGN
+  // the design engine's window: maximized, or the size it was started with
+  if (DesignWindowPlace(g_window)) {
+    g_fullscreen = false;
+    return;
+  }
+#endif
   if (!SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(g_window), &usable)) {
     usable.w = nWidth * 2;
     usable.h = nHeight * 2;
@@ -1656,6 +1667,11 @@ void PortPresentFrame(void)
   const bool bSnap = g_gpu && PortGpuSnapPending();
   if (bSnap)
     g_frameDirty = true;
+#ifdef HX_DESIGN
+  // the design engine's panels are drawn again each frame shown
+  if (DesignWantsFrame())
+    g_frameDirty = true;
+#endif
   PortStartupFrame();
   PresentPerf();
   PresentFitView();
@@ -1868,6 +1884,31 @@ int PortDisplayViewWidth(void)
   return bounds.w * g_portView.nHeight / bounds.h;
 }
 
+// The window's own picture saved for a screenshot: the frame is drawn again for a shot of it,
+// with the screen, the cover and the palette as they stand and the GPU's map as it last drew
+// it, so the shot is of the picture on screen. False when the card gave none, and the classic
+// screen is saved instead.
+static bool PresentShotFrame(const char *pszFile)
+{
+  PortGpuShotAsk(pszFile);
+  const Uint8 *pCover = NULL;
+  if (PortSceneStage() == SCENE_SCREEN) {
+    PresentCoverFit();
+    pCover = g_cover;
+    if (g_coverChanged) {
+      PortGpuCoverChanged();
+      g_coverChanged = false;
+    }
+  }
+  PortGpuFrame(g_screen, pCover, g_portView.nWidth, g_portView.nHeight, g_palette->colors, g_paletteChanged, false,
+               false);
+  g_paletteChanged = false;
+  bool bOk = false;
+  int nWidth = 0;
+  int nHeight = 0;
+  return PortGpuShotTake(&bOk, &nWidth, &nHeight) && bOk;
+}
+
 int PortScreenshot(const char *pszFile)
 {
   SDL_Surface *pSurface;
@@ -1882,6 +1923,11 @@ int PortScreenshot(const char *pszFile)
     SDL_snprintf(szPath, sizeof szPath, "%s%s", PortDataFolder(), pszFile);
     pszFile = szPath;
   }
+  // The GPU presenter shows much more than the classic 8-bit screen, so the shot is of the
+  // window itself; SDL's renderer draws the screen alone, which is what is saved below.
+  // Hyperion's menus have a frame of their own (PortGpuUiEnd), which this does not draw.
+  if (g_gpu && !PortFrontActive() && PresentShotFrame(pszFile))
+    return 1;
   pSurface = SDL_CreateSurfaceFrom(g_portView.nWidth, g_portView.nHeight, SDL_PIXELFORMAT_INDEX8,
                                    const_cast<BYTE *>(PresentShown()), g_portView.nWidth);
   if (pSurface == NULL)
@@ -2118,6 +2164,12 @@ static void PresentApplyCage(void)
     return;
   g_held = false;
   g_sensAt = false;  // a new cage may move the pointer into it
+#ifdef HX_DESIGN
+  if (DesignGamePane()) {
+    ClipCursor(NULL);  // the studio's window: its panels are the pointer's too
+    return;
+  }
+#endif
   if (!g_caged || g_frontUp || g_cursorFree || g_hWnd == NULL || GetForegroundWindow() != g_hWnd) {
     ClipCursor(NULL);
     return;

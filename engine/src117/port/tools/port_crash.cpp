@@ -942,7 +942,7 @@ static void __cdecl OnPureCall(void) { Stopped("a pure virtual function was call
 
 static void __cdecl OnAbort(int) { Stopped("abort() was called", true); }
 
-static void OnTerminate(void)
+static void __cdecl OnTerminate(void)
 {
   char sz[700] = "std::terminate was called";
   try {

@@ -1,0 +1,1808 @@
+{
+  "about": "The studio's fields: for each table of types.json, its categories and, for each field, the category it is filed under, the editor it takes, its label and a line of help. The loader's own columns (port_moddata.cpp) say which fields there are and what they name; this file says how the studio shows them. Editors: int, hp (whole points), frames (seconds too), px (tiles too), half (supply, kept as halves), bool, text, enum:<enums key>, flags:units|targets|group, link:<table>, box4, box2, req, script, grp, icon, sound, readonly, picture (a PNG or GRP, or a unit), sheetpath, pair, soundfile, video (a path without its number and end).",
+  "enums": {
+    "size": [
+      {
+        "value": 0,
+        "label": "Independent"
+      },
+      {
+        "value": 1,
+        "label": "Small"
+      },
+      {
+        "value": 2,
+        "label": "Medium"
+      },
+      {
+        "value": 3,
+        "label": "Large"
+      }
+    ],
+    "damage_type": [
+      {
+        "value": 0,
+        "label": "Independent"
+      },
+      {
+        "value": 1,
+        "label": "Explosive"
+      },
+      {
+        "value": 2,
+        "label": "Concussive"
+      },
+      {
+        "value": 3,
+        "label": "Normal"
+      },
+      {
+        "value": 4,
+        "label": "Ignore armour"
+      }
+    ],
+    "explosion": [
+      {
+        "value": 0,
+        "label": "None"
+      },
+      {
+        "value": 1,
+        "label": "Normal hit"
+      },
+      {
+        "value": 2,
+        "label": "Splash, radial"
+      },
+      {
+        "value": 3,
+        "label": "Splash, enemies only"
+      },
+      {
+        "value": 4,
+        "label": "Lockdown"
+      },
+      {
+        "value": 5,
+        "label": "Nuclear missile"
+      },
+      {
+        "value": 6,
+        "label": "Parasite"
+      },
+      {
+        "value": 7,
+        "label": "Broodlings"
+      },
+      {
+        "value": 8,
+        "label": "EMP shockwave"
+      },
+      {
+        "value": 9,
+        "label": "Irradiate"
+      },
+      {
+        "value": 10,
+        "label": "Ensnare"
+      },
+      {
+        "value": 11,
+        "label": "Plague"
+      },
+      {
+        "value": 12,
+        "label": "Stasis field"
+      },
+      {
+        "value": 13,
+        "label": "Dark swarm"
+      },
+      {
+        "value": 14,
+        "label": "Consume"
+      },
+      {
+        "value": 15,
+        "label": "Yamato gun"
+      },
+      {
+        "value": 16,
+        "label": "Restoration"
+      },
+      {
+        "value": 17,
+        "label": "Disruption web"
+      },
+      {
+        "value": 18,
+        "label": "Corrosive acid"
+      },
+      {
+        "value": 19,
+        "label": "Mind control"
+      },
+      {
+        "value": 20,
+        "label": "Feedback"
+      },
+      {
+        "value": 21,
+        "label": "Optical flare"
+      },
+      {
+        "value": 22,
+        "label": "Maelstrom"
+      },
+      {
+        "value": 24,
+        "label": "Splash, air"
+      },
+      {
+        "value": 25,
+        "label": "Splash and stun (mods only)"
+      }
+    ],
+    "behavior": [
+      {
+        "value": 0,
+        "label": "Flies to the target"
+      },
+      {
+        "value": 1,
+        "label": "Flies toward the target"
+      },
+      {
+        "value": 2,
+        "label": "Appears on the target unit"
+      },
+      {
+        "value": 3,
+        "label": "Stays on the target site"
+      },
+      {
+        "value": 4,
+        "label": "Appears on the target site"
+      },
+      {
+        "value": 5,
+        "label": "Appears on the attacker"
+      },
+      {
+        "value": 6,
+        "label": "Attacks and self-destructs"
+      },
+      {
+        "value": 7,
+        "label": "Bounces"
+      },
+      {
+        "value": 8,
+        "label": "Hits a 3 by 3 area"
+      },
+      {
+        "value": 9,
+        "label": "Goes to its full range"
+      }
+    ],
+    "movement_control": [
+      {
+        "value": 0,
+        "label": "By these numbers"
+      },
+      {
+        "value": 1,
+        "label": "Partly, a weapon"
+      },
+      {
+        "value": 2,
+        "label": "By the image script"
+      }
+    ],
+    "right_click": [
+      {
+        "value": 0,
+        "label": "None"
+      },
+      {
+        "value": 1,
+        "label": "Normal"
+      },
+      {
+        "value": 2,
+        "label": "Move, no attack"
+      },
+      {
+        "value": 3,
+        "label": "Building, with a rally"
+      },
+      {
+        "value": 4,
+        "label": "Building, no rally"
+      },
+      {
+        "value": 5,
+        "label": "Harvest"
+      },
+      {
+        "value": 6,
+        "label": "Harvest, return"
+      }
+    ],
+    "draw_function": [
+      {
+        "value": 0,
+        "label": "Normal"
+      },
+      {
+        "value": 1,
+        "label": "Normal, no hallucination"
+      },
+      {
+        "value": 9,
+        "label": "Remapping"
+      },
+      {
+        "value": 10,
+        "label": "Shadow"
+      },
+      {
+        "value": 13,
+        "label": "Selection circle"
+      },
+      {
+        "value": 16,
+        "label": "Hallucination"
+      }
+    ],
+    "remapping": [
+      {
+        "value": 0,
+        "label": "None"
+      },
+      {
+        "value": 1,
+        "label": "Orange flame"
+      },
+      {
+        "value": 2,
+        "label": "Green acid"
+      },
+      {
+        "value": 3,
+        "label": "Blue fire"
+      },
+      {
+        "value": 4,
+        "label": "Bright blue"
+      }
+    ],
+    "race": [
+      {
+        "value": 0,
+        "label": "Zerg"
+      },
+      {
+        "value": 1,
+        "label": "Terran"
+      },
+      {
+        "value": 2,
+        "label": "Protoss"
+      },
+      {
+        "value": 4,
+        "label": "All"
+      }
+    ],
+    "selection_circle": [
+      {
+        "value": 0,
+        "label": "22 px"
+      },
+      {
+        "value": 1,
+        "label": "32 px"
+      },
+      {
+        "value": 2,
+        "label": "48 px"
+      },
+      {
+        "value": 3,
+        "label": "62 px"
+      },
+      {
+        "value": 4,
+        "label": "72 px"
+      },
+      {
+        "value": 5,
+        "label": "94 px"
+      },
+      {
+        "value": 6,
+        "label": "110 px"
+      },
+      {
+        "value": 7,
+        "label": "122 px"
+      },
+      {
+        "value": 8,
+        "label": "146 px"
+      },
+      {
+        "value": 9,
+        "label": "224 px"
+      }
+    ],
+    "animation": [
+      {
+        "value": 0,
+        "label": "Init"
+      },
+      {
+        "value": 2,
+        "label": "Ground attack"
+      },
+      {
+        "value": 3,
+        "label": "Air attack"
+      },
+      {
+        "value": 5,
+        "label": "Repeat attack"
+      },
+      {
+        "value": 7,
+        "label": "Cast spell"
+      },
+      {
+        "value": 13,
+        "label": "Special state 1"
+      }
+    ],
+    "directions": [
+      {
+        "value": 17,
+        "label": "17, mirrored"
+      },
+      {
+        "value": 32,
+        "label": "32, each its own"
+      }
+    ]
+  },
+  "flags": {
+    "units": [
+      "building",
+      "addon",
+      "flyer",
+      "worker",
+      "subunit",
+      "flying_building",
+      "hero",
+      "regenerate",
+      "animated_idle",
+      "cloakable",
+      "two_in_egg",
+      "single_entity",
+      "resource_depot",
+      "resource_container",
+      "robotic",
+      "detector",
+      "organic",
+      "requires_creep",
+      "unused",
+      "requires_psi",
+      "burrowable",
+      "spellcaster",
+      "permanent_cloak",
+      "pickup_item",
+      "ignores_supply",
+      "medium_overlays",
+      "large_overlays",
+      "battle_reactions",
+      "auto_attack",
+      "invincible",
+      "mechanical",
+      "produces_units"
+    ],
+    "targets": [
+      "air",
+      "ground",
+      "mechanical",
+      "organic",
+      "non_building",
+      "non_robotic",
+      "terrain",
+      "organic_or_mechanical",
+      "own"
+    ],
+    "group": [
+      "zerg",
+      "terran",
+      "protoss",
+      "men",
+      "building",
+      "factory",
+      "independent",
+      "neutral"
+    ],
+    "sound": [
+      "preload",
+      "one_per_unit",
+      "",
+      "",
+      "one_at_a_time",
+      "uninterrupted"
+    ]
+  },
+  "tables": {
+    "units": {
+      "cats": [
+        {
+          "id": "id",
+          "label": "Name and looks"
+        },
+        {
+          "id": "stats",
+          "label": "Life and armour"
+        },
+        {
+          "id": "combat",
+          "label": "Weapons and sight"
+        },
+        {
+          "id": "cost",
+          "label": "Cost and supply"
+        },
+        {
+          "id": "make",
+          "label": "Where it is made"
+        },
+        {
+          "id": "move",
+          "label": "Movement"
+        },
+        {
+          "id": "shape",
+          "label": "Size on the map"
+        },
+        {
+          "id": "orders",
+          "label": "Orders"
+        },
+        {
+          "id": "flags",
+          "label": "Flags"
+        },
+        {
+          "id": "art",
+          "label": "Art"
+        },
+        {
+          "id": "sound",
+          "label": "Sounds"
+        },
+        {
+          "id": "editor",
+          "label": "Editor"
+        }
+      ],
+      "simple": [
+        "name",
+        "hit_points",
+        "shields",
+        "armor",
+        "size",
+        "minerals",
+        "gas",
+        "build_time",
+        "supply_required",
+        "ground_weapon",
+        "air_weapon",
+        "sight_range",
+        "requires"
+      ],
+      "fields": [
+        {
+          "key": "name",
+          "cat": "id",
+          "editor": "text",
+          "label": "Name",
+          "help": "The name the game shows. Without it, the record's own name."
+        },
+        {
+          "key": "looks",
+          "cat": "id",
+          "editor": "link:units",
+          "label": "Looks like",
+          "help": "The classic unit whose status panel, wireframe and command icon it borrows, since those are not in the tables."
+        },
+        {
+          "key": "buttons",
+          "cat": "id",
+          "editor": "link:units",
+          "label": "Command card of",
+          "help": "The classic unit whose command card it has. Without it, its looks'. Cards adds buttons of its own."
+        },
+        {
+          "key": "map_string",
+          "cat": "id",
+          "editor": "int",
+          "label": "Map string",
+          "help": "The name a map's string table may give it."
+        },
+        {
+          "key": "comment",
+          "cat": "id",
+          "editor": "text",
+          "label": "Comment",
+          "help": "Anything. The loader skips it."
+        },
+        {
+          "key": "hit_points",
+          "cat": "stats",
+          "editor": "hp",
+          "label": "Hit points",
+          "help": "Life, in whole points (the file keeps 256 times this)."
+        },
+        {
+          "key": "shields_enabled",
+          "cat": "stats",
+          "editor": "bool",
+          "label": "Has shields",
+          "help": "Whether it has shields at all."
+        },
+        {
+          "key": "shields",
+          "cat": "stats",
+          "editor": "int",
+          "label": "Shields",
+          "help": "Shield points, which take damage first and regenerate."
+        },
+        {
+          "key": "armor",
+          "cat": "stats",
+          "editor": "int",
+          "label": "Armour",
+          "help": "Taken off every hit, after the damage type and size."
+        },
+        {
+          "key": "armor_upgrade",
+          "cat": "stats",
+          "editor": "link:upgrades",
+          "label": "Armour upgrade",
+          "help": "Each level of it adds a point of armour."
+        },
+        {
+          "key": "size",
+          "cat": "stats",
+          "editor": "enum:size",
+          "label": "Size",
+          "help": "Explosive does half to Small and three quarters to Medium; Concussive half to Medium and a quarter to Large."
+        },
+        {
+          "key": "rank",
+          "cat": "stats",
+          "editor": "int",
+          "label": "Rank",
+          "help": "A hero's rank, shown in its status panel."
+        },
+        {
+          "key": "ground_weapon",
+          "cat": "combat",
+          "editor": "link:weapons",
+          "label": "Ground weapon",
+          "help": "The weapon it fires at ground targets. 130 is none."
+        },
+        {
+          "key": "max_ground_hits",
+          "cat": "combat",
+          "editor": "int",
+          "label": "Ground hits",
+          "help": "How many times a ground attack hits."
+        },
+        {
+          "key": "air_weapon",
+          "cat": "combat",
+          "editor": "link:weapons",
+          "label": "Air weapon",
+          "help": "The weapon it fires at air targets. 130 is none."
+        },
+        {
+          "key": "max_air_hits",
+          "cat": "combat",
+          "editor": "int",
+          "label": "Air hits",
+          "help": "How many times an air attack hits."
+        },
+        {
+          "key": "target_range",
+          "cat": "combat",
+          "editor": "int",
+          "label": "Target range",
+          "help": "How far, in tiles, it looks for something to attack."
+        },
+        {
+          "key": "sight_range",
+          "cat": "combat",
+          "editor": "int",
+          "label": "Sight",
+          "help": "How far it sees, in tiles."
+        },
+        {
+          "key": "aura",
+          "cat": "combat",
+          "editor": "readonly",
+          "label": "Aura",
+          "help": "A passive: a status put on the units near it every so often (status, radius in pixels, targets, every, self). The unit's Actions view sets it."
+        },
+        {
+          "key": "scripts",
+          "cat": "combat",
+          "editor": "readonly",
+          "label": "Scripts",
+          "help": "Its hooks in the mod's scripts: on_hit, on_damaged, on_death, on_made and a tick every so many seconds. The Scripts workspace and the unit's Actions view show them."
+        },
+        {
+          "key": "subunit",
+          "cat": "combat",
+          "editor": "link:units",
+          "label": "Turret",
+          "help": "A unit riding on it, as the Goliath's and Siege Tank's turrets do."
+        },
+        {
+          "key": "subunit2",
+          "cat": "combat",
+          "editor": "link:units",
+          "label": "Second turret",
+          "help": "Unused by classic."
+        },
+        {
+          "key": "minerals",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Minerals"
+        },
+        {
+          "key": "gas",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Gas"
+        },
+        {
+          "key": "build_time",
+          "cat": "cost",
+          "editor": "frames",
+          "label": "Build time",
+          "help": "In game frames; 24 a second at Fastest."
+        },
+        {
+          "key": "supply_required",
+          "cat": "cost",
+          "editor": "half",
+          "label": "Supply used",
+          "help": "Kept as halves, so a Zergling is 1."
+        },
+        {
+          "key": "supply_provided",
+          "cat": "cost",
+          "editor": "half",
+          "label": "Supply made",
+          "help": "Kept as halves."
+        },
+        {
+          "key": "space_required",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Transport space",
+          "help": "Slots it takes in a transport."
+        },
+        {
+          "key": "space_provided",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Carries",
+          "help": "Slots it has as a transport."
+        },
+        {
+          "key": "build_score",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Score for making it"
+        },
+        {
+          "key": "destroy_score",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Score for killing it"
+        },
+        {
+          "key": "requires",
+          "cat": "make",
+          "editor": "req",
+          "label": "Needs",
+          "help": "What a player needs to train it, each met in order: where it is trained, a building finished, a tech researched, Brood War. A list is alternatives. Without it, nothing trains it."
+        },
+        {
+          "key": "requirements",
+          "cat": "make",
+          "editor": "readonly",
+          "label": "classic requirement list",
+          "help": "classic own list, by its offset in the game's requirements. A mod writes Needs instead."
+        },
+        {
+          "key": "group_flags",
+          "cat": "make",
+          "editor": "flags:group",
+          "label": "Groups",
+          "help": "The groups triggers and the AI count it in."
+        },
+        {
+          "key": "broodwar",
+          "cat": "make",
+          "editor": "bool",
+          "label": "Brood War only"
+        },
+        {
+          "key": "flingy",
+          "cat": "move",
+          "editor": "link:flingy",
+          "label": "Movement",
+          "help": "How it moves (a flingy row): speed, acceleration, turning, and the sprite that draws it."
+        },
+        {
+          "key": "elevation",
+          "cat": "move",
+          "editor": "int",
+          "label": "Elevation",
+          "help": "Its drawing layer: 4 on the ground, 12 in the air."
+        },
+        {
+          "key": "movement_flags",
+          "cat": "move",
+          "editor": "int",
+          "label": "Movement flags"
+        },
+        {
+          "key": "direction",
+          "cat": "move",
+          "editor": "int",
+          "label": "Starting facing",
+          "help": "0 to 31; 32 picks one at random."
+        },
+        {
+          "key": "right_click",
+          "cat": "move",
+          "editor": "enum:right_click",
+          "label": "Right-click",
+          "help": "What a right-click orders."
+        },
+        {
+          "key": "bounds",
+          "cat": "shape",
+          "editor": "box4",
+          "label": "Bounds",
+          "help": "Its box for collisions and clicks, left, up, right and down of its centre, in pixels."
+        },
+        {
+          "key": "placement_box",
+          "cat": "shape",
+          "editor": "box2",
+          "label": "Placement",
+          "help": "A building's footprint, in pixels."
+        },
+        {
+          "key": "addon_position",
+          "cat": "shape",
+          "editor": "box2",
+          "label": "Addon position",
+          "help": "Where an addon sits, from the building's corner."
+        },
+        {
+          "key": "ai_idle_order",
+          "cat": "orders",
+          "editor": "link:orders",
+          "label": "Computer's idle order"
+        },
+        {
+          "key": "idle_order",
+          "cat": "orders",
+          "editor": "link:orders",
+          "label": "Idle order"
+        },
+        {
+          "key": "return_to_idle_order",
+          "cat": "orders",
+          "editor": "link:orders",
+          "label": "Back to idle"
+        },
+        {
+          "key": "attack_unit_order",
+          "cat": "orders",
+          "editor": "link:orders",
+          "label": "Attack a unit"
+        },
+        {
+          "key": "attack_move_order",
+          "cat": "orders",
+          "editor": "link:orders",
+          "label": "Attack-move"
+        },
+        {
+          "key": "ai_internal",
+          "cat": "orders",
+          "editor": "int",
+          "label": "AI flags"
+        },
+        {
+          "key": "flags",
+          "cat": "flags",
+          "editor": "flags:units",
+          "label": "Flags",
+          "help": "What kind of thing it is. Some change how the engine treats it everywhere: Building, Flyer, Worker, Spellcaster, Robotic, Organic, Mechanical."
+        },
+        {
+          "key": "construction_image",
+          "cat": "art",
+          "editor": "link:images",
+          "label": "Construction image",
+          "help": "What it looks like while it is being built."
+        },
+        {
+          "key": "infestation",
+          "cat": "art",
+          "editor": "link:units",
+          "label": "Infested as",
+          "help": "The unit it becomes when infested."
+        },
+        {
+          "key": "portrait",
+          "cat": "art",
+          "editor": "link:portraits",
+          "label": "Portrait",
+          "help": "Its talking head in the console: a classic portrait or one of the mod's own, whose videos its Sounds view brings in."
+        },
+        {
+          "key": "ready_sound",
+          "cat": "sound",
+          "editor": "sound",
+          "label": "Ready"
+        },
+        {
+          "key": "what_sound_first",
+          "cat": "sound",
+          "editor": "sound",
+          "label": "Selected"
+        },
+        {
+          "key": "pissed_sound_first",
+          "cat": "sound",
+          "editor": "sound",
+          "label": "Annoyed"
+        },
+        {
+          "key": "yes_sound_first",
+          "cat": "sound",
+          "editor": "sound",
+          "label": "Acknowledged"
+        },
+        {
+          "key": "editor_flags",
+          "cat": "editor",
+          "editor": "int",
+          "label": "Map editor flags",
+          "help": "Where StarEdit lists it."
+        },
+        {
+          "key": "icon",
+          "cat": "art",
+          "editor": "picture",
+          "label": "Command icon",
+          "help": "its button and the queues' picture: a PNG or GRP in the data folder, or a unit whose own it shows"
+        },
+        {
+          "key": "wireframe",
+          "cat": "art",
+          "editor": "picture",
+          "label": "Wireframe",
+          "help": "what the status panel shows of it: a PNG or GRP, or a unit whose own it shows"
+        },
+        {
+          "key": "transport_wireframe",
+          "cat": "art",
+          "editor": "picture",
+          "label": "Transport wireframe",
+          "help": "what a transport's cargo shows of it; half the wireframe without it"
+        }
+      ]
+    },
+    "weapons": {
+      "cats": [
+        {
+          "id": "id",
+          "label": "Name"
+        },
+        {
+          "id": "damage",
+          "label": "Damage"
+        },
+        {
+          "id": "range",
+          "label": "Range and splash"
+        },
+        {
+          "id": "timing",
+          "label": "Timing"
+        },
+        {
+          "id": "targets",
+          "label": "Targets"
+        },
+        {
+          "id": "missile",
+          "label": "The missile"
+        }
+      ],
+      "simple": [
+        "label",
+        "damage",
+        "damage_bonus",
+        "cooldown",
+        "max_range",
+        "damage_type",
+        "target_flags"
+      ],
+      "fields": [
+        {
+          "key": "label",
+          "cat": "id",
+          "editor": "text",
+          "label": "Name",
+          "help": "The name its tooltip shows."
+        },
+        {
+          "key": "icon",
+          "cat": "id",
+          "editor": "icon",
+          "label": "Icon",
+          "help": "The command icon its tooltip and the status panel show."
+        },
+        {
+          "key": "damage",
+          "cat": "damage",
+          "editor": "int",
+          "label": "Damage",
+          "help": "Before armour, the damage type and size."
+        },
+        {
+          "key": "damage_bonus",
+          "cat": "damage",
+          "editor": "int",
+          "label": "Bonus a level",
+          "help": "Added for each level of its damage upgrade."
+        },
+        {
+          "key": "damage_upgrade",
+          "cat": "damage",
+          "editor": "link:upgrades",
+          "label": "Damage upgrade",
+          "help": "The upgrade whose levels add the bonus."
+        },
+        {
+          "key": "damage_factor",
+          "cat": "damage",
+          "editor": "int",
+          "label": "Hits an attack",
+          "help": "The Zealot's Psi Blades hit twice."
+        },
+        {
+          "key": "damage_type",
+          "cat": "damage",
+          "editor": "enum:damage_type",
+          "label": "Damage type",
+          "help": "Explosive and Concussive scale by the target's size; Independent ignores armour and size."
+        },
+        {
+          "key": "explosion",
+          "cat": "damage",
+          "editor": "enum:explosion",
+          "label": "Effect",
+          "help": "What a hit does. 25 is a mod's alone: the enemy splash of 3, then a stun of 8 ticks on enemies on the ground in its outer splash."
+        },
+        {
+          "key": "status",
+          "cat": "damage",
+          "editor": "readonly",
+          "label": "Status on a hit",
+          "help": "A status of the mod's (\"statuses\") put on every unit the weapon damages. The Statuses workspace sets it."
+        },
+        {
+          "key": "min_range",
+          "cat": "range",
+          "editor": "px",
+          "label": "Minimum range",
+          "help": "In pixels."
+        },
+        {
+          "key": "max_range",
+          "cat": "range",
+          "editor": "px",
+          "label": "Range",
+          "help": "In pixels; 32 to a tile."
+        },
+        {
+          "key": "inner_splash",
+          "cat": "range",
+          "editor": "px",
+          "label": "Splash, inner",
+          "help": "Full damage within this."
+        },
+        {
+          "key": "middle_splash",
+          "cat": "range",
+          "editor": "px",
+          "label": "Splash, middle",
+          "help": "Half damage within this."
+        },
+        {
+          "key": "outer_splash",
+          "cat": "range",
+          "editor": "px",
+          "label": "Splash, outer",
+          "help": "A quarter within this."
+        },
+        {
+          "key": "cooldown",
+          "cat": "timing",
+          "editor": "frames",
+          "label": "Cooldown",
+          "help": "Frames between attacks; 24 a second at Fastest."
+        },
+        {
+          "key": "target_flags",
+          "cat": "targets",
+          "editor": "flags:targets",
+          "label": "Can target"
+        },
+        {
+          "key": "attack_angle",
+          "cat": "targets",
+          "editor": "int",
+          "label": "Attack angle",
+          "help": "How far off facing it can fire, of 256."
+        },
+        {
+          "key": "flingy",
+          "cat": "missile",
+          "editor": "link:flingy",
+          "label": "Missile",
+          "help": "How the missile moves, and the sprite that draws it."
+        },
+        {
+          "key": "behavior",
+          "cat": "missile",
+          "editor": "enum:behavior",
+          "label": "Missile behaviour"
+        },
+        {
+          "key": "remove_after",
+          "cat": "missile",
+          "editor": "frames",
+          "label": "Missile lasts"
+        },
+        {
+          "key": "launch_spin",
+          "cat": "missile",
+          "editor": "int",
+          "label": "Launch spin"
+        },
+        {
+          "key": "forward_offset",
+          "cat": "missile",
+          "editor": "int",
+          "label": "Forward offset",
+          "help": "Where the missile starts, ahead of the unit."
+        },
+        {
+          "key": "upward_offset",
+          "cat": "missile",
+          "editor": "int",
+          "label": "Upward offset"
+        },
+        {
+          "key": "target_error",
+          "cat": "missile",
+          "editor": "int",
+          "label": "Target error"
+        }
+      ]
+    },
+    "flingy": {
+      "cats": [
+        {
+          "id": "move",
+          "label": "Movement"
+        },
+        {
+          "id": "art",
+          "label": "Art"
+        }
+      ],
+      "simple": [],
+      "fields": [
+        {
+          "key": "top_speed",
+          "cat": "move",
+          "editor": "int",
+          "label": "Top speed",
+          "help": "In 256ths of a pixel a frame."
+        },
+        {
+          "key": "acceleration",
+          "cat": "move",
+          "editor": "int",
+          "label": "Acceleration"
+        },
+        {
+          "key": "halt_distance",
+          "cat": "move",
+          "editor": "int",
+          "label": "Halt distance"
+        },
+        {
+          "key": "turn_radius",
+          "cat": "move",
+          "editor": "int",
+          "label": "Turn rate",
+          "help": "Of 256 a frame."
+        },
+        {
+          "key": "movement_control",
+          "cat": "move",
+          "editor": "enum:movement_control",
+          "label": "Moved by",
+          "help": "By the image script, the numbers here are not read."
+        },
+        {
+          "key": "sprite",
+          "cat": "art",
+          "editor": "link:sprites",
+          "label": "Sprite",
+          "help": "What draws it."
+        }
+      ]
+    },
+    "sprites": {
+      "cats": [
+        {
+          "id": "art",
+          "label": "Art"
+        },
+        {
+          "id": "select",
+          "label": "Selection"
+        }
+      ],
+      "simple": [],
+      "fields": [
+        {
+          "key": "image",
+          "cat": "art",
+          "editor": "link:images",
+          "label": "Image",
+          "help": "The frames and the script that plays them."
+        },
+        {
+          "key": "visible",
+          "cat": "art",
+          "editor": "bool",
+          "label": "Visible"
+        },
+        {
+          "key": "health_bar",
+          "cat": "select",
+          "editor": "int",
+          "label": "Health bar",
+          "help": "Its width in pixels."
+        },
+        {
+          "key": "selection_circle",
+          "cat": "select",
+          "editor": "enum:selection_circle",
+          "label": "Selection circle"
+        },
+        {
+          "key": "selection_offset",
+          "cat": "select",
+          "editor": "int",
+          "label": "Circle offset",
+          "help": "Pixels below the centre."
+        }
+      ]
+    },
+    "images": {
+      "cats": [
+        {
+          "id": "art",
+          "label": "Frames and script"
+        },
+        {
+          "id": "draw",
+          "label": "Drawing"
+        },
+        {
+          "id": "over",
+          "label": "Overlays"
+        },
+        {
+          "id": "sheet",
+          "label": "Sheet"
+        }
+      ],
+      "simple": [],
+      "fields": [
+        {
+          "key": "grp",
+          "cat": "art",
+          "editor": "grp",
+          "label": "Frames",
+          "help": "A GRP file in the data folder. Without it, its base's frames and overlays."
+        },
+        {
+          "key": "script",
+          "cat": "art",
+          "editor": "script",
+          "label": "Image script",
+          "help": "The script that plays the frames, by its Name in iscript.txt."
+        },
+        {
+          "key": "turns",
+          "cat": "art",
+          "editor": "bool",
+          "label": "Turns",
+          "help": "Frames in 17 facings, the other 15 drawn mirrored."
+        },
+        {
+          "key": "use_full_iscript",
+          "cat": "art",
+          "editor": "bool",
+          "label": "Full script"
+        },
+        {
+          "key": "clickable",
+          "cat": "draw",
+          "editor": "bool",
+          "label": "Clickable"
+        },
+        {
+          "key": "draw_if_cloaked",
+          "cat": "draw",
+          "editor": "bool",
+          "label": "Drawn when cloaked"
+        },
+        {
+          "key": "draw_function",
+          "cat": "draw",
+          "editor": "enum:draw_function",
+          "label": "Draw function"
+        },
+        {
+          "key": "remapping",
+          "cat": "draw",
+          "editor": "enum:remapping",
+          "label": "Colour remapping"
+        },
+        {
+          "key": "shield_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Shield hit"
+        },
+        {
+          "key": "attack_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Attack"
+        },
+        {
+          "key": "damage_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Damage",
+          "help": "With frames of its own, a mod image has no damage overlay."
+        },
+        {
+          "key": "special_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Special"
+        },
+        {
+          "key": "landing_dust_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Landing dust"
+        },
+        {
+          "key": "liftoff_dust_overlay",
+          "cat": "over",
+          "editor": "int",
+          "label": "Lift-off dust"
+        },
+        {
+          "key": "team",
+          "cat": "sheet",
+          "editor": "sheetpath",
+          "label": "Team colour",
+          "help": "a picture of the same size whose bright, opaque pixels take the player's colour"
+        },
+        {
+          "key": "frame",
+          "cat": "sheet",
+          "editor": "pair",
+          "label": "Frame size",
+          "help": "a frame's width and height in game pixels"
+        },
+        {
+          "key": "origin",
+          "cat": "sheet",
+          "editor": "pair",
+          "label": "Origin",
+          "help": "where the unit stands in a frame, from its top left; the centre without it"
+        },
+        {
+          "key": "directions",
+          "cat": "sheet",
+          "editor": "enum:directions",
+          "label": "Directions",
+          "help": "17 drawn, the left side mirrored, or 32 each its own"
+        },
+        {
+          "key": "frames",
+          "cat": "sheet",
+          "editor": "int",
+          "label": "Frames",
+          "help": "the count, when the last row of the sheet is not full"
+        },
+        {
+          "key": "scale",
+          "cat": "sheet",
+          "editor": "int",
+          "label": "Scale",
+          "help": "the picture is this many times the game's size, 1 to 8"
+        }
+      ]
+    },
+    "orders": {
+      "cats": [
+        {
+          "id": "id",
+          "label": "Name"
+        },
+        {
+          "id": "cast",
+          "label": "What it fires"
+        },
+        {
+          "id": "behave",
+          "label": "Behaviour"
+        }
+      ],
+      "simple": [],
+      "fields": [
+        {
+          "key": "label",
+          "cat": "id",
+          "editor": "text",
+          "label": "Name"
+        },
+        {
+          "key": "highlight",
+          "cat": "id",
+          "editor": "icon",
+          "label": "Icon"
+        },
+        {
+          "key": "weapon",
+          "cat": "cast",
+          "editor": "link:weapons",
+          "label": "Fires",
+          "help": "The weapon the script's castspell fires."
+        },
+        {
+          "key": "tech",
+          "cat": "cast",
+          "editor": "link:techs",
+          "label": "Tech",
+          "help": "Its energy, and what the caster needs (Needs to cast)."
+        },
+        {
+          "key": "animation",
+          "cat": "cast",
+          "editor": "enum:animation",
+          "label": "Animation",
+          "help": "The script animation played as it casts."
+        },
+        {
+          "key": "obscured",
+          "cat": "cast",
+          "editor": "link:orders",
+          "label": "When not seen"
+        },
+        {
+          "key": "blocks",
+          "cat": "cast",
+          "editor": "readonly",
+          "label": "Blocks",
+          "help": "What the cast does, as blocks run when it is cast, in place of its weapon. The action editor sets them."
+        },
+        {
+          "key": "cooldown",
+          "cat": "cast",
+          "editor": "int",
+          "label": "Cooldown",
+          "help": "Seconds before the caster may cast it again, or before a charge comes back; classic spells have none."
+        },
+        {
+          "key": "charges",
+          "cat": "cast",
+          "editor": "int",
+          "label": "Charges",
+          "help": "Casts it holds at once, one coming back each cooldown; 1 without it."
+        },
+        {
+          "key": "toggle",
+          "cat": "cast",
+          "editor": "readonly",
+          "label": "Toggle",
+          "help": "A cast that turns it on and off (on, off: functions of the scripts; drain: energy a second while on)."
+        },
+        {
+          "key": "channel",
+          "cat": "cast",
+          "editor": "readonly",
+          "label": "Channel",
+          "help": "Held after the cast while the caster stands (tick and stop: functions of the scripts; every, seconds)."
+        },
+        {
+          "key": "autocast",
+          "cat": "cast",
+          "editor": "readonly",
+          "label": "Autocast",
+          "help": "An idle caster casts it by itself at what the scripts' choose function returns, every so many seconds."
+        },
+        {
+          "key": "interruptible",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Interruptible"
+        },
+        {
+          "key": "can_be_queued",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Can be queued"
+        },
+        {
+          "key": "stop_moving",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Stops to cast"
+        },
+        {
+          "key": "can_be_obstructed",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Can be blocked"
+        },
+        {
+          "key": "use_weapon_targeting",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Weapon's targeting"
+        },
+        {
+          "key": "requires_movable",
+          "cat": "behave",
+          "editor": "bool",
+          "label": "Caster must move"
+        }
+      ]
+    },
+    "techs": {
+      "cats": [
+        {
+          "id": "id",
+          "label": "Name"
+        },
+        {
+          "id": "cost",
+          "label": "Cost"
+        },
+        {
+          "id": "req",
+          "label": "Needs"
+        }
+      ],
+      "simple": [
+        "label",
+        "minerals",
+        "gas",
+        "research_time",
+        "energy"
+      ],
+      "fields": [
+        {
+          "key": "label",
+          "cat": "id",
+          "editor": "text",
+          "label": "Name"
+        },
+        {
+          "key": "icon",
+          "cat": "id",
+          "editor": "icon",
+          "label": "Icon"
+        },
+        {
+          "key": "race",
+          "cat": "id",
+          "editor": "enum:race",
+          "label": "Race"
+        },
+        {
+          "key": "minerals",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Minerals"
+        },
+        {
+          "key": "gas",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Gas"
+        },
+        {
+          "key": "research_time",
+          "cat": "cost",
+          "editor": "frames",
+          "label": "Research time"
+        },
+        {
+          "key": "energy",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Energy to cast"
+        },
+        {
+          "key": "requires",
+          "cat": "req",
+          "editor": "req",
+          "label": "Needs to research",
+          "help": "Where it is researched, and what else. Without it, it needs no research."
+        },
+        {
+          "key": "use_requires",
+          "cat": "req",
+          "editor": "req",
+          "label": "Needs to cast",
+          "help": "The caster, and \"researched\" when the research must be done first."
+        },
+        {
+          "key": "broodwar",
+          "cat": "req",
+          "editor": "bool",
+          "label": "Brood War only"
+        }
+      ]
+    },
+    "upgrades": {
+      "cats": [
+        {
+          "id": "id",
+          "label": "Name"
+        },
+        {
+          "id": "cost",
+          "label": "Cost a level"
+        },
+        {
+          "id": "req",
+          "label": "Needs"
+        }
+      ],
+      "simple": [
+        "label",
+        "max_level",
+        "minerals",
+        "gas"
+      ],
+      "fields": [
+        {
+          "key": "label",
+          "cat": "id",
+          "editor": "text",
+          "label": "Name"
+        },
+        {
+          "key": "icon",
+          "cat": "id",
+          "editor": "icon",
+          "label": "Icon"
+        },
+        {
+          "key": "race",
+          "cat": "id",
+          "editor": "enum:race",
+          "label": "Race"
+        },
+        {
+          "key": "max_level",
+          "cat": "id",
+          "editor": "int",
+          "label": "Levels"
+        },
+        {
+          "key": "minerals",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Minerals",
+          "help": "The first level."
+        },
+        {
+          "key": "minerals_factor",
+          "cat": "cost",
+          "editor": "int",
+          "label": "+ a level",
+          "help": "Added for each level done."
+        },
+        {
+          "key": "gas",
+          "cat": "cost",
+          "editor": "int",
+          "label": "Gas"
+        },
+        {
+          "key": "gas_factor",
+          "cat": "cost",
+          "editor": "int",
+          "label": "+ a level"
+        },
+        {
+          "key": "time",
+          "cat": "cost",
+          "editor": "frames",
+          "label": "Time"
+        },
+        {
+          "key": "time_factor",
+          "cat": "cost",
+          "editor": "frames",
+          "label": "+ a level"
+        },
+        {
+          "key": "requires",
+          "cat": "req",
+          "editor": "req",
+          "label": "Needs",
+          "help": "Where it is upgraded, a level at a time."
+        },
+        {
+          "key": "broodwar",
+          "cat": "req",
+          "editor": "bool",
+          "label": "Brood War only"
+        }
+      ]
+    },
+    "sounds": {
+      "cats": [
+        {
+          "id": "file",
+          "label": "The sound"
+        },
+        {
+          "id": "play",
+          "label": "How it plays"
+        }
+      ],
+      "simple": [
+        "file",
+        "priority",
+        "flags",
+        "min_volume"
+      ],
+      "fields": [
+        {
+          "key": "file",
+          "cat": "file",
+          "editor": "soundfile",
+          "label": "File",
+          "help": "WAV, Ogg Vorbis, Opus, MP3 or FLAC in the data folder"
+        },
+        {
+          "key": "priority",
+          "cat": "play",
+          "editor": "int",
+          "label": "Priority",
+          "help": "which sound gives way when too many play"
+        },
+        {
+          "key": "flags",
+          "cat": "play",
+          "editor": "flags:sound",
+          "label": "Flags",
+          "help": "preload; a unit type says one at a time; plays once at a time; not cut off"
+        },
+        {
+          "key": "length_adjust",
+          "cat": "play",
+          "editor": "int",
+          "label": "Talking time",
+          "help": "milliseconds the talking portrait runs past the sound"
+        },
+        {
+          "key": "min_volume",
+          "cat": "play",
+          "editor": "int",
+          "label": "Least volume",
+          "help": "the volume it keeps however far away it plays"
+        },
+        {
+          "key": "min_interval",
+          "cat": "play",
+          "editor": "int",
+          "label": "Least gap",
+          "help": "milliseconds before the sound plays again; 80 when not given, as the classic game"
+        },
+        {
+          "key": "subtitle",
+          "cat": "file",
+          "editor": "text",
+          "label": "Subtitle",
+          "help": "the words of the line, shown as the unit says it to a player with Unit subtitles on"
+        }
+      ]
+    },
+    "portraits": {
+      "cats": [
+        {
+          "id": "video",
+          "label": "Videos"
+        }
+      ],
+      "simple": [
+        "idle",
+        "talking",
+        "idle_chances"
+      ],
+      "fields": [
+        {
+          "key": "idle",
+          "cat": "video",
+          "editor": "video",
+          "label": "Idle videos",
+          "help": "a path without its end: idle0.webm to idle3 are tried; idle0 is enough"
+        },
+        {
+          "key": "talking",
+          "cat": "video",
+          "editor": "video",
+          "label": "Talking videos",
+          "help": "talk0 to talk2, played while the unit speaks; its idle videos without it"
+        },
+        {
+          "key": "idle_chances",
+          "cat": "video",
+          "editor": "int",
+          "label": "Idle chances",
+          "help": "the chance in 100 of each idle video"
+        }
+      ]
+    }
+  }
+}

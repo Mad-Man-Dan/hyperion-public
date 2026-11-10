@@ -28,12 +28,16 @@ struct MutatorsSetUp {
   bool bMapUnits;
 };
 
-// The tabs over the set-up's right column at x, y, w wide in SC2's units: Game Options (O) and
-// Mutators (U), which counts the mutators on, and the set in a word at the strip's right. The
-// tab clicked, 0 or 1, or -1. pszFirst and pszFirstTip name the first tab another way (the
-// benchmark's options).
+// The tabs over the set-up's right column at x, y, w wide in SC2's units: Game Options (O),
+// the game mode's own where one is named (M), and Mutators (U), which counts the mutators on,
+// with what is on in a word at the strip's right. The tab clicked, 0 the options, 1 the mutators
+// or 2 the mode, or -1. pszFirst and pszFirstTip name the first tab another way (the benchmark's
+// options); pszMode is the mode's own name, NULL or "" for a set-up with no mode, with the mod it
+// comes from in pszModeTag and the settings off the mode's own in nModeChanged, which its tab
+// counts.
 int MutatorsViewTabs(float x, float y, float w, int nView, const MutatorSet &m, const char *pszFirst = NULL,
-                     const char *pszFirstTip = NULL);
+                     const char *pszFirstTip = NULL, const char *pszMode = NULL, const char *pszModeTag = NULL,
+                     int nModeChanged = 0);
 // The Mutators tab's box at x, y, w by h; true when the set changed.
 bool MutatorsTab(float x, float y, float w, float h, const MutatorsSetUp &s);
 // The Game Options tab's word on them, at the options' foot (laid out in the open box, as wide

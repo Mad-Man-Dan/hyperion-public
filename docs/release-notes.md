@@ -4,6 +4,25 @@ What changed in each version of Hyperion, newest first. The game shows the same 
 Patch Notes. Versions are numbered as `docs/versioning.md` says; this page is written from
 `engine/notes/release-notes.json` by `engine/tools/release_notes.py md`.
 
+## v0.7.3-beta, 2026-11-10
+
+**Map and mod groundwork, and fixes.** Groundwork for larger maps and deeper mods, and fixes for games with more than 8 players.
+
+### Changed
+
+- **Groundwork for maps.** Hyperion’s map format is documented for map editors: maps up to 512 by 512 tiles in any width and height, and up to 64 players. A map can also say it keeps the original’s limits.
+- **Groundwork for mods.** Mods can run scripts, mark areas on the map and minimap, add statuses and change the unit panel. Tools for making such mods come in a later release.
+
+### Fixed
+
+- Melee games with more than 8 players no longer start a player with nothing.
+- Replays of games with more than 12 players seat a player who was destroyed before the end.
+- Building placement previews no longer draw over attack overlays, nor health bars over selection circles.
+- Some early-format maps load again as Use Map Settings.
+- A map made for a mod no longer starts without that mod.
+- Screenshots save the window as shown, with the HUD design and full colour.
+- Safer reading of sound files from mods and maps.
+
 ## v0.7.2-beta, 2026-11-04
 
 **Start-up and campaign scene fixes.** Hyperion now starts on PCs where the graphics driver hangs or fails, and campaign scenes that move the camera now always start.

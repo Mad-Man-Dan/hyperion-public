@@ -33,6 +33,7 @@
 #include "../h/selectlimits.h"  // Hyperion: SELECTION_MAX
 #include "../h/handicap.h"  // Hyperion: a player's handicap
 #include "../h/mutators.h"  // Hyperion: the supply boost
+#include "../port/hud/port_readout.h"  // Hyperion: a mod's readout writes the panel's text parts
 
 // The globals this TU reaches, dual-spelled: one #ifndef per name, never one
 // over the block, so adding a name cannot undeclare the ones below it.
@@ -338,6 +339,10 @@ void __fastcall statdraw_draw_stat(ctrl_t *pDlg, short nIndex, void *pText) {
 // tail-jump to ctrl_set_update. Ten bodies here end that way.
 void __fastcall statdraw_draw_unit_name(ctrl_t *pDlg) {
   const char *psz = gpStatUnit->GetName();
+  // Hyperion: a mod's readout names the unit its own way; null keeps the unit's own name
+  const char *pszMod = PortReadoutPartText(PORT_READOUT_NAME, psz);
+  if (pszMod != NULL)
+    psz = pszMod;
   ctrl_t *p = ctrl_find_ndx(pDlg, -5);
   p->pData = const_cast<char *>(psz);
   ctrl_show(p);
@@ -897,6 +902,20 @@ void __fastcall statdraw_draw_carrier(ctrl_t *pDlg) {
 void __fastcall statdraw_draw_kills(ctrl_t *pDlg) {
   CUnit *u = gpStatUnit;
   WORD wType = u->wType;
+  // Hyperion: a mod's readout writes this line, and the lines it adds take it in turn; an empty
+  // answer keeps the line off, as classic keeps it off (port_readout.h)
+  const char *pszMod = PortReadoutPartText(PORT_READOUT_KILLS, status_get_str(0x2FC));
+  if (pszMod != NULL) {
+    ctrl_t *pMod = ctrl_find_ndx(pDlg, -0x15);
+    if (*pszMod == '\0') {
+      ctrl_hide(pMod);
+      return;
+    }
+    pMod->pData = const_cast<char *>(pszMod);
+    ctrl_show(pMod);
+    ctrl_set_update(pMod);
+    return;
+  }
   if (wType == 0x2F || wType == 0x32 ||
       ((u->dwFlags & 0x40000000) && !gPlayback && u->bPlayer == g_LocalNationID)) {
     ctrl_hide(ctrl_find_ndx(pDlg, -0x15));
@@ -1078,6 +1097,12 @@ void __fastcall statdraw_draw_hp(ctrl_t *pDlg) {
     p = ctrl_find_ndx(pDlg, -7);
     p->pData = sgszUnitShieldsStat;
   }
+  // Hyperion: a mod's readout writes the life's line its own way (port_readout.h)
+  {
+    const char *pszMod = PortReadoutPartText(PORT_READOUT_LIFE, sgszUnitShieldsStat);
+    if (pszMod != NULL)
+      p->pData = const_cast<char *>(pszMod);
+  }
   ctrl_show(p);
   ctrl_set_update(p);
   statdraw_draw_mana(pDlg);
@@ -1108,6 +1133,13 @@ void __fastcall statdraw_draw_mana(ctrl_t *pDlg) {
   } else {
     p = ctrl_find_ndx(pDlg, -8);
     p->pData = NULL;
+  }
+  // Hyperion: a mod's readout writes the energy's line, or keeps it off (port_readout.h)
+  {
+    const char *pszMod = PortReadoutPartText(PORT_READOUT_ENERGY,
+                                             p->pData != NULL ? sgszUnitLifetimeStat : NULL);
+    if (pszMod != NULL)
+      p->pData = *pszMod != '\0' ? const_cast<char *>(pszMod) : NULL;
   }
   ctrl_show(p);
   ctrl_set_update(p);
@@ -1327,43 +1359,51 @@ shields:
 // "disabled", a nuke count, other status effects, or the unit's rank. Every
 // arm goes through statdraw_draw_stat; the inlined copies are what MSVC
 // cross-jumps into the oracle's shared `mov ecx, K / jmp` tails.
+// Hyperion: the status line under the name, with a mod's readout given the place: its own
+// words over classic's, or classic's where the readout writes none (port_readout.h). Every
+// arm of the line below goes through this, so the mod's line cannot be missed on one path.
+static void __fastcall statdraw_status_line(ctrl_t *pDlg, const char *pszClassic) {
+  const char *pszMod = PortReadoutPartText(PORT_READOUT_STATUS, pszClassic);
+  statdraw_draw_stat(pDlg, -0x14, const_cast<char *>(pszMod != NULL ? pszMod : pszClassic));
+}
+
 void __fastcall statdraw_draw_properties(ctrl_t *pDlg) {
   CUnit *u = gpStatUnit;
   if ((u->dwFlags & 0x40000000) && (gPlayback || u->bPlayer == g_LocalNationID)) {
-    statdraw_draw_stat(pDlg, -0x14, status_get_str(0x340));
+    statdraw_status_line(pDlg, status_get_str(0x340));
     return;
   }
   if ((gulUnitTypeFlags[u->wType] & 1) &&
       ((u->dwFlags & 0x400) || u->bLockdownTimer || u->bStasisTimer || u->bParalyzeTimer) &&
       (u->dwFlags & 1) && !u->IsConstructing() &&
       gpStatUnit->bTechType == 0x2C && gpStatUnit->bUpgradeType == 0x3D) {
-    statdraw_draw_stat(pDlg, -0x14, status_get_str(gpStatUnit->GetRace() + 0x33C));
+    statdraw_status_line(pDlg, status_get_str(gpStatUnit->GetRace() + 0x33C));
     return;
   }
   u = gpStatUnit;
   if (u->bCrunchyCount && (u->dwFlags & 1)) {
     psnprintf(sgszStatCrunchy_g, 0x104, "%s (%d)", status_get_str(0x514),
               u->bCrunchyCount);
-    statdraw_draw_stat(pDlg, -0x14, sgszStatCrunchy_g);
+    statdraw_status_line(pDlg, sgszStatCrunchy_g);
     return;
   }
   if (UnitMyopia(u).Any() && (u->dwFlags & 1)) {  // Hyperion: and the blinders past 7 (stage D)
-    statdraw_draw_stat(pDlg, -0x14, status_get_str(0x513));
+    statdraw_status_line(pDlg, status_get_str(0x513));
     return;
   }
   if (UnitParasite(u).Any() && (u->dwFlags & 1)) {  // Hyperion: and the parasites past 7 (stage D)
-    statdraw_draw_stat(pDlg, -0x14, status_get_str(0x33B));
+    statdraw_status_line(pDlg, status_get_str(0x33B));
     return;
   }
   if (u->sub_431A90()) {
-    statdraw_draw_stat(pDlg, -0x14, status_get_str(0x33F));
+    statdraw_status_line(pDlg, status_get_str(0x33F));
     return;
   }
   if (!(gulUnitTypeFlags[u->wType] & 1)) {
-    statdraw_draw_stat(pDlg, -0x14, u->GetRankStr());
+    statdraw_status_line(pDlg, u->GetRankStr());
     return;
   }
-  statdraw_draw_stat(pDlg, -0x14, NULL);
+  statdraw_status_line(pDlg, NULL);
 }
 
 // The training queue: progress of the unit in production and the five queue

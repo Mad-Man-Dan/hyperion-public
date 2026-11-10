@@ -24,10 +24,12 @@ there as `Hyperion.app` (`tools/package.py --mac`).
 
 | Target | Command (from `engine/`) | Toolchain | Output |
 |---|---|---|---|
-| Windows x64 | `python tools/build_engine_x64.py` | VS 2026 x64 (`vcvarsall.bat` under `C:\Program Files\Microsoft Visual Studio\18\Community`) | `src117/build/x64/Hyperion.exe`, `Hyperion.pdb`, `rt_observer.dll` |
+| Windows x64 | `python tools/build_engine_x64.py` | VS 2026 x64 (`vcvarsall.bat` under `C:\Program Files\Microsoft Visual Studio\18\Community`) | `src117/build/x64/Hyperion.exe`, `Hyperion.pdb`, `rt_observer.dll`, and then the design engine and the studio below, unless `--no-studio` |
 | Linux x64 | `python tools/build_engine_linux.py` | clang, lld, CMake, Ninja; on Windows in the `hyperion-linux` Docker image (`tools/linux/Dockerfile`) | `src117/build/linux-x64/Hyperion.x86_64`, `libSDL3.so.0`, `rt_observer.so` |
 | Linux arm64 | `python tools/build_engine_linux.py --arch arm64` | as above, in `hyperion-linux-arm64` under emulation (slow) | `src117/build/linux-arm64/Hyperion.aarch64` |
 | Browser | `python tools/build_engine_web.py` | Emscripten in its own image (`emscripten/emsdk`) | `src117/build/web/hyperion.js`, `hyperion.wasm`, loaded by `engine/web/play/` |
+| The design engine, for trying ideas | `python tools/build_design_x64.py`, after the Windows x64 build | its objects, with `src117/design/` and the hooked files compiled with `HX_DESIGN` | `src117/build/design/HyperionDesign.exe`; never packaged (`design.md`) |
+| Hyperion Studio | `python tools/build_studio_x64.py`, after the design engine | the design build's objects but its own identity and panels, with `src117/studio/` | `src117/build/studio/HyperionStudio.exe`; packaged and installed beside Hyperion (`studio.md`) |
 
 All outputs are gitignored. Builds take a few minutes each. The Linux and web builds compile
 SDL3, StormLib and CascLib from source once (`--sdl`, `--libs` rebuild them).
@@ -47,11 +49,13 @@ Fetched into the gitignored `third_party/` by scripts in `tools/`:
 | CascLib 3.0 | `fetch_casclib.py` | StarCraft: Remastered's CASC storage, for HD art |
 | DXC | `fetch_dxc.py` | compiles the GPU presenter's shaders to DXIL and SPIR-V |
 | SPIRV-Cross (vulkan-sdk-1.4.363.0) | `fetch_spirv_cross.py`, which also builds its command line with cl | turns each shader's SPIR-V into Metal Shading Language for the Mac (`tools/shader_msl.py`) |
-| Clay 0.14 | `fetch_clay.py` | the front end's layout |
+| Clay 0.14 | `fetch_clay.py` | the front end's layout. Each build patches the fetched `clay.h` once (`fetch_clay.patch()`, marked `Hyperion: CJK`) so its measuring makes each CJK character a word of its own, as Clay wraps only at spaces |
 | stb | `fetch_stb.py` | `stb_truetype` for the front end's text, `stb_vorbis` for the videos' sound and a mod's Ogg Vorbis, `stb_image` for a mod's PNG and TGA art. `tools/stb-patches/` holds the build's fixes to them, applied after the download by `third_party_patches.py`; a build stops on a copy without them |
-| dr_libs (commit `dfe8377`: dr_mp3 0.7.4, dr_flac 0.13.4, dr_wav 0.14.6) | `fetch_drlibs.py`, each file checked against its SHA-256 | a mod's MP3, FLAC and WAV sounds and music (`port_audiodecode.cpp`); public domain or MIT-0 |
+| dr_libs (commit `b6a9189`: dr_mp3 0.7.5, dr_flac 0.13.5, dr_wav 0.14.7) | `fetch_drlibs.py`, each file checked against its SHA-256 | a mod's MP3, FLAC and WAV sounds and music (`port_audiodecode.cpp`); public domain or MIT-0 |
 | libvpx 1.17.0, with libwebm | `fetch_libvpx.py` | Remastered's WebM videos (`data.md`, Video): the VP8 and VP9 decoders in plain C, configured once into the committed `tools/libvpx/` (its `sources.txt` lists the files), and the WebM parser libvpx carries; compiled by the build scripts into `webm.lib` / `libwebm.a`. Not in the browser build |
 | dav1d 1.5.4 | `fetch_dav1d.py`, checked against its SHA-256 | a mod's AV1 videos (`data.md`, Video): plain C, no assembly, configured by hand in the committed `tools/dav1d/` (`config.h`), its bit-depth files compiled once for 8 bits and once for 16; into `dav1d.lib` / `libdav1d.a`. BSD. Not in the browser build |
+| Luau 0.742 | `fetch_luau.py`, checked against its SHA-256 | the design engine's effects (`design.md`): its parser, compiler and VM, built by `build_design_x64.py` for the design engine's effects and by `build_engine_x64.py` into `Hyperion.exe` for a mod's scripts (`docs/mod-data.md`, Scripts) |
+| Dear ImGui 1.93.0-docking | `fetch_imgui.py`, checked against its SHA-256 | the design engine's panels (`design.md`): the library with its SDL3 and SDL_GPU backends, built only by `build_design_x64.py` into `src117/build/design/imgui/imgui.lib`; `Hyperion.exe` has none of it. MIT |
 | libwebp 1.5.0 | `fetch_libwebp.py` | a mod's WebP art (`data.md`, mod data): the decoder alone, into `image.lib` / `libimage.a` with `stb_image` |
 | none: the system's | | H.264, H.265 and AAC (`data.md`, Video), with no code of theirs in Hyperion: Media Foundation on Windows (`mfplat.dll` loaded at run time, `mfuuid.lib` linked for its names), VideoToolbox, CoreMedia, CoreVideo and AudioToolbox on a Mac (linked), the player's FFmpeg on Linux (`libavcodec`, loaded at run time) |
 | Fonts | `fetch_fonts.py` | Saira, Michroma, IBM Plex Mono and Chakra Petch's four cuts, and Noto Sans and Noto Sans JP, KR, SC and TC for the letters those lack (all OFL), linked into the exe as resources; Chakra Petch is the HUD tooltips' (`hud.md`). The Noto faces are cut to their regular weight and to each language's common characters with every character the catalogs use (`fetch_fonts.cut()`, which each build runs and which cuts again when the catalogs need a character the cuts lack; about 6 MB in all). Every package carries the faces' licenses in `docs/licenses/fonts.txt` (`package.py`) |
@@ -64,7 +68,7 @@ Some sources are generated and committed. Rerun the generator when its input cha
 | File | Generator | When |
 |---|---|---|
 | `src117/gen/globals117.h` | `tools/regen_globals.py` | the game's globals change |
-| `src117/gen/wide117.h`, `wide117.json` | `tools/wide_globals.py` | a global's type changes |
+| `src117/gen/wide117.h`, `wide117.json` | `tools/wide_globals.py` | a global's type changes, including a type inside it (a stale stride overruns the next global; a TU that declares such a global asserts `WideStride(va) == sizeof` of its type, as `CImage.cpp` does for the GRP groups). The tool also compiles the port's files at 32 bits, so port code stays valid there |
 | `src117/gen/save117.h` | `tools/save_layouts.py` | a saved type's layout changes |
 | `src117/gen/code_map.cpp` | `tools/code_map.py` lists the missing rows | a function 1.17's data points at gets a body |
 | `src117/gen/data117.cpp` | `tools/data117_source.py`, from the oracle exe | the engine names another of 1.17's globals |
@@ -129,15 +133,18 @@ they copy.
 - `tools/package.py` zips a build for players (`--linux x64|arm64` for a tarball, `--mac` on
   a Mac for `Hyperion.app` in a zip, signed ad hoc) into a new folder under `testrun/share/`.
   A package carries no Blizzard files and goes in a folder of its own. Beside the program it
-  puts only the SDL library, README.txt and `docs`; the mods, tools, maps, `web` and `notes` go
+  puts only `HyperionStudio.exe` with the `studio\` it reads and the `tools\control\` its Claude
+  panel runs (the Windows package alone: the studio is built on the design engine, which is
+  Windows only), the SDL library, README.txt and `docs`; the mods, tools, maps, `web` and
+  `notes` go
   in `Data\`, the default data folder, where the program finds them (`PortPackagedFile`,
   platform.md). The mods for Hyperion's own testing, Hybrid Test and the AI Lab, are in no
   package or install (`UNSHIPPED_MODS`, the user's decision of 2026-10-27), nor are its test
   maps (`UNSHIPPED_MAPS`).
 - `tools/package.py --install <folder>` puts the Windows zip's files in a folder as unzipping
   would, writing only what differs and touching nothing else there, the player's own `Data\`
-  included; a running `Hyperion.exe` is renamed `Hyperion.exe.old` and goes on, and the next
-  install removes it. Each Windows build that succeeds installs so into the folders
+  included; a running `Hyperion.exe` or `HyperionStudio.exe` is renamed `<name>.exe.old` and goes
+  on, and the next install removes it. Each Windows build that succeeds installs so into the folders
   `engine/install_to.txt` names (one a line, not committed; on the user's machine
   `E:\Hyperion`, the user's request of 2026-10-21), unless built with `--no-install`.
 - `tools/mac_sync.py --host user@mac` sends the engine's tree to a Mac to build and package:
@@ -175,3 +182,5 @@ they copy.
 ## Further reading
 
 - `../../README.md`: the engine tree's layout and rules.
+- `../../../docs/public-release.md`: signing, scan reports, hashes and licenses for the first
+  public build (not done yet).

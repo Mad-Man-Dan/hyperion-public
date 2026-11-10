@@ -210,6 +210,10 @@ Match &NewMatch(const PortJson &j)
   m.nSpeed = static_cast<int>(j["speedN"].Num(m.nSpeed));
   m.bHyperion = j["rules"].Str() == "hyperion";
   m.mut = MutatorsFromJson(j["mutators"]);
+  m.mode = j["mode"].Str();
+  m.modeName = j["modeName"].Str();
+  m.modeSettings = j["modeSettings"].Str();
+  m.dwModeSeed = static_cast<uint32_t>(j["modeSeed"].Num());
   m.nMapPlayers = static_cast<int>(j["players"].Num(8));
   if (m.nMapPlayers < 2 || m.nMapPlayers > kPlayers)
     m.nMapPlayers = kPlayers;
@@ -245,6 +249,9 @@ std::string LaunchJson(const Match &m, const Device &d, bool bCreate)
                   ",\"key\":" + std::to_string(m.nKey) + ",\"speedN\":" + std::to_string(m.nSpeed) +
                   ",\"rules\":" + PortJsonQuote(m.bHyperion ? "hyperion" : "classic") +
                   ",\"mutators\":" + MutatorsJson(m.mut) +
+                  // the match's game mode, so every seat rolls the same run (port_mode.h)
+                  ",\"mode\":" + PortJsonQuote(m.mode) + ",\"modeSettings\":" + PortJsonQuote(m.modeSettings) +
+                  ",\"modeSeed\":" + std::to_string(m.dwModeSeed) +
                   ",\"race\":" + std::to_string(RaceId(d.race)) + ",\"seats\":[";
   bool bFirst = true;
   int nHumans = 0;

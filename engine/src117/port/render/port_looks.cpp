@@ -27,18 +27,62 @@
 #include "../../h/poollimits.h"     // POOL_UNITS_STORE, g_pools
 #include "../../h/typelimits.h"     // UNIT_TYPES_MAX, IMAGE_TYPES_MAX
 #include "../../gen/globals117.h"   // sgGamePalette_g, _gbRemapColorTbl, glScrollPixelX
+#include "../data/port_moddata.h"  // ModTypeByName
 
 namespace {
 
 // The palette entries a look takes, and what it is made of on the GPU.
-enum { RULE_BLUES, RULE_GREENS, RULE_ALL };
-enum { MAT_CRYSTAL, MAT_GAS };
-enum { RAMP = 6, LOOKS_MAX = 254 };
-const char *const kRules[] = {"blues", "greens", "all"};
-const char *const kMaterials[] = {"crystal", "gas"};
+// The rules past the first three: none keeps the image's colours, for a look that is only an
+// aura; reds, golds, greys and skins; a band of hue; and a zone's own entries. The materials past
+// the first two: paint, the ramp at the tone as the art is shaded, and glow, the ramp added as
+// light.
+enum { RULE_BLUES, RULE_GREENS, RULE_ALL, RULE_NONE, RULE_REDS, RULE_GOLDS, RULE_GREYS, RULE_SKINS, RULE_HUE, RULE_ENTRIES, RULES };
+enum { MAT_CRYSTAL, MAT_GAS, MAT_PAINT, MAT_GLOW, MATERIALS };
+enum { RAMP = 6, LOOKS_MAX = 254, ZONES = 4 };
+const char *const kRules[] = {"blues", "greens", "all", "none", "reds", "golds", "greys", "skins", "hue", "entries"};
+const char *const kMaterials[] = {"crystal", "gas", "paint", "glow"};
+
+// A zone of a look's colours: the entries it takes, onto its ramp by their tone, spread over the
+// zone's own lightness or kept at theirs, and how much of its colour shows over the image's own.
+// The first zone's rule, material and ramp are the look's own (nRule, nMaterial, adwRamp).
+struct Zone {
+  int nRule = RULE_NONE;
+  int nMaterial = MAT_PAINT;
+  unsigned int adwRamp[RAMP] = {};
+  float afHue[5] = {0.0f, 360.0f, 0.02f, 0.0f, 1.0f};  // from and to in degrees, the least chroma, the lightness between
+  std::vector<int> entries;                          // RULE_ENTRIES's
+  std::vector<int> except;                           // never taken
+  float fMix = 1.0f;
+  bool bKeep = false;
+};
+
+// An aura's numbers as looks.json names them, the least and most of each, and whether it is whole.
+enum { AU_REACH, AU_WIDTH, AU_STRENGTH, AU_CRACKLE, AU_SPEED, AU_PULSE, AU_SPARKS, AU_GAP, AU_FALLOFF, AU_INNER,
+       AU_OPACITY, AU_PULSE_RATE, AU_FLICKER, AU_EMBERS, AU_BANDS, AU_BAND_SPEED, AU_STEPS, AU_CRACKLE_SIZE, AU_BLOCK,
+       AU_FIELDS };
+struct AuraField {
+  const char *pszName;
+  float fLo, fHi;
+  bool bWhole;
+};
+const AuraField kAura[AU_FIELDS] = {
+    {"reach", 0, 8, true},      {"width", 0.5f, 3, false},     {"strength", 0, 2, false},  {"crackle", 0, 1, false},
+    {"speed", 0, 4, false},     {"pulse", 0, 1, false},        {"sparks", 0, 1, false},    {"gap", 0, 3, true},
+    {"falloff", 0.5f, 3, false}, {"inner", 0, 1, false},       {"opacity", 0, 1, false},   {"pulseRate", 0.1f, 4, false},
+    {"flicker", 0, 1, false},   {"embers", 0, 1, false},       {"bands", 0, 8, true},      {"bandSpeed", -4, 4, false},
+    {"steps", 2, 8, true},      {"crackleSize", 0.25f, 4, false}, {"block", 1, 2, true}};
+// its colours by the line's distance (fixed: the glow's and the line's; ramp: line, middle, glow
+// outward; team: the player's; cycle: the hue turning), and how they go over what is under
+enum { AURA_FIXED, AURA_RAMP, AURA_TEAM, AURA_CYCLE, AURA_MODES };
+// how many auras a unit shows at once, so three looks that each bring one all show
+enum { AURAS_MAX = 3 };
+const char *const kAuraModes[] = {"fixed", "ramp", "team", "cycle"};
+const char *const kAuraBlends[] = {"add", "over"};
+// how far a look's embers rise past an image's top
+const int kEmberRise = 12;
 
 // A vent of an image a plume rises from: its place in the image's canvas, how strong it is
-// and how wide (the design's numbers, local-design-center, 41-rich-bases/richfx.js), and the
+// and how wide (the design's numbers, design/41-rich-bases/richfx.js), and the
 // frame it is for, -1 for any. An image's vents for the frame drawn stand in for its others.
 struct Vent {
   int nImage;
@@ -59,6 +103,18 @@ struct Look {
   unsigned int dwLight = 0;         // the ground light's colour
   float afLight[4] = {};            // its radius and strength, and its centre from the unit's place
   std::vector<Vent> vents;
+  int nZones = 1;
+  Zone az[ZONES];        // [0]'s rule, material and ramp are the look's own above
+  bool bCircle = false;  // a selection's mark takes it too
+  // the aura: its glow, middle and line colours, its numbers (kAura's), its mode and blend, whether
+  // only the sprite's main image has it, its dither, and whether its glow goes over other sprites
+  unsigned int adwAura[3] = {0x40FF60, 0x9FFFA0, 0xEAFFEA};
+  float afAura[AU_FIELDS] = {0, 1, 1, 0.5f, 1, 0.3f, 0.3f, 0, 1, 0.3f, 1, 1, 0, 0, 0, 1, 4, 1, 1};
+  int nAuraMode = AURA_FIXED;
+  int nAuraBlend = 0;
+  bool bAuraMain = false, bAuraDither = true, bAuraOver = false;
+  bool bLive = false;     // made or changed by the channel: kept from game to game
+  BYTE abZone[256] = {};  // the zone that takes each entry
   // made for the palette in g_abPalette
   bool abTakes[256] = {};
   BYTE abRemap[256] = {};
@@ -72,17 +128,27 @@ BYTE g_abPalette[1024];     // the palette the looks were last made for
 bool g_bMade;
 unsigned char g_abUnitLook[POOL_UNITS_STORE];  // given by hand
 unsigned char g_abTypeLook[UNIT_TYPES_MAX];    // given by type
+unsigned char g_abTypeAura[UNIT_TYPES_MAX][AURAS_MAX - 1];  // the auras of the looks before it
 PFN_PORT_LOOK_OF_UNIT g_pfnProvider;
+
+bool HasAura(const Look &l);
+bool Paints(const Look &l);
 
 struct Looked {
   const CSprite *pSprite;
   int nLook;
   int x, y, nType;  // a unit's place and type, for a fogged copy and the minimap
   bool bUnit;
+  int nAura;  // the looks its auras are from, one a byte, 0 for none; nLook is its paint's
 };
 std::vector<Looked> g_looked;  // this pass's, in the order of the sprites
 BYTE g_abSaved[256];
 unsigned int g_nNow;  // PortLookNow's
+unsigned char g_abPlayerLook[12];  // given by player (look_player)
+unsigned int g_nNowAura;           // PortLookAuraNow's look, the first of g_anNowAura
+unsigned int g_anNowAura[AURAS_MAX];  // the looks of the auras of the image drawn now
+int g_nMainImage = -1;             // the main image of the sprite drawn now
+float g_fAura = 1.0f, g_fAuraSpeed = 1.0f;
 
 // The live values (port_looks.h)
 float g_fOn = 1.0f, g_fSteps = 1.0f;
@@ -133,10 +199,12 @@ Look Fresh(const char *pszName) {
   l.afLight[3] = 8.0f;
   for (int e = 0; e < 256; e++)
     l.abRemap[e] = static_cast<BYTE>(e);
+  for (Zone &z : l.az)
+    memcpy(z.adwRamp, kGold, sizeof z.adwRamp);
   return l;
 }
 
-// The built-in looks (local-design-center, 41-rich-bases/richfx.js).
+// The built-in looks (design/41-rich-bases/richfx.js).
 void Builtins(void) {
   g_looks.assign(1, Look());
   Look gold = Fresh("rich-gold");
@@ -160,14 +228,40 @@ void Builtins(void) {
   g_looks.push_back(violet);
   std::sort(g_looks[1].images.begin(), g_looks[1].images.end());
   std::sort(g_looks[2].images.begin(), g_looks[2].images.end());
+  // a green charge round a unit, its colours left as they are
+  Look aura = Fresh("aura-green");
+  aura.nRule = RULE_NONE;
+  memset(aura.afMat, 0, sizeof aura.afMat);
+  aura.dwLight = 0x40FF60;
+  aura.afLight[0] = 28.0f;
+  aura.afLight[1] = 0.45f;
+  aura.afAura[AU_REACH] = 4.0f;
+  g_looks.push_back(aura);
   g_bMade = false;
 }
 
+// A type's look is the last that names it and paints it, else the last that names it. The auras of
+// the other looks that name it are kept beside it, up to two, so a unit made of several looks
+// shows each of their auras.
 void Reindex(void) {
   memset(g_abTypeLook, 0, sizeof g_abTypeLook);
+  memset(g_abTypeAura, 0, sizeof g_abTypeAura);
   for (size_t i = 1; i < g_looks.size(); i++)
-    for (int t : g_looks[i].units)
-      g_abTypeLook[t] = static_cast<unsigned char>(i);
+    for (int t : g_looks[i].units) {
+      const unsigned char bWas = g_abTypeLook[t];
+      if (bWas == 0 || Paints(g_looks[i]) || !Paints(g_looks[bWas]))
+        g_abTypeLook[t] = static_cast<unsigned char>(i);
+    }
+  for (size_t i = 1; i < g_looks.size(); i++)
+    for (int t : g_looks[i].units) {
+      if (static_cast<int>(i) == g_abTypeLook[t] || !HasAura(g_looks[i]))
+        continue;
+      for (int k = 0; k < AURAS_MAX - 1; k++)
+        if (g_abTypeAura[t][k] == 0) {
+          g_abTypeAura[t][k] = static_cast<unsigned char>(i);
+          break;
+        }
+    }
   g_bMade = false;
 }
 
@@ -211,12 +305,15 @@ bool Name(const PortJson &j, const char *const *ppszNames, int nNames, int *pn) 
 }
 
 // A list of numbers below nEnd, in order.
-bool Numbers(const PortJson &j, int nEnd, std::vector<int> *pOut) {
+// A list of rows, each a number or, when pszTable is given, a name of that table's ("terran_marine",
+// a mod's unit), so a mod's row is named by what does not move when records sort before it.
+bool Numbers(const PortJson &j, int nEnd, std::vector<int> *pOut, const char *pszTable = nullptr) {
   if (j.kind != PortJson::ARRAY)
     return false;
   std::vector<int> out;
   for (size_t i = 0; i < j.size(); i++) {
-    const double d = j.At(i).Num(-1);
+    const PortJson &v = j.At(i);
+    const double d = v.kind == PortJson::STRING && pszTable ? ModTypeByName(pszTable, v.s.c_str()) : v.Num(-1);
     if (d < 0 || d >= nEnd)
       return false;
     out.push_back(static_cast<int>(d));
@@ -227,16 +324,11 @@ bool Numbers(const PortJson &j, int nEnd, std::vector<int> *pOut) {
   return true;
 }
 
-// The fields of a look a message or the file gives; the rest stay as they are.
+// the reader below reads a look's rule, material, zones, circle and aura round this one
+#define ReadLook ReadLookShared
+// The fields of a look a message or the file gives, past its first zone's; the rest stay as they
+// are.
 bool ReadLook(const PortJson &j, Look *pLook, std::string *pWhy) {
-  if (j["rule"].kind != PortJson::NONE && !Name(j["rule"], kRules, 3, &pLook->nRule)) {
-    *pWhy = "rule is \"blues\", \"greens\" or \"all\"";
-    return false;
-  }
-  if (j["material"].kind != PortJson::NONE && !Name(j["material"], kMaterials, 2, &pLook->nMaterial)) {
-    *pWhy = "material is \"crystal\" or \"gas\"";
-    return false;
-  }
   if (j["ramp"].kind != PortJson::NONE) {
     unsigned int adw[RAMP];
     bool bOk = j["ramp"].size() == RAMP;
@@ -248,11 +340,11 @@ bool ReadLook(const PortJson &j, Look *pLook, std::string *pWhy) {
     }
     memcpy(pLook->adwRamp, adw, sizeof adw);
   }
-  if (j["images"].kind != PortJson::NONE && !Numbers(j["images"], IMAGE_TYPES_MAX, &pLook->images)) {
+  if (j["images"].kind != PortJson::NONE && !Numbers(j["images"], IMAGE_TYPES_MAX, &pLook->images, "images")) {
     *pWhy = "images is a list of places in images.dat";
     return false;
   }
-  if (j["units"].kind != PortJson::NONE && !Numbers(j["units"], UNIT_TYPES_MAX, &pLook->units)) {
+  if (j["units"].kind != PortJson::NONE && !Numbers(j["units"], UNIT_TYPES_MAX, &pLook->units, "units")) {
     *pWhy = "units is a list of places in units.dat";
     return false;
   }
@@ -302,6 +394,182 @@ bool ReadLook(const PortJson &j, Look *pLook, std::string *pWhy) {
     pLook->afLight[3] = Clamp(light["y"].d, -256.0f, 256.0f);
   return true;
 }
+#undef ReadLook
+
+// Zone z of a look, the first's rule, material and ramp from the look's own; and back.
+Zone ZoneOf(const Look &l, int z) {
+  Zone o = l.az[z];
+  if (z == 0) {
+    o.nRule = l.nRule;
+    o.nMaterial = l.nMaterial;
+    memcpy(o.adwRamp, l.adwRamp, sizeof o.adwRamp);
+  }
+  return o;
+}
+
+void ZoneSet(Look *pLook, int z, const Zone &zone) {
+  pLook->az[z] = zone;
+  if (z == 0) {
+    pLook->nRule = zone.nRule;
+    pLook->nMaterial = zone.nMaterial;
+    memcpy(pLook->adwRamp, zone.adwRamp, sizeof pLook->adwRamp);
+  }
+}
+
+// One colour as a ramp of six from dark to light: a fifth of it, toward it, it at the fourth, then
+// toward white.
+void RampOf(unsigned int dw, unsigned int *pdwRamp) {
+  static const float kAt[RAMP] = {0.18f, 0.45f, 0.75f, 1.0f, 1.0f, 1.0f};
+  static const float kWhite[RAMP] = {0.0f, 0.0f, 0.0f, 0.0f, 0.35f, 0.7f};
+  for (int k = 0; k < RAMP; k++) {
+    unsigned int out = 0;
+    for (int s = 16; s >= 0; s -= 8) {
+      const float f = (dw >> s & 0xFF) * kAt[k];
+      out |= static_cast<unsigned int>(lroundf(f + (255.0f - f) * kWhite[k])) << s;
+    }
+    pdwRamp[k] = out;
+  }
+}
+
+bool Flag(const PortJson &j, bool *pb) {
+  if (j.kind != PortJson::BOOL)
+    return j.kind == PortJson::NONE;
+  *pb = j.b;
+  return true;
+}
+
+// A zone's fields; those it does not give stay as they are.
+bool ReadZone(const PortJson &j, Zone *pZone, std::string *pWhy) {
+  if (j["rule"].kind != PortJson::NONE && !Name(j["rule"], kRules, RULES, &pZone->nRule)) {
+    *pWhy = "rule is blues, greens, all, none, reds, golds, greys, skins, hue or entries";
+    return false;
+  }
+  if (j["material"].kind != PortJson::NONE && !Name(j["material"], kMaterials, MATERIALS, &pZone->nMaterial)) {
+    *pWhy = "material is crystal, gas, paint or glow";
+    return false;
+  }
+  if (j["ramp"].kind != PortJson::NONE) {
+    unsigned int adw[RAMP];
+    bool bOk = j["ramp"].size() == RAMP;
+    for (int k = 0; bOk && k < RAMP; k++)
+      bOk = ParseColour(j["ramp"].At(k), &adw[k]);
+    if (!bOk) {
+      *pWhy = "ramp is six colours, \"#rrggbb\", dark to light";
+      return false;
+    }
+    memcpy(pZone->adwRamp, adw, sizeof adw);
+  }
+  if (j["color"].kind != PortJson::NONE) {
+    unsigned int dw;
+    if (!ParseColour(j["color"], &dw)) {
+      *pWhy = "color is \"#rrggbb\", made into a ramp by lightness";
+      return false;
+    }
+    RampOf(dw, pZone->adwRamp);
+  }
+  const PortJson &hue = j["hue"];
+  const char *const apszHue[5] = {"from", "to", "chroma", "lightMin", "lightMax"};
+  const float afMost[5] = {360.0f, 360.0f, 0.4f, 1.0f, 1.0f};
+  for (int k = 0; k < 5; k++)
+    if (hue[apszHue[k]].kind == PortJson::NUMBER)
+      pZone->afHue[k] = Clamp(hue[apszHue[k]].d, 0.0f, afMost[k]);
+  if (j["entries"].kind != PortJson::NONE) {
+    if (!Numbers(j["entries"], 256, &pZone->entries)) {
+      *pWhy = "entries is a list of palette entries, 0 to 255";
+      return false;
+    }
+    if (j["rule"].kind == PortJson::NONE)
+      pZone->nRule = RULE_ENTRIES;
+  }
+  if (j["except"].kind != PortJson::NONE && !Numbers(j["except"], 256, &pZone->except)) {
+    *pWhy = "except is a list of palette entries, 0 to 255";
+    return false;
+  }
+  if (j["mix"].kind == PortJson::NUMBER)
+    pZone->fMix = Clamp(j["mix"].d, 0.0f, 1.0f);
+  if (j["fit"].kind != PortJson::NONE) {
+    if (j["fit"].s != "spread" && j["fit"].s != "keep") {
+      *pWhy = "fit is \"spread\" (the zone's lightness over the ramp) or \"keep\" (each entry's own)";
+      return false;
+    }
+    pZone->bKeep = j["fit"].s == "keep";
+  }
+  return true;
+}
+
+bool ReadAura(const PortJson &a, Look *pLook, std::string *pWhy) {
+  for (int k = 0; k < AU_FIELDS; k++)
+    if (a[kAura[k].pszName].kind == PortJson::NUMBER) {
+      const float f = Clamp(a[kAura[k].pszName].d, kAura[k].fLo, kAura[k].fHi);
+      pLook->afAura[k] = kAura[k].bWhole ? floorf(f + 0.5f) : f;
+    }
+  const char *const apszColour[3] = {"color", "mid", "core"};
+  for (int k = 0; k < 3; k++)
+    if (a[apszColour[k]].kind != PortJson::NONE && !ParseColour(a[apszColour[k]], &pLook->adwAura[k])) {
+      *pWhy = std::string("aura.") + apszColour[k] + " is \"#rrggbb\"";
+      return false;
+    }
+  if (a["mode"].kind != PortJson::NONE && !Name(a["mode"], kAuraModes, AURA_MODES, &pLook->nAuraMode)) {
+    *pWhy = "aura.mode is fixed, ramp, team or cycle";
+    return false;
+  }
+  if (a["blend"].kind != PortJson::NONE && !Name(a["blend"], kAuraBlends, 2, &pLook->nAuraBlend)) {
+    *pWhy = "aura.blend is add or over";
+    return false;
+  }
+  if (a["images"].kind != PortJson::NONE) {
+    if (a["images"].s != "all" && a["images"].s != "main") {
+      *pWhy = "aura.images is \"all\" or \"main\"";
+      return false;
+    }
+    pLook->bAuraMain = a["images"].s == "main";
+  }
+  if (!Flag(a["dither"], &pLook->bAuraDither) || !Flag(a["overUnits"], &pLook->bAuraOver)) {
+    *pWhy = "aura.dither and aura.overUnits are true or false";
+    return false;
+  }
+  return true;
+}
+
+// A look in full: the first zone's fields at the top, then the fields above, the zones, whether
+// a selection's mark takes it, and its aura.
+bool ReadLook(const PortJson &j, Look *pLook, std::string *pWhy) {
+  Zone first = ZoneOf(*pLook, 0);
+  if (!ReadZone(j, &first, pWhy))
+    return false;
+  ZoneSet(pLook, 0, first);
+  PortJson rest = j;
+  rest.members.erase(std::remove_if(rest.members.begin(), rest.members.end(),
+                                    [](const PortJsonMember &m) { return m.first == "rule" || m.first == "material"; }),
+                     rest.members.end());
+  if (!ReadLookShared(rest, pLook, pWhy))
+    return false;
+  const PortJson &zones = j["zones"];
+  if (zones.kind != PortJson::NONE) {
+    if (zones.kind != PortJson::ARRAY || zones.size() < 1 || zones.size() > ZONES) {
+      *pWhy = "zones is a list of one to four zones";
+      return false;
+    }
+    for (size_t z = 0; z < zones.size(); z++) {
+      Zone zone;
+      if (static_cast<int>(z) < pLook->nZones)
+        zone = ZoneOf(*pLook, static_cast<int>(z));
+      else
+        memcpy(zone.adwRamp, kGold, sizeof zone.adwRamp);
+      if (!ReadZone(zones.At(z), &zone, pWhy)) {
+        *pWhy = "zone " + std::to_string(z) + ": " + *pWhy;
+        return false;
+      }
+      ZoneSet(pLook, static_cast<int>(z), zone);
+    }
+    pLook->nZones = static_cast<int>(zones.size());
+  }
+  if (!Flag(j["circle"], &pLook->bCircle)) {
+    *pWhy = "circle is true or false";
+    return false;
+  }
+  return j["aura"].kind == PortJson::NONE || ReadAura(j["aura"], pLook, pWhy);
+}
 
 std::string NumbersText(const std::vector<int> &v) {
   std::string s = "[";
@@ -310,6 +578,7 @@ std::string NumbersText(const std::vector<int> &v) {
   return s + "]";
 }
 
+#define LookJson LookJsonShared
 // A look as looks.json and the channel give it, on one line.
 std::string LookJson(const Look &l) {
   char sz[256];
@@ -336,6 +605,76 @@ std::string LookJson(const Look &l) {
   sprintf_s(sz, "]},\"light\":{\"color\":\"%s\",\"radius\":%g,\"strength\":%g,\"x\":%g,\"y\":%g}}",
             ColourText(l.dwLight).c_str(), l.afLight[0], l.afLight[1], l.afLight[2], l.afLight[3]);
   return s + sz;
+}
+#undef LookJson
+
+std::string ZoneJson(const Zone &z) {
+  char sz[192];
+  std::string s = std::string("{\"rule\":\"") + kRules[z.nRule] + "\",\"material\":\"" + kMaterials[z.nMaterial] + "\",\"ramp\":[";
+  for (int k = 0; k < RAMP; k++)
+    s += std::string(k ? "," : "") + "\"" + ColourText(z.adwRamp[k]) + "\"";
+  sprintf_s(sz, "],\"hue\":{\"from\":%g,\"to\":%g,\"chroma\":%g,\"lightMin\":%g,\"lightMax\":%g},\"mix\":%g,\"fit\":\"%s\"",
+            z.afHue[0], z.afHue[1], z.afHue[2], z.afHue[3], z.afHue[4], z.fMix, z.bKeep ? "keep" : "spread");
+  return s + sz + ",\"entries\":" + NumbersText(z.entries) + ",\"except\":" + NumbersText(z.except) + "}";
+}
+
+// A look in full as JSON: the fields above, then its zones, its circle and its aura.
+std::string LookJson(const Look &l) {
+  std::string s = LookJsonShared(l);
+  s.pop_back();
+  s += ",\"zones\":[";
+  for (int z = 0; z < l.nZones; z++)
+    s += (z ? "," : "") + ZoneJson(ZoneOf(l, z));
+  s += std::string("],\"circle\":") + (l.bCircle ? "true" : "false") + ",\"aura\":{";
+  char sz[64];
+  for (int k = 0; k < AU_FIELDS; k++) {
+    sprintf_s(sz, "%s\"%s\":%g", k ? "," : "", kAura[k].pszName, l.afAura[k]);
+    s += sz;
+  }
+  s += ",\"color\":\"" + ColourText(l.adwAura[0]) + "\",\"mid\":\"" + ColourText(l.adwAura[1]) + "\",\"core\":\"" +
+       ColourText(l.adwAura[2]) + "\",\"mode\":\"" + kAuraModes[l.nAuraMode] + "\",\"blend\":\"" + kAuraBlends[l.nAuraBlend] +
+       "\",\"images\":\"" + (l.bAuraMain ? "main" : "all") + "\",\"dither\":" + (l.bAuraDither ? "true" : "false") +
+       ",\"overUnits\":" + (l.bAuraOver ? "true" : "false");
+  return s + "}}";
+}
+
+// The looks a game's mode brings beside the file's: its own looks.json and the entries its
+// generate returned, each one changing the look of its name or adding it (port_moddata.cpp).
+std::string g_modeFile, g_modeLooks;
+
+// The looks of one tree, each changing the look of its name or added after it.
+void ReadLooks(const PortJson &j, const char *pszWhere) {
+  for (size_t i = 0; i < j["looks"].size(); i++) {
+    const PortJson &l = j["looks"].At(i);
+    const std::string name = l["name"].Str("");
+    if (name.empty()) {
+      Log("looks: look %d in %s has no name, and is left out", static_cast<int>(i), pszWhere);
+      continue;
+    }
+    const int nAt = PortLookFind(name.c_str());
+    Look look = nAt != 0 ? g_looks[nAt] : Fresh(name.c_str());
+    std::string why;
+    if (!ReadLook(l, &look, &why)) {
+      Log("looks: %s in %s is left out: %s", name.c_str(), pszWhere, why.c_str());
+      continue;
+    }
+    if (nAt != 0)
+      g_looks[nAt] = look;
+    else if (g_looks.size() <= LOOKS_MAX)
+      g_looks.push_back(look);
+  }
+}
+
+// A file's looks, or a tree's text; false when neither reads.
+bool ReadLooksText(const std::string &text, const char *pszWhere) {
+  PortJson j;
+  std::string why;
+  if (!PortJsonParse(text.c_str(), &j, &why) || j["looks"].kind != PortJson::ARRAY) {
+    Log("looks: %s does not read: %s", pszWhere, why.empty() ? "it has no \"looks\" list" : why.c_str());
+    return false;
+  }
+  ReadLooks(j, pszWhere);
+  return true;
 }
 
 // looks.json over the built-in looks: each look in it changes the one of its name, or is added.
@@ -379,6 +718,10 @@ bool CmdLooks(const PortJson &, std::string *pAnswer) {
   for (size_t i = 1; i < g_looks.size(); i++)
     s += (i > 1 ? "," : "") + LookJson(g_looks[i]);
   *pAnswer = s + "]";
+  *pAnswer += ",\"players\":[";
+  for (int p = 0; p < 12; p++)
+    *pAnswer += (p ? "," : "") + PortJsonQuote(PortLookName(g_abPlayerLook[p]));
+  *pAnswer += "]";
   return true;
 }
 
@@ -396,6 +739,7 @@ bool CmdLook(const PortJson &j, std::string *pAnswer) {
   Look look = nAt != 0 ? g_looks[nAt] : Fresh(name.c_str());
   if (!ReadLook(j, &look, pAnswer))
     return false;
+  look.bLive = true;
   if (nAt != 0)
     g_looks[nAt] = look;
   else
@@ -421,6 +765,47 @@ bool CmdLookUnit(const PortJson &j, std::string *pAnswer) {
   PortLookUnitSet(static_cast<int>(dUnit), nLook);
   PortPresentRedraw();
   *pAnswer = "";
+  return true;
+}
+
+// The look for each of a player's units that has no look by hand or from the provider; "" takes
+// it away.
+bool CmdLookPlayer(const PortJson &j, std::string *pAnswer) {
+  const double dPlayer = j["player"].Num(-1);
+  const std::string name = j["look"].Str("");
+  if (dPlayer < 0 || dPlayer >= 12) {
+    *pAnswer = "look_player needs player, 0 to 11";
+    return false;
+  }
+  const int nLook = name.empty() ? 0 : PortLookFind(name.c_str());
+  if (!name.empty() && nLook == 0) {
+    *pAnswer = "no look is named " + name;
+    return false;
+  }
+  g_abPlayerLook[static_cast<int>(dPlayer)] = static_cast<unsigned char>(nLook);
+  PortPresentRedraw();
+  *pAnswer = "";
+  return true;
+}
+
+void Make(void);
+
+// What a look takes in the palette as it is now: each entry's zone, -1 for none, and the entry the
+// 8-bit picture draws it with.
+bool CmdLookTakes(const PortJson &j, std::string *pAnswer) {
+  const int nLook = PortLookFind(j["name"].Str("").c_str());
+  if (nLook == 0) {
+    *pAnswer = "look_takes needs name, a look's";
+    return false;
+  }
+  Make();
+  const Look &l = g_looks[nLook];
+  std::string zone = "[", remap = "[";
+  for (int e = 0; e < 256; e++) {
+    zone += (e ? "," : "") + std::to_string(l.abTakes[e] ? l.abZone[e] : -1);
+    remap += (e ? "," : "") + std::to_string(l.abRemap[e]);
+  }
+  *pAnswer = "\"zone\":" + zone + "],\"remap\":" + remap + "]";
   return true;
 }
 
@@ -468,6 +853,10 @@ void Init(void) {
   PortControlCommand("look", CmdLook);
   PortControlCommand("look_unit", CmdLookUnit);
   PortControlCommand("looks_save", CmdLooksSave);
+  PortControlCommand("look_player", CmdLookPlayer);
+  PortControlCommand("look_takes", CmdLookTakes);
+  PortControlFloat("looks.aura", &g_fAura, 0.0f, 2.0f, "how strong a look's aura is; 1 as the look gives");
+  PortControlFloat("looks.aura.speed", &g_fAuraSpeed, 0.0f, 4.0f, "how fast every aura moves; 1 as the look gives");
 }
 
 void Lab(unsigned int dwRgb, float *pLab) {
@@ -496,9 +885,41 @@ bool Drawable(int e) {
   return e >= 16 && e < 248;
 }
 
-// Each look's remap and pen for the palette as it is now: each entry its rule takes goes to the
-// palette entry nearest the ramp at its tone, the darkest it takes to the ramp's start and the
-// lightest to its end, fitted in OKLab as the team colours are (port_teamcolor.cpp).
+// Whether a zone takes entry e, of colour dwRgb and pLab in OKLab.
+bool ZoneTakes(const Zone &z, int e, unsigned int dwRgb, const float *pLab) {
+  if (std::binary_search(z.except.begin(), z.except.end(), e))
+    return false;
+  if (z.nRule <= RULE_ALL)
+    return Takes(z.nRule, dwRgb);
+  const int r = dwRgb >> 16 & 0xFF, g = dwRgb >> 8 & 0xFF, b = dwRgb & 0xFF;
+  const int nHi = std::max(r, std::max(g, b)), nLo = std::min(r, std::min(g, b));
+  switch (z.nRule) {
+  case RULE_REDS:
+    return r > g + 40 && r > b + 24;
+  case RULE_GOLDS:
+    return r > b + 40 && g > b + 20 && g + 50 > r;
+  case RULE_GREYS:
+    return nHi - nLo < 20 && nHi > 24;
+  case RULE_SKINS:
+    return r > g && g > b && r > 96 && r - b > 40 && r - b < 140 && g - b > 10;
+  case RULE_HUE: {
+    const float fChroma = sqrtf(pLab[1] * pLab[1] + pLab[2] * pLab[2]);
+    float fHue = atan2f(pLab[2], pLab[1]) * 57.29578f;
+    if (fHue < 0.0f)
+      fHue += 360.0f;
+    const bool bIn = z.afHue[0] <= z.afHue[1] ? fHue >= z.afHue[0] && fHue <= z.afHue[1]
+                                               : fHue >= z.afHue[0] || fHue <= z.afHue[1];
+    return bIn && fChroma >= z.afHue[2] && pLab[0] >= z.afHue[3] && pLab[0] <= z.afHue[4];
+  }
+  case RULE_ENTRIES:
+    return std::binary_search(z.entries.begin(), z.entries.end(), e);
+  }
+  return false;
+}
+
+// Each zone in turn takes the entries no zone before it took and fits them to its ramp; the
+// 8-bit picture's colour is the ramp's over the entry's own by the zone's mix. The pen is that of
+// the first zone that takes any, else none.
 void Make(void) {
   if (g_bMade && memcmp(g_abPalette, sgGamePalette_g, sizeof g_abPalette) == 0)
     return;
@@ -524,48 +945,91 @@ void Make(void) {
   };
   for (size_t i = 1; i < g_looks.size(); i++) {
     Look &l = g_looks[i];
-    float ramp[RAMP][3];
-    for (int k = 0; k < RAMP; k++)
-      Lab(l.adwRamp[k], ramp[k]);
-    float fLo = 1.0f, fHi = 0.0f;
     for (int e = 0; e < 256; e++) {
-      l.abTakes[e] = e != 0 && (e < 8 || e > 15) && Takes(l.nRule, Entry(e));
+      l.abTakes[e] = false;
       l.abRemap[e] = static_cast<BYTE>(e);
       l.abTone[e] = 0;
-      if (l.abTakes[e]) {
+      l.abZone[e] = 0;
+    }
+    l.bPen = 0;
+    for (int z = 0; z < l.nZones; z++) {
+      const Zone zone = ZoneOf(l, z);
+      float ramp[RAMP][3];
+      for (int k = 0; k < RAMP; k++)
+        Lab(zone.adwRamp[k], ramp[k]);
+      bool abHere[256] = {};
+      float fLo = 1.0f, fHi = 0.0f;
+      for (int e = 1; e < 256; e++) {
+        if (l.abTakes[e] || (e >= 8 && e <= 15) || !ZoneTakes(zone, e, Entry(e), lab[e]))
+          continue;
+        abHere[e] = l.abTakes[e] = true;
+        l.abZone[e] = static_cast<BYTE>(z);
         fLo = std::min(fLo, lab[e][0]);
         fHi = std::max(fHi, lab[e][0]);
       }
+      bool bAny = false;
+      for (int e = 0; e < 256; e++) {
+        if (!abHere[e])
+          continue;
+        bAny = true;
+        const float fTone = zone.bKeep ? Clamp(lab[e][0], 0.0f, 1.0f) : fHi > fLo ? (lab[e][0] - fLo) / (fHi - fLo) : 0.5f;
+        const float t = fTone * (RAMP - 1);
+        const int k = std::min(static_cast<int>(t), RAMP - 2);
+        const float f = t - k;
+        float at[3];
+        for (int c = 0; c < 3; c++)
+          at[c] = lab[e][c] + (ramp[k][c] + (ramp[k + 1][c] - ramp[k][c]) * f - lab[e][c]) * zone.fMix;
+        l.abRemap[e] = nearest(at);
+        l.abTone[e] = static_cast<BYTE>(1 + lroundf(powf(fTone, 0.85f) * 254.0f));
+      }
+      if (bAny && l.bPen == 0)
+        l.bPen = nearest(ramp[3]);
     }
-    for (int e = 0; e < 256; e++) {
-      if (!l.abTakes[e])
-        continue;
-      const float fTone = fHi > fLo ? (lab[e][0] - fLo) / (fHi - fLo) : 0.5f;
-      const float t = fTone * (RAMP - 1);
-      const int k = std::min(static_cast<int>(t), RAMP - 2);
-      const float f = t - k;
-      float at[3];
-      for (int c = 0; c < 3; c++)
-        at[c] = ramp[k][c] + (ramp[k + 1][c] - ramp[k][c]) * f;
-      l.abRemap[e] = nearest(at);
-      // the GPU's tone, a little toward the light as the design's is
-      l.abTone[e] = static_cast<BYTE>(1 + lroundf(powf(fTone, 0.85f) * 254.0f));
-    }
-    l.bPen = nearest(ramp[3]);
   }
 }
 
-// A unit's look: given by hand, else by the provider, else by its type.
-int LookOfUnit(const CUnit *pUnit) {
+bool Paints(const Look &l) {
+  for (int z = 0; z < l.nZones; z++)
+    if ((z == 0 ? l.nRule : l.az[z].nRule) != RULE_NONE)
+      return true;
+  return false;
+}
+
+bool HasAura(const Look &l) {
+  return l.afAura[AU_REACH] > 0.0f && l.afAura[AU_STRENGTH] > 0.0f;
+}
+
+// A unit's paint and auras, paint | aura << 8 | another << 16 | another << 24. The paint is the
+// look given by hand unless that look only has an aura, else the provider's, else its player's
+// (unless bPlayer is false), else its type's; the first aura is the hand's look's if it has one,
+// else the paint's, and the rest are those of the other looks that name the unit's type.
+int LookOfUnit(const CUnit *pUnit, bool bPlayer = true) {
   const int n = static_cast<int>(pUnit - CUnit::Head());
   if (n < 0 || n >= g_pools.units)
     return 0;
-  int nLook = g_abUnitLook[n];
-  if (nLook == 0 && g_pfnProvider != NULL)
-    nLook = g_pfnProvider(n, pUnit);
-  if (nLook == 0 && pUnit->wType < UNIT_TYPES_MAX)
-    nLook = g_abTypeLook[pUnit->wType];
-  return nLook < static_cast<int>(g_looks.size()) ? nLook : 0;
+  const int nLooks = static_cast<int>(g_looks.size());
+  const int nHand = g_abUnitLook[n] < nLooks ? g_abUnitLook[n] : 0;
+  if (g_abUnitLook[n] == PORT_LOOK_NONE)
+    return 0;
+  int nPaint = nHand != 0 && Paints(g_looks[nHand]) ? nHand : 0;
+  if (nPaint == 0 && g_pfnProvider != NULL)
+    nPaint = g_pfnProvider(n, pUnit);
+  if (nPaint == 0 && bPlayer && pUnit->bPlayer < 12)
+    nPaint = g_abPlayerLook[pUnit->bPlayer];
+  if (nPaint == 0 && pUnit->wType < UNIT_TYPES_MAX)
+    nPaint = g_abTypeLook[pUnit->wType];
+  if (nPaint >= nLooks)
+    nPaint = 0;
+  const int nAura = nHand != 0 && HasAura(g_looks[nHand]) ? nHand : nPaint != 0 && HasAura(g_looks[nPaint]) ? nPaint : 0;
+  int nOut = nPaint | nAura << 8;
+  if (pUnit->wType < UNIT_TYPES_MAX)
+    for (int k = 0, nAt = 1; k < AURAS_MAX - 1; k++) {
+      const int nNext = g_abTypeAura[pUnit->wType][k];
+      if (nNext == 0 || nNext >= nLooks || nNext == nAura || ++nAt >= AURAS_MAX + 1)
+        continue;
+      nOut |= nNext << (8 * nAt);
+    }
+  return nOut;
 }
 
 bool Covers(const Look &l, int nImage) {
@@ -610,6 +1074,41 @@ void Light(const Looked &looked, int nSeed) {
 
 void PutFloat(unsigned char *p, float f) {
   memcpy(p, &f, 4);
+}
+
+// The rest of a look's GPU data: its zones and its aura (port_looks.h, PortLookAuraNow;
+// scene.hlsl, LookAura and LookColour).
+void LookGpuDesign(const Look &l, unsigned char *p) {
+  const float *a = l.afAura;
+  const float afColour[3] = {a[AU_STRENGTH] * g_fAura, a[AU_OPACITY], a[AU_CRACKLE]};
+  const int anAt[3] = {416, 448, 432};  // glow, middle, line
+  for (int k = 0; k < 3; k++) {
+    PutFloat(p + anAt[k], (l.adwAura[k] >> 16 & 0xFF) / 255.0f);
+    PutFloat(p + anAt[k] + 4, (l.adwAura[k] >> 8 & 0xFF) / 255.0f);
+    PutFloat(p + anAt[k] + 8, (l.adwAura[k] & 0xFF) / 255.0f);
+    PutFloat(p + anAt[k] + 12, afColour[k]);
+  }
+  const float af[20] = {a[AU_WIDTH],  a[AU_GAP],    a[AU_FALLOFF],  a[AU_INNER],
+                        a[AU_SPEED] * g_fAuraSpeed, a[AU_PULSE], a[AU_PULSE_RATE], a[AU_FLICKER],
+                        a[AU_SPARKS], a[AU_EMBERS], a[AU_BANDS],    a[AU_BAND_SPEED],
+                        static_cast<float>(l.nAuraMode), static_cast<float>(l.nAuraBlend), a[AU_STEPS],
+                        l.bAuraDither ? 1.0f : 0.0f, a[AU_BLOCK], a[AU_CRACKLE_SIZE], l.bAuraOver ? 1.0f : 0.0f,
+                        a[AU_REACH]};
+  for (int k = 0; k < 20; k++)
+    PutFloat(p + 464 + 4 * k, af[k]);
+  memcpy(p + 544, l.abZone, 256);
+  for (int z = 0; z < ZONES; z++) {
+    const Zone zone = ZoneOf(l, z);
+    if (z > 0)
+      for (int k = 0; k < RAMP; k++) {
+        unsigned char *q = p + 800 + (z - 1) * 96 + k * 16;
+        PutFloat(q, (zone.adwRamp[k] >> 16 & 0xFF) / 255.0f);
+        PutFloat(q + 4, (zone.adwRamp[k] >> 8 & 0xFF) / 255.0f);
+        PutFloat(q + 8, (zone.adwRamp[k] & 0xFF) / 255.0f);
+      }
+    PutFloat(p + 1088 + z * 16, static_cast<float>(zone.nMaterial));
+    PutFloat(p + 1092 + z * 16, zone.fMix);
+  }
 }
 
 // How much 1.17's puffs swell the plume of the vent at x, y (the map layer's pixels), 0 to 255:
@@ -661,9 +1160,42 @@ void PortLooksGameBegin(void) {
   Init();
   memset(g_abUnitLook, 0, sizeof g_abUnitLook);
   g_looked.clear();
+  // the looks the channel made or changed, and each player's, stay from game to game
+  std::vector<Look> live;
+  for (size_t i = 1; i < g_looks.size(); i++)
+    if (g_looks[i].bLive)
+      live.push_back(g_looks[i]);
+  std::string players[12];
+  for (int p = 0; p < 12; p++)
+    players[p] = PortLookName(g_abPlayerLook[p]);
   Builtins();
   ReadLooksFile();
+  // then the mode's own, so its looks stand over the file's
+  if (!g_modeFile.empty()) {
+    std::string text;
+    if (PortReadFile(g_modeFile, &text))
+      ReadLooksText(text, g_modeFile.c_str());
+  }
+  if (!g_modeLooks.empty())
+    ReadLooksText(g_modeLooks, "the mode's generated looks");
+  for (const Look &l : live) {
+    const int nAt = PortLookFind(l.name.c_str());
+    if (nAt != 0)
+      g_looks[nAt] = l;
+    else if (g_looks.size() <= LOOKS_MAX)
+      g_looks.push_back(l);
+  }
+  for (int p = 0; p < 12; p++)
+    g_abPlayerLook[p] = static_cast<unsigned char>(players[p].empty() ? 0 : PortLookFind(players[p].c_str()));
   Reindex();
+}
+
+void PortLooksModeFile(const std::string &path) {
+  g_modeFile = path;
+}
+
+void PortLooksModeLooks(const std::string &text) {
+  g_modeLooks = text;
 }
 
 void PortLooksProvider(PFN_PORT_LOOK_OF_UNIT pfn) {
@@ -673,10 +1205,25 @@ void PortLooksProvider(PFN_PORT_LOOK_OF_UNIT pfn) {
 void PortLooksPassBegin(void) {
   Init();
   g_looked.clear();
+  // each unit's paint and aura, and its turret's, which is not in the list: its base's unless it
+  // has a look by hand
   for (CUnit *p = CUnit::GetUsedList(); p != NULL; p = p->pNext) {
-    const int nLook = p->pSprite != NULL ? LookOfUnit(p) : 0;
-    if (nLook != 0 && nLook != PORT_LOOK_NONE) {
-      const Looked l = {p->pSprite, nLook, p->wPositionX, p->wPositionY, p->wType, true};
+    if (p->pSprite == NULL || (p->wType < UNIT_TYPES_MAX && (gulUnitTypeFlags[p->wType] & 0x10) != 0))
+      continue;
+    const int nPair = LookOfUnit(p);
+    if (nPair != 0) {
+      const Looked l = {p->pSprite, nPair & 0xFF, p->wPositionX, p->wPositionY, p->wType, true, nPair >> 8};
+      g_looked.push_back(l);
+    }
+    const CUnit *pTurret = p->subunit;
+    if (pTurret == NULL || pTurret->pSprite == NULL || pTurret->wType >= UNIT_TYPES_MAX ||
+        (gulUnitTypeFlags[pTurret->wType] & 0x10) == 0)
+      continue;
+    const int n = static_cast<int>(pTurret - CUnit::Head());
+    const int nTurret = n >= 0 && n < g_pools.units && g_abUnitLook[n] != 0 ? LookOfUnit(pTurret) : nPair;
+    if (nTurret != 0) {
+      const Looked l = {pTurret->pSprite, nTurret & 0xFF, pTurret->wPositionX, pTurret->wPositionY, pTurret->wType, true,
+                        nTurret >> 8};
       g_looked.push_back(l);
     }
   }
@@ -698,29 +1245,56 @@ void PortLooksPassBegin(void) {
     return;
   Make();
   if (g_fOn != 0.0f && g_fLight > 0.0f)
-    for (size_t i = 0; i < g_looked.size(); i++)
+    for (size_t i = 0; i < g_looked.size(); i++) {
       Light(g_looked[i], static_cast<int>(i));
+      // and the light of each look its auras are from
+      for (int k = 0; k < AURAS_MAX; k++) {
+        const int nAura = g_looked[i].nAura >> (8 * k) & 0xFF;
+        if (nAura == 0 || nAura == g_looked[i].nLook)
+          continue;
+        Looked aura = g_looked[i];
+        aura.nLook = nAura;
+        Light(aura, static_cast<int>(i));
+      }
+    }
 }
 
 int PortLookOfSprite(const CSprite *pSprite) {
   if (g_looked.empty())
     return 0;
   const Looked *p = LookedOf(pSprite);
-  return p != NULL ? p->nLook : 0;
+  g_nMainImage = p != NULL && pSprite->pMainImage != NULL ? pSprite->pMainImage->wImageID : -1;
+  return p != NULL ? p->nLook | p->nAura << 8 : 0;
 }
 
+// The paint's remap and the aura, each where its look covers the image: a selection's mark only
+// when the look's circle is on, and an aura only on the main image when the look says so.
 bool PortLookImageBegin(int nLook, int nImage) {
-  if (nLook <= 0 || nLook >= static_cast<int>(g_looks.size()))
-    return false;
-  const Look &l = g_looks[nLook];
-  if (!Covers(l, nImage))
+  const int nPaint = nLook & 0xFF, nLooks = static_cast<int>(g_looks.size());
+  const bool bMark = nImage >= 0x231 && nImage <= 0x244;
+  memset(g_anNowAura, 0, sizeof g_anNowAura);
+  int nAuras = 0;
+  for (int k = 0; k < AURAS_MAX; k++) {
+    const int nAura = nLook >> (8 * (k + 1)) & 0xFF;
+    if (nAura <= 0 || nAura >= nLooks)
+      continue;
+    const Look &a = g_looks[nAura];
+    if (Covers(a, nImage) && (!bMark || a.bCircle) && (!a.bAuraMain || nImage == g_nMainImage))
+      g_anNowAura[nAuras++] = static_cast<unsigned int>(nAura);
+  }
+  g_nNowAura = g_anNowAura[0];
+  const bool bPaint = nPaint > 0 && nPaint < nLooks && Covers(g_looks[nPaint], nImage) && (!bMark || g_looks[nPaint].bCircle);
+  if (!bPaint && nAuras == 0)
     return false;
   memcpy(g_abSaved, _gbRemapColorTbl, sizeof g_abSaved);
+  if (!bPaint)
+    return true;
+  const Look &l = g_looks[nPaint];
   for (int e = 0; e < 256; e++)
     if ((e < 8 || e > 15) && l.abTakes[_gbRemapColorTbl[e]])
       _gbRemapColorTbl[e] = l.abRemap[_gbRemapColorTbl[e]];
   if (g_fOn != 0.0f)
-    g_nNow = static_cast<unsigned int>(nLook) |
+    g_nNow = static_cast<unsigned int>(nPaint) |
              (std::binary_search(l.replaced.begin(), l.replaced.end(), nImage) ? PORT_LOOK_REPLACED : 0u);
   return true;
 }
@@ -728,6 +1302,8 @@ bool PortLookImageBegin(int nLook, int nImage) {
 void PortLookImageEnd(void) {
   memcpy(_gbRemapColorTbl, g_abSaved, sizeof g_abSaved);
   g_nNow = 0;
+  g_nNowAura = 0;
+  memset(g_anNowAura, 0, sizeof g_anNowAura);
 }
 
 unsigned int PortLookNow(void) {
@@ -743,7 +1319,25 @@ int PortLookHalo(unsigned int nNow) {
   return l.nMaterial == MAT_CRYSTAL && l.afMat[2] * g_fGlow > 0.0f ? 6 : 0;
 }
 
+unsigned int PortLookAuraAt(int i) {
+  const int nLook = i >= 0 && i < AURAS_MAX ? static_cast<int>(g_anNowAura[i]) : 0;
+  if (g_fOn == 0.0f || g_fAura <= 0.0f || (g_nNow & PORT_LOOK_REPLACED) != 0 || nLook <= 0 ||
+      nLook >= static_cast<int>(g_looks.size()))
+    return 0;
+  const Look &l = g_looks[nLook];
+  const int nReach = static_cast<int>(l.afAura[AU_REACH]);
+  if (nReach <= 0 || l.afAura[AU_STRENGTH] <= 0.0f)
+    return 0;
+  return static_cast<unsigned int>(nLook) | static_cast<unsigned int>(nReach) << 8 |
+         static_cast<unsigned int>(l.afAura[AU_EMBERS] > 0.0f ? kEmberRise : 0) << 16;
+}
+
+unsigned int PortLookAuraNow(void) {
+  return PortLookAuraAt(0);
+}
+
 void PortLookSpriteDrawn(const CSprite *pSprite, int nLook) {
+  nLook &= 0xFF;
   if (g_fOn == 0.0f || g_fPlume <= 0.0f || nLook <= 0 || nLook >= static_cast<int>(g_looks.size()))
     return;
   const Look &l = g_looks[nLook];
@@ -802,23 +1396,26 @@ const unsigned char *PortLooksGpu(unsigned int *pnBytes) {
     PutFloat(p + 396, 0.55f * g_fLight);
     const unsigned int anFlags[2] = {l.nMaterial == MAT_GAS ? 1u : 0u, g_fSteps != 0.0f ? 1u : 0u};
     memcpy(p + 400, anFlags, sizeof anFlags);
+    LookGpuDesign(l, p);
   }
   *pnBytes = static_cast<unsigned int>(g_gpu.size());
   return g_gpu.data();
 }
 
+// A player's look leaves the dot in the player's colour, and so does a look that takes no
+// colours.
 unsigned char PortLookUnitPen(const CUnit *pUnit, unsigned char bColour) {
   Init();
-  const int nLook = LookOfUnit(pUnit);
-  if (nLook <= 0 || nLook == PORT_LOOK_NONE)
+  const int nLook = LookOfUnit(pUnit, false) & 0xFF;
+  if (nLook == 0)
     return bColour;
   Make();
-  return g_looks[nLook].bPen;
+  return g_looks[nLook].bPen != 0 ? g_looks[nLook].bPen : bColour;
 }
 
 unsigned char PortLookPlacePen(int x, int y, int nType, unsigned char bColour) {
   for (const Looked &l : g_looked)
     if (l.bUnit && l.x == x && l.y == y && l.nType == nType)
-      return g_looks[l.nLook].bPen;
+      return g_looks[l.nLook].bPen != 0 ? g_looks[l.nLook].bPen : bColour;
   return bColour;
 }

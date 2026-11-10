@@ -39,6 +39,7 @@
 #include "TrigAct.h"       // net_rand
 #include "CUnitTSpells.h"  // net_randbetween
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The globals this TU reaches, dual-spelled, one #ifndef per name: the plain extern arm
 // alone leaves the shipped form's baked slots unchecked, and one guard over the whole
@@ -323,8 +324,8 @@ end:
     }
     CUnit *pBuilt;
     int nType = wBuildQueue[bBuildQueueSlot];
-    if (nType == 0x6E)
-      pBuilt = ReplaceGeyser(nType);
+    if (nType == 0x6E || ModRulesModGas(nType))  // Hyperion: or a mod's gas building
+      pBuilt = ReplaceGeyser(static_cast<WORD>(nType));
     else
       pBuilt = CreateUnitAt(nType, wOrderTargetX, wOrderTargetY, bPlayer);
     wBuildQueue[bBuildQueueSlot] = 0xE4;
@@ -828,7 +829,7 @@ BOOL CUnit::IsReaver() {
 // Turns the geyser on the build site into a new refinery of bUnitType owned by this unit's player.
 // TransformType takes a WORD, so its argument and the life index are two extensions of the byte;
 // the byte keeps its own web, which takes EBX and is reread from [ebp+8] at both uses.
-CUnit *CUnit::ReplaceGeyser(BYTE bUnitType) {
+CUnit *CUnit::ReplaceGeyser(WORD bUnitType) {
   CUnit *pGeyser = this->pOrderTarget;
 
   if (pGeyser == NULL || pGeyser->wType != 0xBC)

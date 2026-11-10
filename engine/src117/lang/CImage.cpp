@@ -10,6 +10,7 @@
 #include "../port/data/port_formats.h"  // Hyperion
 #include "../port/render/port_view.h"  // Hyperion: g_portView
 #include "../gen/save117.h"
+#include "../gen/wide117.h"  // Hyperion: WideStride
 #include "CImage.h"
 #include "grp.h"            // ours: GROUP/FRAME bodies -- GetJuiceFrame needs GROUP complete
 #include "CSprite.h"        // ours: CSprite::AllocImageAbove, for CreateOverlay
@@ -1052,6 +1053,7 @@ extern lo_file_t *sgpOverlayGroups[5 * 999];
 const lo_file_t *g_hxModOverlays[6][IMAGE_TYPES_MAX - IMAGE_TYPES_117];
 static inline const lo_file_t *ImageOverlay(int nKind, unsigned nImage);  // below sgpShieldOverlayGroups_g
 #include "../port/data/port_moddata.h"  // Hyperion: ModDataStartUp, ImageScriptsEnd, ImageScriptsAppend
+#include "../port/data/port_iscript.h"  // Hyperion: IscriptAnimCount
 
 // Walks the frame's RLE row y and says whether pixel x is opaque.
 BOOL frame_clickable_at(PFRAME pFrame, int x, int y)
@@ -1455,6 +1457,12 @@ extern BYTE  sprite_selCircleImg[387] OC_UNALIGNED;
 extern BYTE  sprite_selCircleOffset[387] OC_UNALIGNED;
 extern GROUP sgHpbarGroups_g[SELECTION_MAX];
 extern const lo_file_t *sgpShieldOverlayGroups_g[999] OC_UNALIGNED;
+// Hyperion: the storage gen/wide117.h gives the two groups' arrays is sized by GROUP as
+// the generator last saw it; a GROUP grown since would run into the globals after them
+#ifndef OC_WIDE_PROBE
+static_assert(WideStride(0x592BA8u) == sizeof(GROUP), "sgHpbarGroups_g: run tools/wide_globals.py");
+static_assert(WideStride(0x596080u) == sizeof(GROUP), "sgPlacemaskGroups_g: run tools/wide_globals.py");
+#endif
 #endif
 
 // Hyperion: the health bars, their groups and the circles of a game of Hyperion's
@@ -1573,6 +1581,10 @@ bool ImageScriptsAppend(const BYTE *pBlock, DWORD cbBlock)
 iscript_off_t ImageScriptAnim(iscript_off_t header, int nAnim)
 {
   const BYTE *p = reinterpret_cast<const BYTE *>(sgpScripts) + header + 8;
+  // Hyperion: in a game with a mod, a classic header's animations end where its type says, as
+  // a mod's race may play a Terran building's script where only a Protoss one has the animation
+  if (g_hxModGame && header < s_dwScripts117 && nAnim >= IscriptAnimCount(p[-4]))
+    return 0;
   // Hyperion: a slot inside the scripts; a mod's orders.dat may name any animation
   const DWORD dwWidth = header < s_dwScripts117 ? 2 : 4;
   const DWORD dwSlot = header + 8 + static_cast<DWORD>(nAnim) * dwWidth;
@@ -1582,6 +1594,30 @@ iscript_off_t ImageScriptAnim(iscript_off_t header, int nAnim)
     return *reinterpret_cast<const WORD *>(p + nAnim * 2);
   return static_cast<iscript_off_t>(ScriptDword(p + nAnim * 4));
 }
+
+// Hyperion: whether a picture of the original's damages -- whether its script reaches
+// domissiledmg or dogrddamage, which only a weapon's own picture does (port_iscript.cpp,
+// IscriptDamages). The mod loader warns with it: such a picture hung on a unit, or shown on
+// its own, is asked to damage with no weapon behind it. Only the original's pictures are read,
+// since a mod's own script is the mod author's to write; false for anything else, and for an
+// id the tables do not hold.
+int ImageScriptDamages117(int nImage)
+{
+  if (sgpScripts == NULL || nImage < 0 || nImage >= IMAGE_TYPES_117)
+    return -1;
+  const int id = static_cast<int>(img_iscriptId[nImage]);
+  const script_id_ent_t *pEnt = reinterpret_cast<const script_id_ent_t *>(
+      reinterpret_cast<BYTE *>(sgpScripts) + sgpScripts->offset);
+  for (; pEnt->wScriptId != 0xFFFF; ++pEnt)
+    if (pEnt->wScriptId == id)
+      return IscriptDamagesFrom(reinterpret_cast<const BYTE *>(sgpScripts), s_dwScripts117,
+                                pEnt->wHeaderOffset);
+  return -1;
+}
+
+// A sprite's picture is not read here: the game's sprites.dat is not written until a game
+// starts, where this is asked at start-up as a mod loads, so the caller takes the sprite's
+// image from the mod loader's own copy of the file (ModDataSpriteImage).
 
 // oracle 0x40EF80 (108 B). The middle is CImage::SetRLE inlined, including its
 // `bPaletteType == 0x11` arm, which is dead here because the guard above has already
@@ -1679,7 +1715,7 @@ __declspec(noinline) void CImage::SetAnimation(BYTE bAnim)
   // (port_moddata.cpp, ImageArt), which may have no entry for an animation the mod's unit
   // plays, a Hybrid Reaver's cast on the Ultralisk's script; 1.17 would run the scripts from
   // their first byte. The image keeps the animation it has.
-  if (this->wImageID >= IMAGE_TYPES_117 && ImageScriptAnim(*pIscript, bAnim) == 0)
+  if ((this->wImageID >= IMAGE_TYPES_117 || g_hxModGame) && ImageScriptAnim(*pIscript, bAnim) == 0)
     return;
 
   this->bAnim = bAnim;
@@ -2294,7 +2330,13 @@ void CImage::RunScript(void *pIscript, int a2, intptr_t a3)
     }
     case 0x1B:  // domissiledmg
     case 0x44:  // dogrddamage
-      if (!a2)
+      // Hyperion: only a bullet's own script has a bullet to damage with. CBullet::Update
+      // publishes it for the bullets' pass and clears it after, so an image that reaches this
+      // outside that pass has none: a mod's overlay taken from a weapon's image, whose death
+      // animation runs when the unit it sits on dies. The classic game reads the cleared
+      // pointer there; this does nothing instead, as the classic game's own sprol does with
+      // the same pointer a few cases above.
+      if (!a2 && gpImageBullet != NULL)
         gpImageBullet->Damage();
       break;
     case 0x1F: {  // turnccwise

@@ -1,8 +1,8 @@
 // port_hxsave.cpp -- a save of a Hyperion game:
 // the sections a game by Hyperion's rules (HxRules) adds to 1.17's save, HXGM after GAME, then
 // HXRC, HXRA, HXAI and HXHC when a slot needs them (each a DWORD count of slots, then a record a
-// slot), HXST after VIEW, HXWI after it when a mod's ids pass 255 and HXMT when it has techs or
-// upgrades past 1.17's (docs/modules/replays.md,
+// slot), HXST after VIEW, HXWI after it when a mod's ids pass 255, HXMT when it has techs or
+// upgrades past 1.17's and HXSU in a game of a mod with statuses or action blocks (port_modstatus.cpp) (docs/modules/replays.md,
 // "Hyperion's save").
 //
 // HXGM, read before the game starts, turns on the player tables' extra entries, which the
@@ -49,9 +49,12 @@
 #include "../../h/hxrules.h"
 #include "../../h/selectlimits.h"  // SelectionSave, SelectionLoad: Hyperion's selection
 #include "../data/port_moddata.h"  // g_hxModGame
+#include "../data/port_modstatus.h"  // ModStatusSaveGame, ModStatusLoadGame
+#include "../data/port_modlua.h"     // ModLuaSaveGame, ModLuaLoadGame
 #include "../gameplay/port_ai.h"        // AiProfilesSave, AiProfilesRecorded
 #include "../gameplay/port_handicap.h"  // HandicapsSave, HandicapsRecorded
 #include "../gameplay/port_mutators.h"  // MutatorsSave, MutatorsRecorded
+#include "../data/port_mode.h"          // PortModeSave, PortModeRecorded
 #include "../gameplay/port_richbases.h"  // RichBasesSave, RichBasesLoad
 #include "../../gen/globals117.h"
 #include "../platform/port_globals117.h"
@@ -112,6 +115,7 @@ const ULONG kRaces = PORT_SAVE_ID('H', 'X', 'R', 'A');
 const ULONG kAiLevels = PORT_SAVE_ID('H', 'X', 'A', 'I');
 const ULONG kHandicaps = PORT_SAVE_ID('H', 'X', 'H', 'C');  // the slots' handicaps
 const ULONG kMutators = PORT_SAVE_ID('H', 'X', 'M', 'U');  // the game's mutators
+const ULONG kMode = PORT_SAVE_ID('H', 'X', 'M', 'D');  // the game's mode, its settings and seed
 const ULONG kUnits = PORT_SAVE_ID('H', 'X', 'U', 'N');  // the unit table, when not the slots'
 const ULONG kWideIds = PORT_SAVE_ID('H', 'X', 'W', 'I');  // ids past 255, after HXST
 const ULONG kModTech = PORT_SAVE_ID('H', 'X', 'M', 'T');  // a mod's techs and upgrades, after
@@ -585,6 +589,11 @@ int HxSaveSetUp(void *pFile) {
   if ((g_hxRuleOptions & HX_OPT_MUTATORS) != 0 &&
       !(PortSaveSection(pFile, kMutators) && pfwrite(abMutators, sizeof abMutators, pFile)))
     return 0;
+  BYTE abMode[PORT_MODE_RECORD_BYTES];
+  PortModeSave(abMode);
+  if ((g_hxRuleOptions & HX_OPT_MODE) != 0 &&
+      !(PortSaveSection(pFile, kMode) && pfwrite(abMode, sizeof abMode, pFile)))
+    return 0;
   const DWORD dwUnits = static_cast<DWORD>(PoolsUnitsToRecord());
   return dwUnits == 0 || (PortSaveSection(pFile, kUnits) && pfwrite(&dwUnits, 4, pFile));
 }
@@ -605,6 +614,7 @@ int HxLoadSetUp(void *pFile) {
   AiProfilesRecorded(NULL, 0);
   HandicapsRecorded(NULL, 0);
   MutatorsRecorded(NULL, 0);
+  PortModeRecorded(NULL, 0);
   PoolsUnitsRecorded(0);
   const int nHave = PortLoadSectionIf(pFile, kSetUp);
   if (nHave <= 0) {
@@ -666,6 +676,18 @@ int HxLoadSetUp(void *pFile) {
     return 0;
   if (nMutators > 0)
     MutatorsRecorded(abMutators, nMutatorBytes);
+  const int nMode = PortLoadSectionIf(pFile, kMode);
+  BYTE abMode[PORT_MODE_RECORD_BYTES];
+  const int nModeBytes = nMode > 0 ? PortLoadSectionBytes() : 0;
+  if (nMode < 0 || (nMode > 0 && (!PortModeRecordBytesRead(nModeBytes) || !pfread(abMode, nModeBytes, pFile))))
+    return 0;
+  if (nMode > 0) {
+    PortModeRecorded(abMode, nModeBytes);
+    if (const char *pszWhy = PortModeRecordRefusal()) {
+      Log("refused: %s", pszWhy);
+      return 0;
+    }
+  }
   const int nUnits = PortLoadSectionIf(pFile, kUnits);
   DWORD dwUnits = 0;
   if (nUnits < 0 || (nUnits > 0 && !pfread(&dwUnits, 4, pFile)))
@@ -708,7 +730,8 @@ int HxSaveState(void *pFile) {
       && TableSave(sglCachedGameCounts_g, pFile) && TableSave(sglCachedUnitCounts_g, pFile)
       && TableSave(sglCachedCompletedCounts_g, pFile) && ListsSave(pFile, false) && DemandsSave(pFile)
       && CountersSave(pFile) && (!PoolsWideIds() || CargoSave(pFile)) && (!SelectionWide() || SelectionSave(pFile))
-      && (!RichBasesInGame() || RichBasesSave(pFile)) && WideIdsSave(pFile) && ModTechSave(pFile);
+      && (!RichBasesInGame() || RichBasesSave(pFile)) && WideIdsSave(pFile) && ModTechSave(pFile) && ModStatusSaveGame(pFile)
+      && ModLuaSaveGame(pFile);
 }
 
 int HxLoadState(void *pFile) {
@@ -722,7 +745,8 @@ int HxLoadState(void *pFile) {
       || !TableLoad(sglCachedUnitCounts_g, pFile) || !TableLoad(sglCachedCompletedCounts_g, pFile)
       || !ListsRead(pFile, &late) || !ListsApply(late, false) || !DemandsLoad(pFile) || !CountersLoad(pFile)
       || (PoolsWideIds() && !CargoLoad(pFile)) || (SelectionWide() && !SelectionLoad(pFile))
-      || (RichBasesInGame() && !RichBasesLoad(pFile)) || !WideIdsLoad(pFile) || !ModTechLoad(pFile))
+      || (RichBasesInGame() && !RichBasesLoad(pFile)) || !WideIdsLoad(pFile) || !ModTechLoad(pFile) || !ModStatusLoadGame(pFile)
+      || !ModLuaLoadGame(pFile))
     return 0;
   sgwCheckDelay = static_cast<WORD>(head.dwCheckDelay);
   sgdwOrderSeqDelay_g = head.adwOrderSeq[0];

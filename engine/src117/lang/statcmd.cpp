@@ -1407,6 +1407,15 @@ statcmd_card_t *StatcmdCard(WORD wCard)
   return &gCards[wCard];
 }
 
+// A card as the classic game has it: the copy kept while a game with a mod has changed it.
+const statcmd_card_t *StatcmdClassicCard(WORD wCard)
+{
+  for (const StatcmdModCard &c : s_modCards)
+    if (c.wCard == wCard && wCard < UNIT_TYPE_MOD_FIRST)
+      return &c.saved;
+  return StatcmdCard(wCard);
+}
+
 // Hyperion: the engine's copies of the buttons EUD maps point cards at.
 static std::vector<statcmd_btn_t> s_eudBtns[250];
 
@@ -1463,12 +1472,37 @@ void StatcmdModCards(bool bApply)
       pCard->saved = gCards[wFrom];
       pCard->btns.assign(pCard->saved.pBtns, pCard->saved.pBtns + pCard->saved.wBtnCount);
     }
+    if (pAdd[k].bWords) {
+      // the words of the card's own button at the position, the first there or the one for wMatch
+      for (statcmd_btn_t &o : pCard->btns)
+        if (o.wMinIndex == pAdd[k].wPos && o.wStatusStrId < MOD_STRING_FIRST &&
+            (pAdd[k].wMatch == 0xFFFF || o.w0E == pAdd[k].wMatch)) {
+          if (pAdd[k].wDisabledStr != 0)
+            o.wDisabledStrId = pAdd[k].wDisabledStr;
+          if (pAdd[k].nWords >= 0) {
+            const WORD w = ModCardWordsString(pAdd[k].nWords, status_get_str(o.wStatusStrId));
+            if (w != 0)
+              o.wStatusStrId = w;
+          }
+          break;
+        }
+      continue;
+    }
     statcmd_btn_t b = {};
     b.wMinIndex = pAdd[k].wPos;
     b.wIcon = pAdd[k].wIcon;
-    if (pAdd[k].wUnit != 0xFFFF) {
+    if (pAdd[k].bPlace != MOD_PLACE_NONE) {
+      // a building on a worker's build menu: placed as its race places, built once placed
       b.pfnCondition = bf_mod_unit_ok;
-      b.pfnAction = order_build;
+      b.pfnAction = pAdd[k].bPlace == MOD_PLACE_ZERG      ? order_zerg_place
+                    : pAdd[k].bPlace == MOD_PLACE_PROTOSS ? order_place_protoss
+                                                          : order_place;
+      b.bConditionArg = pAdd[k].wUnit;
+      b.w0E = pAdd[k].wUnit;
+    } else if (pAdd[k].wUnit != 0xFFFF) {
+      b.pfnCondition = bf_mod_unit_ok;
+      // an add-on is placed beside the building, as the classic add-ons' buttons place theirs
+      b.pfnAction = (gulUnitTypeFlags[pAdd[k].wUnit] & 2) ? order_place_addon : order_build;
       b.bConditionArg = pAdd[k].wUnit;
       b.w0E = pAdd[k].wUnit;
     } else if (pAdd[k].bUpgrade) {

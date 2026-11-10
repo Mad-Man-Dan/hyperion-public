@@ -43,6 +43,7 @@
 #include "../render/port_present.h"      // PortPresentGpu
 #include "../gameplay/port_handicap.h"   // HandicapChooseNet
 #include "../gameplay/port_mutators.h"   // MutatorsChooseNet
+#include "../data/port_mode.h"           // PortModeChooseNet
 #include "../../h/hxrules.h"             // RulesChooseNext
 #include "../../h/playertables.h"        // PlayersSeatsBegin
 
@@ -128,7 +129,20 @@ void __stdcall NoList(intptr_t, intptr_t)
 
 bool PortLaunchNetGame(const PortJson &launch)
 {
-  g_plan = Plan();
+  g_plan = Plan();
+  // the match's game mode, the host's (port_mode.h), before anything is set up: a seat that has
+  // not the mode would play the same map by other rules, which is no game at all, so it says so
+  // and stays in the room.
+  PortModeChoice mode;
+  mode.id = launch["mode"].Str();
+  mode.settings = launch["modeSettings"].Str();
+  mode.seed = static_cast<uint32_t>(launch["modeSeed"].Num());
+  if (!mode.id.empty() && PortModeFind(mode.id) == NULL) {
+    // {0} the mode the host chose, by its id; the home screen says it (PortLanTakeWhy)
+    g_why = PortTextF("This match is played in a game mode this copy has not installed ({0}).", {mode.id});
+    Log("the match's mode %s is not installed here", mode.id.c_str());
+    return false;
+  }
   const bool bCreate = launch["role"].Str() == "create";
   const std::string token = launch["token"].Str();
   const unsigned long dwGame = static_cast<unsigned long>(launch["game"].Num());
@@ -176,6 +190,10 @@ bool PortLaunchNetGame(const PortJson &launch)
   HandicapChooseNet(handicapPeople, handicapComputers);
   // and the mutators (port_mutators.h)
   MutatorsChooseNet(MutatorsFromJson(launch["mutators"]));
+  // and the game mode, the host's, so every seat's game rolls the same run (port_mode.h)
+  PortModeChooseNet(mode);
+  Log("the match's mode is %s, seed %u, settings %s", mode.id.empty() ? "none" : mode.id.c_str(),
+      static_cast<unsigned>(mode.seed), mode.settings.c_str());
   PlayersSeatsBegin();  // where the shuffle of the starts puts each lobby slot's record
   g_plan.mapName = launch["mapName"].Str(PortText("A match"));
   g_plan.who = Who();

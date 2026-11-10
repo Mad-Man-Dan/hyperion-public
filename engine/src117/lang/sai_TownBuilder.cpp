@@ -78,6 +78,7 @@ static_assert(offsetof(TAiPathReq, wToRegion) == offsetof(path_search_t, nGoalRe
 #include "../h/SAI_Banker.h"         // banker_build_site_failed and the banker queries
 #include "../h/saveload.h"           // compress / decompress -- the town-data serialisers
 #include "../port/data/port_formats.h"  // Hyperion: PortSave117Get, PortSave117Put
+#include "../port/data/port_moddata.h"  // Hyperion: ModRaceAiClassic
 #include "../gen/save117.h"
 #include "../h/CUnit.h"
 #include "../h/CUnitSearches.h"      // aiscript_has_campaign
@@ -95,6 +96,7 @@ static_assert(offsetof(TAiPathReq, wToRegion) == offsetof(path_search_t, nGoalRe
 #include "../h/point16.h"
 #include "../h/net_cmds.h"           // PlayerData -- MUST precede gen/globals117.h
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // TBuildTemplate is not declared in src117/h: it stays TU-local until a second
 // consumer appears. Stride 16 and the -1 terminator at +0x00 come from
@@ -290,13 +292,13 @@ int ai_get_build_location(CUnit *pUnit, int nType, mpoint_t pos, mpoint_t *pOut,
         ptNear = ptTile;
         ptNear.x -= gUnitPlaceboxSize[pUnit->wType].x / 2 / 32;
         ptNear.y += -gUnitPlaceboxSize[pUnit->wType].y / 2 / 32;
-        ptNear.x += gUnitAddOnOffset[(WORD)nType - 106].x / 32;
-        ptNear.y += gUnitAddOnOffset[(WORD)nType - 106].y / 32;
+        ptNear.x += ModRulesAddOnOffset((WORD)nType).x / 32;
+        ptNear.y += ModRulesAddOnOffset((WORD)nType).y / 32;
         if (!mtx_query_place_bldg(pUnit, (BYTE)nPlayer, *(int *)&ptNear.x, *(int *)&ptNear.y,
                                   nType, 0, 0, 1, 0))
         {
-            ptNear.x += -gUnitAddOnOffset[(WORD)nType - 106].x / 32;
-            ptNear.y += -gUnitAddOnOffset[(WORD)nType - 106].y / 32;
+            ptNear.x += -ModRulesAddOnOffset((WORD)nType).x / 32;
+            ptNear.y += -ModRulesAddOnOffset((WORD)nType).y / 32;
             pOut->x = ptNear.x * 32 + gUnitPlaceboxSize[pUnit->wType].x / 2;
             pOut->y = ptNear.y * 32 + gUnitPlaceboxSize[pUnit->wType].y / 2;
             return 1;
@@ -305,7 +307,7 @@ int ai_get_build_location(CUnit *pUnit, int nType, mpoint_t pos, mpoint_t *pOut,
 
     int nRegion = AI_AREAS_117;
     BOOL bSpacing = TRUE;
-    switch ((WORD)nType)
+    switch ((WORD)ModRaceAiClassic(nPlayer, nType))  // Hyperion: a mod's race's stand-ins as theirs
     {
     case 0x6A:
     case 0x83:
@@ -892,13 +894,15 @@ void sai_seed_town_plans(int nKind, BYTE *pKinds)
 void ReservePlacement(int nArg0, intptr_t nArg1, intptr_t nArg2, mpoint_t pos, int nArg4)
 {
     TReserve *pReserve = (TReserve *)nArg1;
+    // Hyperion: the classic building a mod's race's stand-in is placed as
+    const int nRole = ModRaceAiClassic((int)nArg2, nArg0);
 
     memset(pReserve, 0, sizeof(TReserve));
 
     AssignBuildableLocations(nArg0, pReserve, (BYTE)nArg2, pos, nArg4);
     pReserve->RemoveDisconnected(pos);
 
-    if (nArg0 != 0x9C)
+    if (nRole != 0x9C)
         sai_reserve_safe_regions(nArg0, nArg1, nArg2, pos);
 
     sai_reserve_walk_range(pReserve, nArg4, pos);
@@ -917,7 +921,7 @@ found:
     pReserve->RemoveWrongHeight(pos);
     sai_reserve_buildable_tiles(nArg0, nArg1, pos);
 
-    if (nArg0 == 0x6A || nArg0 == 0x83 || nArg0 == 0x9A)
+    if (nRole == 0x6A || nRole == 0x83 || nRole == 0x9A)
     {
         nArg4 = 1;
     }
@@ -929,7 +933,7 @@ found:
 
     sai_reserve_addon_space(nArg0, nArg1, (void *)nArg2, pos);
 
-    switch (nArg0)
+    switch (nRole)
     {
     case 0x9C:
         sai_reserve_pylon_placement(nArg1, (int)nArg2, pos);
@@ -968,7 +972,7 @@ void AssignBuildableLocations(int nArg0, TReserve *pReserve, BYTE bArg2, mpoint_
 {
     int bAddon;
 
-    switch (nArg0)
+    switch (ModRaceAiClassic(bArg2, nArg0))  // Hyperion: a mod's race's stand-ins as theirs
     {
     case 0x6A:
     case 0x71:
@@ -2340,7 +2344,9 @@ void sai_reserve_safe_regions(int nUnitType, intptr_t nArg1, intptr_t nArg2, mpo
 {
     TReserve *pReserve = (TReserve *)nArg1;
 
-    if (nUnitType == 0x6A || nUnitType == 0x83 || nUnitType == 0x9A)
+    // Hyperion: a mod's race's stand-ins as theirs
+    const int nRole = ModRaceAiClassic((int)nArg2, nUnitType);
+    if (nRole == 0x6A || nRole == 0x83 || nRole == 0x9A)
         return;
 
     int nY = pos.y - 0x400;
@@ -2529,7 +2535,7 @@ void sai_reserve_addon_space(int nArg0, intptr_t nArg1, void *pArg2, mpoint_t po
         if (pUnit->IsDeadOrDying())
             continue;
 
-        switch (pUnit->wType)
+        switch (ModRaceAiClassic(pUnit->bPlayer, pUnit->wType))  // Hyperion: a mod's race's stand-ins as theirs
         {
         case 0x6A:
         case 0x71:

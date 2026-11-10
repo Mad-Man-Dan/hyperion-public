@@ -270,7 +270,7 @@ DWORD WINAPI Watch(LPVOID)
   return 0;
 }
 
-void AtExit(void) { PortStartupEnded(0); }
+void __cdecl AtExit(void) { PortStartupEnded(0); }
 
 // SDL's messages, put in the log while the start lasts, then passed on as before
 SDL_LogOutputFunction g_pfnSdlLog;

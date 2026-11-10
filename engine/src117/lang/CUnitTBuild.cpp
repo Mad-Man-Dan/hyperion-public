@@ -19,6 +19,7 @@
 #include "../h/CUnitInit.h"      // ours: CreateUnitAt
 #include "../h/placebox.h"       // ours: town_move_morphed_building
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The globals this TU reaches, dual-spelled: one #ifdef per name, never one over the whole
 // block, since the generated set grows over time and a single guard would go false and
@@ -196,7 +197,7 @@ void CUnit::DispatchPlaceAddon()
     WORD wAddon = *(WORD *)_unmapped_C4;
     point16_t size = gUnitPlaceboxSize[wAddon];
     WORD wSelfType = wType;
-    point16_t offset = gUnitAddOnOffset[wAddon - 106];
+    point16_t offset = ModRulesAddOnOffset(wAddon);  // Hyperion: a mod's add-on too
     wOrderTargetX -= gUnitPlaceboxSize[wSelfType].x / 2;
     wOrderTargetY -= gUnitPlaceboxSize[wSelfType].y / 2;
     int nSx = size.x;

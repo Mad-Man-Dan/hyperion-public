@@ -228,15 +228,26 @@ def oracle_exe() -> Path:
 
 
 def game_running() -> bool:
-    """True while a Hyperion.exe runs. Other copies of the game do not count.
-    By name, because the game's InitACL denies other
-    processes the rights needed to read its exe path. None off Windows, where the oracle
-    does not run and its runs come from the cache."""
+    """True while a Hyperion.exe runs from one of the suite's game folders, which hold the staged
+    replay. By name, with each one's path where Windows gives it (the limited query the game's
+    InitACL leaves open): one in another folder, another checkout's or a data folder of its own,
+    shares nothing with a run here; one whose path is not given counts. None off Windows, where
+    the oracle does not run and its runs come from the cache."""
     if sys.platform != "win32":
         return False
     out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {GAME_EXE.name}", "/NH"],
                          capture_output=True, text=True).stdout
-    return GAME_EXE.name.lower() in out.lower()
+    if GAME_EXE.name.lower() not in out.lower():
+        return False
+    paths = subprocess.run(["powershell", "-NoProfile", "-Command",
+                            f"Get-Process -Name {GAME_EXE.stem} | ForEach-Object {{ '|' + $_.Path }}"],
+                           capture_output=True, text=True).stdout
+    folders = {os.path.normcase(str(p)) for p in (GAME, HX64_GAME, HXR_GAME)}
+    for line in paths.split("|")[1:]:
+        path = line.strip()
+        if not path or os.path.normcase(os.path.dirname(path)) in folders:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -1233,14 +1244,10 @@ def keep_ref(csv: Path, meta_json: Path, ref: Path, made_by: str, checkpoint: in
     (ref / "hxref.json").write_text(json.dumps(meta, indent=1))
 
 
-def hx_mod_args(e: dict, game: Path) -> list[str]:
-    """An entry's mod: its folder copied from engine/mods/, or from the local test
-    mods in testrun/test_mods/ (wide_test_mod.py), into the data folder of the game
-    folder the run uses, and --mod, which the live game, the replay and the save's load all
-    take."""
-    mod = e.get("mod")
-    if not mod:
-        return []
+def copy_mod_folder(mod: str, game: Path) -> None:
+    """A mod's folder copied from engine/mods/, or from the local test mods in
+    testrun/test_mods/ (wide_test_mod.py), into the data folder of the game folder the run
+    uses."""
     src = ROOT / "mods" / mod
     if not src.is_dir():
         src = TESTRUN / "test_mods" / mod
@@ -1250,7 +1257,33 @@ def hx_mod_args(e: dict, game: Path) -> list[str]:
             t = dst / f.relative_to(src)
             t.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, t)
-    return [f"--mod={mod}"]
+
+
+def hx_mod_args(e: dict, game: Path) -> list[str]:
+    """An entry's mod: its folder copied in, and --mod, which the live game, the replay and the
+    save's load all take. A mode's folder goes in the same way, since a replay of one needs the
+    mode installed to play back."""
+    out = []
+    if e.get("mode"):
+        copy_mod_folder(e["mode"], game)
+    mod = e.get("mod")
+    if mod:
+        copy_mod_folder(mod, game)
+        out.append(f"--mod={mod}")
+    return out
+
+
+def hx_mode_args(e: dict) -> list[str]:
+    """An entry's game mode, for a live game alone: --mode with its settings and its seed. A
+    replay or a save carries the mode it was played with, so a run of one is given none."""
+    if not e.get("mode"):
+        return []
+    out = [f"--mode={e['mode']}"]
+    if e.get("mode_settings"):
+        out.append(f"--mode-settings={e['mode_settings']}")
+    if e.get("mode_seed"):
+        out.append(f"--mode-seed={e['mode_seed']}")
+    return out
 
 
 def cmd_hxrecord(args) -> int:
@@ -1296,7 +1329,10 @@ def cmd_hxrecord(args) -> int:
             live.append(f"--handicaps={e['handicaps']}")
         if e.get("mutators"):
             live.append(f"--mutators={e['mutators']}")
+        if e.get("teams"):
+            live.append(f"--teams={e['teams']}")
         live += hx_mod_args(e, game)
+        live += hx_mode_args(e)
         if e.get("orders"):
             live.append(f"--record-orders={orders_arg(e)}")
         args.tag = tag

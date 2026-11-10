@@ -31,7 +31,7 @@
 #include "../gen/globals117.h"
 #include "../h/typelimits.h"         // Hyperion: UnitTypeMod
 #include "../port/data/port_moddata.h"    // Hyperion: ModCardButtons
-#include "../port/gameplay/port_ai.h"         // Hyperion: AiThinkFrames
+#include "../port/gameplay/port_ai.h"         // Hyperion: AiThinkFrames, AiModeKeeps
 
 // Every callee this TU reaches is declared in a header, none of them here:
 // tai_captain_init, TAI_Captain_RemoveUnit and tai_review_allied_strength in
@@ -103,6 +103,7 @@ extern DWORD dword_69B56C;
 #endif
 #endif
 
+
 // The bodies, in oracle VA order.
 
 // CUnit::DispatchComputerAI -- oracle 0x48CD70 (364 B). The computer player's
@@ -116,6 +117,10 @@ void CUnit::DispatchComputerAI()
   if (this->bUnion54 != 0)
     return;
   this->bUnion54 = AiThinkFrames(this, 0x0F);  // Hyperion: 0x0F, a computer's profile may change it
+  // Hyperion: a unit the game's mode has taken is the mode's to play (hx.own), so the computer
+  // that owns it does not think for it
+  if (AiModeKeeps(this))
+    return;
   if (this->wType == 0x23) {
     this->DispatchIdleLarva();
     if (this->IsDeadOrDying())

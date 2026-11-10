@@ -34,8 +34,10 @@
 #include "../h/CThingy.h"        // ours: CThingy::AllocThingy / UpdateVisibility
 #include "../h/CUnitZSpells.h"   // ours: FindPlaceForUnit
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #undef find_first_unit_near
 #include "../h/count.h"          // count_race
+#include "../h/CUnitInit.h"  // Hyperion: get_order_tech_energy_cost
 #include "../h/order.h"          // status_get_str, map_msg_target_self
 #include "../h/gamesnd.h"        // gamesnd_play_mtx, snd_pos_t
 #include "../h/CUnitTSpells.h"   // gamesnd_play, CUnitTSpellsFindProc
@@ -613,7 +615,7 @@ void UpdateProtossPowerGrid()
        pUnit = pUnit->pNext) {
     if ((pUnit->dwFlags & 2) == 0)
       continue;
-    if (pUnit->GetRace() != 2)
+    if (!ModRulesPowered(pUnit))  // Hyperion: and a mod's building that needs power
       continue;
     if (gPlayerData[pUnit->bPlayer].nType == 3)
       continue;
@@ -878,7 +880,7 @@ void CUnit::DispatchSummonDArchon()
 // pylon from the psi-link chain.
 void DestroyPsiLinks() {
   for (CUnit *pUnit = CUnit::GetUsedList(); pUnit; pUnit = pUnit->pNext) {
-    if (pUnit->wType != 0x9C || !(pUnit->dwFlags & 1))
+    if (!ModRulesPowerSource(pUnit->wType) || !(pUnit->dwFlags & 1))  // Hyperion: and a mod's power source
       continue;
     if (pUnit->pPowerTemplate)
       pUnit->pPowerTemplate->Kill();
@@ -898,7 +900,7 @@ void DestroyPsiLinks() {
 // restarts its order.
 void RestorePsiLinks() {
   for (CUnit *pUnit = CUnit::GetUsedList(); pUnit; pUnit = pUnit->pNext) {
-    if (pUnit->wType != 0x9C || !(pUnit->dwFlags & 1))
+    if (!ModRulesPowerSource(pUnit->wType) || !(pUnit->dwFlags & 1))  // Hyperion: and a mod's power source
       continue;
     CUnit *pHead = sgJuiceLink_g;
     if (pHead != pUnit && !pUnit->pPsiLinkNext && !pUnit->pPsiLinkPrev) {
@@ -1038,13 +1040,15 @@ void CUnit::DispatchTeleport() {
     EndDispatchOrder();
     return;
   }
-  if (NeedsMoreEnergy(techdata_energy_g[21] << 8)) {
+  // Hyperion: a mod's order pays its own tech's energy
+  const WORD wCost = OrderTypeMod(bOrderId) ? get_order_tech_energy_cost(bOrderId) : techdata_energy_g[21] << 8;
+  if (NeedsMoreEnergy(wCost)) {
     char *pszMsg = status_get_str(count_race(wType) + 0x360);
     map_msg_target_self(pszMsg, bPlayer);
     EndDispatchOrder();
     return;
   }
-  SubtractEnergy(techdata_energy_g[21] << 8);
+  SubtractEnergy(wCost);
   CUnit *pTarget = pOrderTarget;
   if (pTarget != NULL) {
     wOrderTargetX = pTarget->pSprite->wPosX;

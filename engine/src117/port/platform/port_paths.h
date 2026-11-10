@@ -29,6 +29,17 @@ struct PortOptions {
   char szAiLevels[260];     // --ai-levels <l,l,...>: a computer level a player, the local player first (port_ai.h)
   char szHandicaps[260];    // --handicaps <n,n,...>: a handicap in percent a player, the local player first (port_handicap.h)
   char szMutators[260];     // --mutators <preset|name=value,...>: the game's mutators (port_mutators.h)
+  // the game mode (port_mode.h): --mode <id>, --mode-settings a JSON object of its settings by
+  // id or "<preset>" or "name=value,..." (a list setting's value is the ids turned off, with
+  // +), --mode-seed <n> the run's seed, 0 for one drawn as the game starts
+  char szMode[260];
+  char szModeSettings[512];
+  char szModeSeed[260];
+  // --mode-roll <id> [<out.json>]: that mode's generate rolled once for --map, --mode-settings,
+  // --mode-seed, --race and --players, written as JSON, and no game (port_modcheck.cpp)
+  char szModeRoll[260];
+  char szModeRollOut[260];
+  bool bModeTrace;          // --mode-trace: the scripts' trace on from the first frame
   char aszMaps[PORT_MAP_FOLDERS][260];  // --maps <folder>, once per folder, each ending in a backslash
   int nMaps;
   bool bUms;                // --ums: --map's game is Use Map Settings, not melee
@@ -116,6 +127,10 @@ bool PortWritePrivateFile(const char *pszPath, const char *pszText);
 // place nowhere; the name alone elsewhere, which the POSIX layer opens with the desktop's opener.
 const char *PortExplorer(void);
 const PortOptions *PortCommandOptions(void);
+// Whether this run plays no game and writes only its own report and logs: --mod-check and
+// --mode-roll. Such a run stands beside a Hyperion that is playing, so it takes no instance lock
+// and keeps its logs in a folder of its own.
+bool PortCommandReportOnly(void);
 char *PortGameCommandLine(void);
 void PortPathsSplitCommandLine(const char *pszLine, char *pszGame, size_t cchGame,
                                PortOptions *pOptions);

@@ -246,7 +246,8 @@ BOOL seat_computer_player(BYTE bRace)
   do {
     if (i-- == 0)
       return 0;
-  } while (gPlayerData[i].nType != 6);
+  } while (gPlayerData[i].nType != 6 ||
+           (i >= PLAYER_LOBBY_117 && !PlayersMapSeat(i)));  // Hyperion: a seat of the map's
   gPlayerData[i].nType = 5;
   gPlayerData[i].nRace = bRace;
   PlayersSeatNote(i);  // Hyperion: where this computer sits

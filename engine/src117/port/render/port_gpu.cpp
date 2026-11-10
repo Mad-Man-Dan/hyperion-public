@@ -57,6 +57,9 @@
 #include "PSGround.msl.h"
 #endif
 #include "port_gpu_internal.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 // The state the other parts share (port_gpu_internal.h).
 SDL_GPUDevice *g_device;
@@ -97,6 +100,16 @@ static char g_szSnap[MAX_PATH];
 static int g_nSnapState;  // 0 none, 1 asked, 2 taken
 static bool g_bSnapOk;
 static int g_nSnapW, g_nSnapH;
+// The player's screenshot (PortGpuShotAsk): the window's own picture, which is drawn into a
+// texture of its own, since the swapchain's cannot be read back. Made for the shot and let go
+// with it, as the window's picture is large and a shot is rare.
+static char g_szShot[MAX_PATH];
+static int g_nShotState;  // 0 none, 1 asked, 2 taken
+static bool g_bShotOk;
+static int g_nShotW, g_nShotH;
+static SDL_GPUTexture *g_shotTarget;
+static SDL_GPUTransferBuffer *g_shotDown;
+static void GpuShotRelease(void);
 // The check's counts.
 static ULONG g_nChecked;
 static ULONG g_nMismatched;
@@ -415,6 +428,24 @@ static bool GpuFitSize(int nWidth, int nHeight)
 void PortGpuGameBox(float fTargetW, float fTargetH, float fLogicalW, float fLogicalH, SDL_FRect *pDst)
 {
   float fX, fY, fW, fH;
+#ifdef HX_DESIGN
+  // the design engine's panels round the game: the game, and a layer's panels, in the room left
+  float fRoomX, fRoomY, fRoomW, fRoomH;
+  if (DesignGameRoom(fTargetW, fTargetH, &fRoomX, &fRoomY, &fRoomW, &fRoomH)) {
+    if (DesignGamePane() && fLogicalW > 0.0f && fLogicalH > 0.0f) {
+      // a pane is filled edge to edge, what falls past it under the panels round it
+      const float fScale = SDL_max(fRoomW / fLogicalW, fRoomH / fLogicalH);
+      pDst->w = SDL_floorf(fLogicalW * fScale + 0.5f);
+      pDst->h = SDL_floorf(fLogicalH * fScale + 0.5f);
+      pDst->x = SDL_floorf(fRoomX + (fRoomW - pDst->w) / 2.0f);
+      pDst->y = SDL_floorf(fRoomY + (fRoomH - pDst->h) / 2.0f);
+      return;
+    }
+    PortOverlayGameArea(fRoomW, fRoomH, &fX, &fY, &fW, &fH);
+    fX += fRoomX;
+    fY += fRoomY;
+  } else
+#endif
   PortOverlayGameArea(fTargetW, fTargetH, &fX, &fY, &fW, &fH);
   PortGpuLetterbox(fW, fH, fLogicalW, fLogicalH, pDst);
   pDst->x = SDL_floorf(pDst->x + fX);
@@ -658,6 +689,7 @@ void PortGpuShutdown(void)
   PortGpuFrameEnd();
   SDL_WaitForGPUIdle(g_device);
   GpuAheadRelease();
+  GpuShotRelease();
   GpuReleaseSized();
   GpuUiRelease();
   GpuHudRelease();
@@ -713,11 +745,11 @@ const char *PortGpuDriver(void)
 }
 
 // RGBA pixels (rows nWidth apart) saved as a PNG, or a BMP when pszPath does not end
-// in .png, without their alpha.
-bool GpuSavePixels(const void *pPixels, int nWidth, int nHeight, const char *pszPath)
+// in .png, without their alpha. bBgra for pixels of a swapchain's own order.
+bool GpuSavePixels(const void *pPixels, int nWidth, int nHeight, const char *pszPath, bool bBgra)
 {
-  SDL_Surface *pRgba = SDL_CreateSurfaceFrom(nWidth, nHeight, SDL_PIXELFORMAT_ABGR8888, const_cast<void *>(pPixels),
-                                             nWidth * 4);
+  SDL_Surface *pRgba = SDL_CreateSurfaceFrom(nWidth, nHeight, bBgra ? SDL_PIXELFORMAT_ARGB8888 : SDL_PIXELFORMAT_ABGR8888,
+                                             const_cast<void *>(pPixels), nWidth * 4);
   if (pRgba == NULL)
     return false;
   SDL_Surface *pRgb = SDL_ConvertSurface(pRgba, SDL_PIXELFORMAT_RGB24);
@@ -750,6 +782,24 @@ bool PortGpuSnapTake(bool *pbOk, int *pnWidth, int *pnHeight)
   *pbOk = g_bSnapOk;
   *pnWidth = g_nSnapW;
   *pnHeight = g_nSnapH;
+  return true;
+}
+
+void PortGpuShotAsk(const char *pszFile)
+{
+  SDL_strlcpy(g_szShot, pszFile, sizeof g_szShot);
+  g_nShotState = 1;
+}
+
+bool PortGpuShotTake(bool *pbOk, int *pnWidth, int *pnHeight)
+{
+  const bool bTaken = g_nShotState == 2;
+  g_nShotState = 0;  // an ask no frame answered is dropped, rather than kept for a later one
+  if (!bTaken)
+    return false;
+  *pbOk = g_bShotOk;
+  *pnWidth = g_nShotW;
+  *pnHeight = g_nShotH;
   return true;
 }
 
@@ -1238,6 +1288,12 @@ static bool GpuFrameWindow(SDL_GPUCommandBuffer *pCmd, int nWidth, int nHeight, 
   GpuFrameDraw(pCmd, pPass, box, shown, bFx);
   SDL_EndGPURenderPass(pPass);
   GpuVideoDraw(pCmd, pSwap, nSwapW, nSwapH);
+#ifdef HX_DESIGN
+  // the design engine's paths and effects over the frame, and the HUD unless it is hidden
+  DesignWorldDraw(pCmd, pSwap, static_cast<int>(nSwapW), static_cast<int>(nSwapH), box, nWidth, nHeight,
+                  static_cast<int>(g_swapFormat));
+  if (!DesignHudHidden())
+#endif
   // the HUD design, when one is on, between the frame and the overlay
   GpuHudDraw(pCmd, pSwap, nSwapW, nSwapH, box, [&](SDL_GPUTexture *pTarget, int w, int h) {
     SDL_GPUColorTargetInfo back;
@@ -1252,8 +1308,187 @@ static bool GpuFrameWindow(SDL_GPUCommandBuffer *pCmd, int nWidth, int nHeight, 
     SDL_EndGPURenderPass(pBack);
   });
   GpuUiOverlay(pCmd, pSwap, nSwapW, nSwapH, box);
+#ifdef HX_DESIGN
+  DesignPanelsDraw(pCmd, pSwap, static_cast<int>(nSwapW), static_cast<int>(nSwapH));  // its panels, last
+#endif
   return true;
 }
+
+// The shot's texture and its buffer let go.
+static void GpuShotRelease(void)
+{
+  if (g_shotTarget != NULL)
+    SDL_ReleaseGPUTexture(g_device, g_shotTarget);
+  if (g_shotDown != NULL)
+    SDL_ReleaseGPUTransferBuffer(g_device, g_shotDown);
+  g_shotTarget = NULL;
+  g_shotDown = NULL;
+}
+
+// The player's screenshot (PortGpuShotAsk): the window's steps again on a texture of the
+// window's size, which can be read back as the swapchain's picture cannot, so the file has what
+// the window shows -- the frame in full colour, a cinematic over it, the HUD design and the
+// overlay. True when it was drawn and its download recorded.
+static bool GpuFrameShot(SDL_GPUCommandBuffer *pCmd, int nWidth, int nHeight, const GpuFrameShown &shown, bool bFx)
+{
+  int nW = 0;
+  int nH = 0;
+  if (!SDL_GetWindowSizeInPixels(g_window, &nW, &nH) || nW <= 0 || nH <= 0)
+    return false;
+  g_shotTarget = GpuTexture(g_swapFormat, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER, nW, nH);
+  g_shotDown =
+      GpuTransfer(SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD, static_cast<Uint32>(nW) * static_cast<Uint32>(nH) * 4u);
+  if (g_shotTarget == NULL || g_shotDown == NULL) {
+    GpuShotRelease();
+    return false;
+  }
+  g_nShotW = nW;
+  g_nShotH = nH;
+  SDL_FRect box;
+  PortGpuGameBox(static_cast<float>(nW), static_cast<float>(nH), static_cast<float>(nWidth),
+                 static_cast<float>(nHeight), &box);
+  SDL_GPUColorTargetInfo target;
+  SDL_zero(target);
+  target.texture = g_shotTarget;
+  target.clear_color.a = 1.0f;
+  target.load_op = SDL_GPU_LOADOP_CLEAR;
+  target.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass *pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
+  GpuFrameDraw(pCmd, pPass, box, shown, bFx);
+  SDL_EndGPURenderPass(pPass);
+  GpuVideoDraw(pCmd, g_shotTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH));
+  GpuHudDraw(pCmd, g_shotTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH), box,
+             [&](SDL_GPUTexture *pTarget, int w, int h) {
+               SDL_GPUColorTargetInfo back;
+               SDL_zero(back);
+               back.texture = pTarget;
+               back.clear_color.a = 1.0f;
+               back.load_op = SDL_GPU_LOADOP_CLEAR;
+               back.store_op = SDL_GPU_STOREOP_STORE;
+               SDL_GPURenderPass *pBack = SDL_BeginGPURenderPass(pCmd, &back, 1, NULL);
+               const SDL_FRect whole = {0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h)};
+               GpuFrameDraw(pCmd, pBack, whole, shown, bFx);
+               SDL_EndGPURenderPass(pBack);
+             });
+  GpuUiOverlay(pCmd, g_shotTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH), box);
+  GpuFrameDownload(pCmd, g_shotTarget, nW, nH, g_shotDown);
+  return true;
+}
+
+// The shot's pixels saved, once the card has drawn them.
+static void GpuShotSave(void)
+{
+  const void *pGot = SDL_MapGPUTransferBuffer(g_device, g_shotDown, false);
+  if (pGot != NULL) {
+    const bool bBgra = g_swapFormat == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM ||
+                       g_swapFormat == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB;
+    g_bShotOk = GpuSavePixels(pGot, g_nShotW, g_nShotH, g_szShot, bBgra);
+    SDL_UnmapGPUTransferBuffer(g_device, g_shotDown);
+  }
+  GpuShotRelease();
+}
+
+#ifdef HX_DESIGN
+// The design engine's grab (design_grab): the window's steps again on a texture of the window's
+// size, its panels too when asked, downloaded once the card has drawn them. A clip's frame
+// (design_record) is drawn without the HUD and the menus, and only its part is downloaded. True
+// when drawn.
+static SDL_GPUTexture *g_grabTarget;
+static SDL_GPUTransferBuffer *g_grabDown;
+static int g_nGrabW;
+static int g_nGrabH;
+static int g_nTakeW;  // the part downloaded
+static int g_nTakeH;
+
+static bool GpuDesignGrab(SDL_GPUCommandBuffer *pCmd, int nWidth, int nHeight, const GpuFrameShown &shown, bool bFx,
+                          bool bPanels, bool bClip)
+{
+  int nW = 0;
+  int nH = 0;
+  if (!g_claimed || !SDL_GetWindowSizeInPixels(g_window, &nW, &nH) || nW <= 0 || nH <= 0)
+    return false;
+  if (g_grabTarget == NULL || nW != g_nGrabW || nH != g_nGrabH) {
+    if (g_grabTarget != NULL)
+      SDL_ReleaseGPUTexture(g_device, g_grabTarget);
+    if (g_grabDown != NULL)
+      SDL_ReleaseGPUTransferBuffer(g_device, g_grabDown);
+    g_grabTarget = GpuTexture(g_swapFormat, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER, nW, nH);
+    g_grabDown = GpuTransfer(SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD, static_cast<Uint32>(nW) * static_cast<Uint32>(nH) * 4u);
+    g_nGrabW = nW;
+    g_nGrabH = nH;
+    if (g_grabTarget == NULL || g_grabDown == NULL) {
+      g_nGrabW = g_nGrabH = 0;
+      return false;
+    }
+  }
+  SDL_FRect box;
+  PortGpuGameBox(static_cast<float>(nW), static_cast<float>(nH), static_cast<float>(nWidth),
+                 static_cast<float>(nHeight), &box);
+  int nX = 0;
+  int nY = 0;
+  g_nTakeW = nW;
+  g_nTakeH = nH;
+  if (bClip && !DesignClipRegion(box, nWidth, nHeight, nW, nH, &nX, &nY, &g_nTakeW, &g_nTakeH))
+    return false;
+  SDL_GPUColorTargetInfo target;
+  SDL_zero(target);
+  target.texture = g_grabTarget;
+  target.clear_color.a = 1.0f;
+  target.load_op = SDL_GPU_LOADOP_CLEAR;
+  target.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass *pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
+  GpuFrameDraw(pCmd, pPass, box, shown, bFx);
+  SDL_EndGPURenderPass(pPass);
+  GpuVideoDraw(pCmd, g_grabTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH));
+  DesignWorldDraw(pCmd, g_grabTarget, nW, nH, box, nWidth, nHeight, static_cast<int>(g_swapFormat));
+  if (!bClip && !DesignHudHidden())
+    GpuHudDraw(pCmd, g_grabTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH), box,
+               [&](SDL_GPUTexture *pTarget, int w, int h) {
+                 SDL_GPUColorTargetInfo back;
+                 SDL_zero(back);
+                 back.texture = pTarget;
+                 back.clear_color.a = 1.0f;
+                 back.load_op = SDL_GPU_LOADOP_CLEAR;
+                 back.store_op = SDL_GPU_STOREOP_STORE;
+                 SDL_GPURenderPass *pBack = SDL_BeginGPURenderPass(pCmd, &back, 1, NULL);
+                 const SDL_FRect whole = {0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h)};
+                 GpuFrameDraw(pCmd, pBack, whole, shown, bFx);
+                 SDL_EndGPURenderPass(pBack);
+               });
+  if (!bClip)
+    GpuUiOverlay(pCmd, g_grabTarget, static_cast<Uint32>(nW), static_cast<Uint32>(nH), box);
+  if (bPanels)
+    DesignPanelsRedraw(pCmd, g_grabTarget, nW, nH);
+  SDL_GPUTextureRegion from;
+  SDL_GPUTextureTransferInfo to;
+  SDL_zero(from);
+  SDL_zero(to);
+  from.texture = g_grabTarget;
+  from.x = static_cast<Uint32>(nX);
+  from.y = static_cast<Uint32>(nY);
+  from.w = static_cast<Uint32>(g_nTakeW);
+  from.h = static_cast<Uint32>(g_nTakeH);
+  from.d = 1;
+  to.transfer_buffer = g_grabDown;
+  to.pixels_per_row = static_cast<Uint32>(g_nTakeW);
+  to.rows_per_layer = static_cast<Uint32>(g_nTakeH);
+  SDL_GPUCopyPass *pCopy = SDL_BeginGPUCopyPass(pCmd);
+  SDL_DownloadFromGPUTexture(pCopy, &from, &to);
+  SDL_EndGPUCopyPass(pCopy);
+  return true;
+}
+
+// The grab's pixels to the design engine once the card has drawn them.
+static void GpuDesignTake(void)
+{
+  const void *pGot = SDL_MapGPUTransferBuffer(g_device, g_grabDown, false);
+  const bool bBgra = g_swapFormat == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM ||
+                     g_swapFormat == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB;
+  DesignGrabTake(pGot, g_nTakeW, g_nTakeH, bBgra);
+  if (pGot != NULL)
+    SDL_UnmapGPUTransferBuffer(g_device, g_grabDown);
+}
+#endif
 
 bool PortGpuFrame(const Uint8 *pScreen, const Uint8 *pCover, int nWidth, int nHeight,
                   const SDL_Color *pColors, bool bPaletteChanged, bool bPresent, bool bCheck)
@@ -1280,8 +1515,23 @@ bool PortGpuFrame(const Uint8 *pScreen, const Uint8 *pCover, int nWidth, int nHe
   GpuFrameEffects(pCmd, nWidth, nHeight, shown, bFx, bCheck, &snap);
   GpuVideoUp(pCmd);
   const bool bShown = !bPresent || GpuFrameWindow(pCmd, nWidth, nHeight, shown, bFx);
-
-  if (!bCheck && !snap.bOn) {
+  // the player's screenshot, of the same frame the window was given
+  const bool bShot = g_nShotState == 1 && GpuFrameShot(pCmd, nWidth, nHeight, shown, bFx);
+  if (g_nShotState == 1 && !bShot) {
+    g_bShotOk = false;
+    g_nShotState = 2;
+  }
+#ifdef HX_DESIGN
+  bool bPanels = false;
+  bool bClip = false;
+  const bool bGrab = !snap.bOn && DesignGrabAsked(&bPanels, &bClip);
+  const bool bGrabbed = bGrab && GpuDesignGrab(pCmd, nWidth, nHeight, shown, bFx, bPanels, bClip);
+  if (bGrab && !bGrabbed)
+    DesignGrabTake(NULL, 0, 0, false);
+  if (!bCheck && !snap.bOn && !bShot && !bGrabbed) {
+#else
+  if (!bCheck && !snap.bOn && !bShot) {
+#endif
     GpuSubmit(pCmd);
     return bShown;
   }
@@ -1292,10 +1542,27 @@ bool PortGpuFrame(const Uint8 *pScreen, const Uint8 *pCover, int nWidth, int nHe
     g_nSnapH = snap.pFrom != NULL ? shown.nH : nHeight;
     g_nSnapState = 2;
   }
-  if (pFence == NULL)
+  if (bShot) {
+    g_bShotOk = false;
+    g_nShotState = 2;
+  }
+#ifdef HX_DESIGN
+  if (pFence == NULL && bGrabbed)
+    DesignGrabTake(NULL, 0, 0, false);
+#endif
+  if (pFence == NULL) {
+    if (bShot)
+      GpuShotRelease();
     return bShown;
+  }
   SDL_WaitForGPUFences(g_device, true, &pFence, 1);
   SDL_ReleaseGPUFence(g_device, pFence);
+#ifdef HX_DESIGN
+  if (bGrabbed)
+    GpuDesignTake();
+#endif
+  if (bShot)
+    GpuShotSave();
   if (snap.bOn) {
     const void *pGot = SDL_MapGPUTransferBuffer(g_device, snap.pDown, false);
     if (pGot != NULL) {

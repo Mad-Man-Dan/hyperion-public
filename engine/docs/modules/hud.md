@@ -13,8 +13,8 @@ worked on (`PortHudDesignHeld`, the user's decision of 2026-10-27): the tab show
 
 A design is a pair of files in the HUD format, version 3: a layout (panels, layers, slots,
 bindings, timelines, options) and a style (materials, palette, looks, lights, sounds, since
-round 12 a tooltip, and since 2026-10-24 the music player's skin). The format is `../hud-format.md`, Hyperion's copy of the design center's,
-with Hyperion's additions marked. The engine reads and plays the files as the design center's
+round 12 a tooltip, and since 2026-10-24 the music player's skin). The format is `../hud-format.md`, Hyperion's copy of the design pages' (`design/04-widescreen-ui/hud-format.md`),
+with Hyperion's additions marked. The engine reads and plays the files as the design pages'
 player (`hudplayer.js`) does, so a file checked there means the same here.
 
 1.17's console does not go away under a design. Its dialogs live on and draw into their own
@@ -114,7 +114,7 @@ did not before 0.6.10.
 The built-in files are in `engine/huds/`: `mech-span.json`, `mech-span-min.json`,
 `mech-flank.json`, `mech-flank-right.json`, `terran-r9.json`, and `styles/mech-gunmetal.json`,
 `mech-graphite.json`, `mech-blackout.json`, `terran-r8.json`. They are copies of the design
-center's round 13 files, built there from its parts (`huds/kits/build-mech.mjs`,
+pages' round 13 files, built there from its parts (`huds/kits/build-mech.mjs`,
 `build-r9.mjs`). `tools/hud/import_builtins.py` copies them and makes Hyperion's changes, each
 file's `note` saying which:
 
@@ -125,7 +125,7 @@ file's `note` saying which:
   out.
 
 Take a new round by running it again. It stops when a layer it changes is gone from the design
-center's files. The files hold no Blizzard art: the mech and R9 designs are procedural. The
+pages' files. The files hold no Blizzard art: the mech and R9 designs are procedural. The
 builds put them beside the program, and `package.py` puts them in `Data\huds\`.
 
 A player's design is a folder of `huds\` in the data folder holding `hud.json` (the layout) and
@@ -203,7 +203,7 @@ place of 1.17's bubble. `HudLoad` adds a `tooltip` panel at z 100; `HudPlayer::T
 as `hudplayer.js`'s `tipLayout`, `tipPlace` and `tipPath` do, and fires `tip.show` and
 `tip.hide` for its timelines. Two changes of Hyperion's (the user, 2026-10-23): the tooltip is
 placed against the button itself, above it as 1.17's and Remastered's are, where the design
-center places it against the button's panel; and it shows and goes at once, as the original's
+pages place it against the button's panel; and it shows and goes at once, as the original's
 does, so Hyperion's styles leave out the `tip.show` and `tip.hide` timelines (each style's
 `note` says so).
 
@@ -244,7 +244,7 @@ lights the tooltip as well: `tipAccent`, `tipAccentHot` (65% of the way to white
 See also `addons.md`. A style's `musicPlayer` block (`../hud-format.md`, "The
 music player") skins a music add-on's windows while the design plays; Hyperion has none at
 present, so the block is read and checked and nothing wears it. `ValidateStyle` checks
-the block in the design center's words. `MusicSkinOf` resolves it into `HudDesign::music`
+the block in the design pages' words. `MusicSkinOf` resolves it into `HudDesign::music`
 (`HudMusicSkin`), in `HudLoad` after the palette is worn. The parts it resolves:
 
 - **colours**: each one swapped from the palette and checked as hex;
@@ -279,12 +279,76 @@ part's first layers at those boxes and hides the rest. `PlaceAll` keeps the pane
 rather than the band, `Sides` leaves it out, and the hits leave it out, since the windows take
 their own mouse. The overlay draws after the HUD, so the plates follow the windows a frame late.
 
+## A mod's unit readout in the slot
+
+A mod may lay out the single-unit panel and add to it (`port_readout.h`, the format in
+`../../docs/mod-data.md`; the drawing in `render.md`, "The unit readout"). One drawing serves both
+consoles: the readout draws into the panel's own picture, which the `selection` slot already
+shows as its pixels, so a mod's readout appears on whichever console the player chose and the
+slot reads nothing of the format. With no mod readout the slot is as it was, pixel for pixel.
+
+The slot's part of it is the room, the panel's place in the slot, the group view's marks and the
+words.
+
+- **The room.** `PortHudReadoutRoom` (`port_hudinput.cpp`) measures the laid-out slot in the
+  readout's own pixels, as `PortHudCage` reads the minimap's box: the panel fitted whole in the
+  slot (`HudRoomIn`), then the slot in the panel's pixels. The spare counts only when it is wide
+  or tall enough to write a line in, so a margin too small to use does not push the panel off
+  centre. Which way the spare falls is the slot's shape, not a choice: the panel is wider than it
+  is tall, so a wide short slot leaves columns beside it (R9 at 536 by 92, Mech span at 476 by 92)
+  and a squarer one leaves rows under it (Mech flank at 270 by 136). The classic console, a design
+  with no selection slot and a slot no bigger than the panel all give the panel's own size. It is
+  set from the slot just laid out, in `GpuHudDraw`'s pass right after `PortHudHitsSet`, so the
+  readout has it before anything is drawn from it.
+- **The panel's place.** While a readout draws (`PortReadoutDraws`), `HudReadoutBox` puts the
+  panel at the slot's start on the axis with room to spare, so that what the readout adds has one
+  unbroken room beside or under it rather than a margin at each end; with no room to spare, and
+  for a slot showing no readout, it is `HudFit` and the panel keeps the middle. The drawing
+  (`SlotPrims`) and the presses (`PartOf`) take the box from that one function, so a click on the
+  wireframe lands where the wireframe is drawn.
+- **The readout's own drawing.** A design draws it inside the selection slot's own layer and the
+  classic console by the panel's place (the user's decision, 2026-11-06). The layer makes a
+  `PortReadoutSurface` over itself (`ReadoutSurface`): the readout draws in its own pixels with
+  (0, 0) at classic's panel's top left, and each call is put through the panel's box in the slot
+  and then the slot's own placing, so the readout comes out right under whatever the design does
+  to the panel, a turn included, and takes the layer's effects with it. The readout registers its
+  drawing with `PortHudReadoutSurfaceSet` and nothing is drawn while none is registered, so a game
+  with no mod readout costs the slot one null test. The classic console has no layer:
+  `PortHudReadoutPlace` gives it the panel's box, the room's box beside or under it and the scale,
+  in the game's own screen pixels, and on that console the panel is the StatData dialog's own
+  rectangle at a scale of 1 with no room, since classic's panel is the whole of it and what a mod
+  adds there takes the room classic leaves free.
+- **The marks.** Where several units are selected, each box of the group view carries the unit's
+  rank as a pip in its top right corner -- every ranked unit, the first rank the file names
+  included, three pixels for that one and a pixel wider for each rank above it -- and the
+  first three things on it down its left, the ones that ask loudest first
+  (`PortReadoutKindPriority`, and the least time left among equals). The readout's `status_look`
+  says how those show (`nGroupMark`): its glyphs, which is the default and the user's pick, each
+  the kind's glyph inside a near-black frame, round for a thing working for the unit and cornered
+  for one against it, drawn in the colour the status named for itself or in its side's green or
+  red where it named none; or its dots; or the tile's edge in the loudest thing's hue with that
+  one glyph, which takes the hue either way; or none. A tile too small for a glyph to read falls
+  back to the dots. `PortConsoleRollMarkOf` works out the values once and
+  `PortConsoleRollMarks` and `GridMarks` draw them, both walking `PortReadoutGlyph`'s strokes and
+  both placing them by `PORT_ROLL_MARK`, `PORT_ROLL_PITCH` and `PORT_ROLL_EDGE`, so the two
+  consoles cannot drift. 1.17's panel is eight bit, so its colours go to the palette's nearest and
+  a rank's hue is approximate there, where a design's grid has the readout's own; the pip's size
+  carries the rank either way.
+- **The words.** A box's tooltip names the unit as the readout does, gives its rank where the
+  readout has a word for it, and lists what is on it with the time each has left, over 1.17's own
+  lines (`PortConsoleRollTip`): in `statdata_hover_update` for the panel's boxes and in
+  `GridMouse` for a design's grid cells. The four stat icons carry the readout's own lines under
+  classic's, or in place of them where the file gives `tooltip` patterns
+  (`PortConsoleRollIconTip`, from `PortReadoutSlotTip`). That one goes in at
+  `statdata_ctx_show`, where every one of the panel's tooltips is shown, so both consoles get it:
+  over a design the bubble is already the design's tooltip (`ctxhelp_show`).
+
 ## Replays
 
 Round 15 (the user, 2026-10-25: "currently our replay and observer styl uses the normal game
 variant of them"). A layout may name a second layout, its `replay`, that the game wears while a
 replay plays (`../hud-format.md`, Replays). Each of the four Mech layouts names one,
-`mech-*-replay.json`, which `tools/hud/import_builtins.py` copies from the design center with the
+`mech-*-replay.json`, which `tools/hud/import_builtins.py` copies from `design/04-widescreen-ui/` with the
 game layouts. A match watched from a LAN room or the AI lab plays as a replay, so it wears it
 too; an observer has no other way in.
 
@@ -394,7 +458,7 @@ line a `seekHit` rect whose action is `replay.seek`.
 - **Actions** (`HudAction`, `port_hudfile.h`): a layer names what it does, and a press does what
   the slot of that name does (`PressAction`): the console's buttons, the groups, the replay's
   buttons, `stats.popup`, `stats.side`, `stats.page.next|prev|<page>`, `vision.0` to `vision.7`.
-  `ActionShown` and `ActionGreyed` (`port_gpu_hud.cpp`) follow the design center's rules; a press
+  `ActionShown` and `ActionGreyed` (`port_gpu_hud.cpp`) follow the design pages' rules; a press
   fires `panel.press` with the action, which a timeline's `action` may pick out.
 - **`ride`** places a layer at the lit end of a meter layer of the same panel (`HudPlayer::Frame`,
   from that layer's box this frame).
@@ -415,7 +479,7 @@ replay or a watched skirmish, where the recorded seat's result is not the viewer
 (`banner.win`, `banner.lose`) was taken out of every layout on 2026-10-25 (the user: "Can we
 remove that wording as a whole, I prefer the old method of the modal popup, but just have it in
 our own gui ui style"): the game menu's Victory and Defeat box says it. The victory and defeat
-timelines keep their lights. The design session took it out of the design center's builders the
+timelines keep their lights. The design session took it out of the design pages' builders the
 same day, with the Mech styles' `winText`, `loseText` and `banner` look, and
 `tools/hud/import_builtins.py` brought those in; round 8's console and the archived layouts keep
 theirs.
@@ -498,7 +562,9 @@ option selects 12 as recorded.
   1.17's wireframe does (`StatDataSelectAmong`: alone, Shift leaves it out, Ctrl takes its
   type), its tooltip names the unit with 1.17's lines (status string 0x329), and a tab shows its
   page (`PortHudGridTurn`). The page shown is the one holding the active subgroup's first unit
-  until the player turns it (`PortHudGridPage`). Presentation only: the page is the HUD's.
+  until the player turns it (`PortHudGridPage`). Presentation only: the page is the HUD's. A mod
+  readout marks a cell and names it in the tooltip, as it marks the panel's own boxes ("A mod's
+  unit readout in the slot").
 - **Buildings' wireframes.** grpwire.grp, the panel's small wireframes, has 1.17's 131 units'
   and no building's. A building's is the console's large wireframe (wirefram.grp) at half its
   size, made into a frame as 1.17's are (`PortConsoleSmallWire`), so 1.17's panel and the grid

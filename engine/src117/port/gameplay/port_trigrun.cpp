@@ -194,3 +194,23 @@ void PortTrigSound(const char *pszPath)
   if (pszPath != NULL && pszPath[0] != '\0')
     play_digital(pszPath);
 }
+
+void PortTrigVictory(int nPlayer)
+{
+  if (nPlayer < 0 || nPlayer >= PlayerSlots())
+    return;
+  const DWORD dwSaved = sgdwTriggerPlayer;
+  sgdwTriggerPlayer = static_cast<DWORD>(nPlayer);
+  act_victory();
+  sgdwTriggerPlayer = dwSaved;
+}
+
+void PortTrigDefeat(int nPlayer)
+{
+  if (nPlayer < 0 || nPlayer >= PlayerSlots())
+    return;
+  const DWORD dwSaved = sgdwTriggerPlayer;
+  sgdwTriggerPlayer = static_cast<DWORD>(nPlayer);
+  act_defeat();
+  sgdwTriggerPlayer = dwSaved;
+}

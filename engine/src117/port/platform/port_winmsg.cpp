@@ -9,6 +9,9 @@
 #include "../render/port_present.h"  // PORT_TEST_MOUSE
 #include "../data/port_sound.h"  // PortSoundForeground
 #include "port_standalone.h"  // PortModuleResource
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 #include <SDL3/SDL.h>
 #include <string.h>
 #include <deque>
@@ -520,6 +523,9 @@ static void Pump(void)
   SDL_PumpEvents();
   SDL_Event e;
   while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST) == 1)
+#ifdef HX_DESIGN
+    if (!DesignEvent(&e))  // the design engine's panels see it first
+#endif
     Translate(e);
 }
 

@@ -611,7 +611,7 @@ offset. An outline is offset copies of the glyphs. A design should not depend on
 The mock draws vector text at the device's own pixels, with the shadow's blur.
 
 **The fonts Hyperion draws (Hyperion's addition).** The engine draws every text in the fonts it
-ships, as the design center draws a file without Remastered's: `eurostile`, `blizzard` and `saira`
+ships, as the design pages draw a file without Remastered's: `eurostile`, `blizzard` and `saira`
 in Saira, `eurostile-ext` and `michroma` in Michroma, and `chakra-petch` in the cut its `weight`
 picks, 400 below 450, 500 from 450, 600 from 550 and 700 from 650 (`HudFaceOf` in
 `port_hudplay.cpp`, `TextPrims` in `port_gpu_hud.cpp`). A `weight` of 550 or more on any other
@@ -1214,7 +1214,7 @@ shows, so two screens with different widths (or a resize) show the page holding 
 Clicking a wireframe selects that unit; Shift takes it out; Ctrl keeps only its type.
 
 **The grid in Hyperion (Hyperion's addition).** The cells sit beside the tabs, from the left, or
-up to the tabs when they are at the right, as StarCraft II's do; the design center's player
+up to the tabs when they are at the right, as StarCraft II's do; the design pages' player
 centres them in the slot. Hyperion's copies of the built-in layouts show at most 8 columns, 24
 units a page as StarCraft II's (the user, 2026-10-23), and the flank layouts 5; each layout's
 `note` says so. A cell is drawn as 1.17's panel draws a selected unit: its box by the unit's
@@ -1328,8 +1328,10 @@ The names, all read-only, all things the player can see:
 | `selection.subgroup`, `selection.subgroups` | the active subgroup's unit name, and how many unit types are selected |
 | `group.0.count` to `group.9.count` | the units in each control group |
 | `group.last` | the group last recalled, 0 to 9, or -1 |
+| `mode.<key>` | a value the game's mode set by that name (`../../docs/mod-data.md`, "A game mode"); empty in a game with no mode, or before the mode sets it. A value that reads as a number is one |
 
-A name's parts may be numbers (`group.3.count`); every name is still checked against this list.
+A name's parts may be numbers (`group.3.count`); every name is still checked against this list,
+`mode.<key>` apart, whose key is the mode's own.
 
 The language is numbers, `'strings'` (or `"strings"`), the names, `+ - * /` (`+` joins
 strings), `< <= > >= == !=`, `a ? b : c`, brackets, unary minus, and three functions,
@@ -1703,7 +1705,7 @@ tooltip, is an error.
 slot holding the point, and takes its corners through the slot's transform, so the tooltip sits
 by the button where the design drew it, whatever the design did with the slot. It is placed
 against the button's box, above it as 1.17's and Remastered's tooltips are, where the design
-center's player places it against the button's panel (the user, 2026-10-23). It shows and goes
+pages' player places it against the button's panel (the user, 2026-10-23). It shows and goes
 at once, as the original's does: Hyperion's copies of the styles leave out the `tip.show` and
 `tip.hide` timelines, so the panel is hidden at once, as the format says when there is none.
 
@@ -1837,8 +1839,8 @@ their legends read, and its LCD in the teal of the console's LCD cells.
 These load with a note: a field that means nothing, a colour name, part, role or moment the
 player does not have, a field in a `set` that means nothing. `SCHudPlayer.musicPlayer(style)`
 returns the block resolved (each colour a colour, each part's look whole, each font and sound),
-or `null`; `musicskin.js` turns that into the player's skin. The mock's check is
-`scripts/smoke-hyperion-music-skins.mjs` in the design center.
+or `null`; `musicskin.js` turns that into the player's skin. The mock's check was
+`scripts/smoke-hyperion-music-skins.mjs` in the old design center.
 
 ### Sizes, window shade and menus
 
@@ -2543,7 +2545,7 @@ page, each a line of text; and, when it plays, `panels` and `timelines`, the cou
 compiled to. With `--layout 2560x1080` it adds `lw`, the screen's width in units, `rects`, each
 panel's box by its id, and `layers`, every layer drawn with its panel and layer numbers, its
 target (`panel.layer`), its kind, its box, its margin and its transform, which is what
-`tools/hud/hudgolden.mjs` compares against the design center's player. `--out` writes the JSON to
+`tools/hud/hudgolden.mjs` compares against the design pages' player. `--out` writes the JSON to
 a file instead of standard output. The exit code is 0 when the design plays, 1 when it has errors,
 2 when a file does not read.
 
@@ -2688,7 +2690,7 @@ limits are 512 entries and 64 MB unpacked in all, counted from the archive's own
 a byte is inflated; past either, the rest is left out with a note. None of these notes stops the
 design loading.
 
-**Where it differs from the design center's reader.** The style is `style.json`, one for the
+**Where it differs from the design pages' reader.** The style is `style.json`, one for the
 design, not `styles/<name>.json` one per race, and the layout's `style` and `package` fields are
 not read: a package carrying several styles loses all but the one named `style.json`. A `files/`
 entry is taken by its first bytes rather than its extension, and a WebM video is allowed
@@ -2732,7 +2734,7 @@ R9 use none of their own; the tooltip's cost icons are 1.17's (Tooltips).
 
 **The `time` slot.** Never filled: the user wants no game timer in the skins. Hyperion's copies
 of the Mech layouts leave out `btnWell3`, `timeCell` and `time`, and R9's `clockBox` and `time`.
-The design center's keep them.
+The design pages' keep them.
 
 **Tooltips.** Built. They show:
 

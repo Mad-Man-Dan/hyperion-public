@@ -1312,7 +1312,8 @@ BOOL sub_49E620(sound_t *pSound, LONG nVolume, int nPan, int nSoundId,
 
   // The guards nest around the success path: a shared `return 0` that is not
   // textually last is laid out inline and costs 12 B in jump widths.
-  if ((DWORD)(pSound->nLastPlayed + dwNow) >= 0x50) {
+  // Hyperion: a mod's sound may wait longer between plays (PortSoundGap, 0x50 in 1.17)
+  if ((DWORD)(pSound->nLastPlayed + dwNow) >= PortSoundGap(nSoundId)) {
     nSlot = snd_find_slot(bPriority);
     if (nSlot >= 0) {
       if (pBuffer->GetStatus(&dwStatus) == 0) {
@@ -1693,4 +1694,24 @@ void stop_digital()
     }
     ++pEnt;
   } while (i != 0);
+}
+
+// Hyperion: the slots as the live channel's sounds reads them (port_sound.h).
+int PortSoundSlots(int *pnIds, int *pnPriorities)
+{
+  int n = 0;
+  for (int i = 0; i < 8; ++i) {
+    IDirectSoundBuffer *pBuffer = sgSoundsPlaying[i].pBuffer;
+    DWORD dwStatus = 0;
+    const bool bOn = pBuffer != 0 && pBuffer->GetStatus(&dwStatus) == 0 && dwStatus == 1;
+    pnIds[i] = bOn ? sgSoundsPlaying[i].nSoundId : -1;
+    pnPriorities[i] = bOn ? sgSoundsPlaying[i].bPriority : -1;
+    n += bOn ? 1 : 0;
+  }
+  return n;
+}
+
+int PortSoundPlay(int nSoundId)
+{
+  return sub_49E740(nSoundId);
 }

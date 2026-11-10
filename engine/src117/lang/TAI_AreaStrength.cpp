@@ -23,6 +23,7 @@ static_assert(offsetof(TGuard, bType) == offsetof(TSoldier, bType), "the AI reco
 #include "../gen/globals117.h"
 #include "../h/playervision.h"  // Hyperion: the slots past 31 (stage D)
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../h/typelimits.h"  // Hyperion: UnitTypeMod, UnitTypeLooks
 
 // The globals this TU reaches, dual-spelled, one `#ifndef` per name.
 //
@@ -43,6 +44,16 @@ static_assert(offsetof(TGuard, bType) == offsetof(TSoldier, bType), "the AI reco
 extern DWORD sgnThreatBase_g[456];
 #endif
 #endif
+
+// Hyperion: the threat of a mod's unit types, worked out as the classic ones' are, in a table
+// of their own past the classic two rows; ThreatBase reads either.
+static DWORD s_modThreatBase[2][UNIT_TYPES_MAX - UNIT_TYPE_MOD_FIRST];
+static DWORD ThreatBase(int nAirGround, unsigned nType)
+{
+  if (UnitTypeMod(nType))
+    return s_modThreatBase[nAirGround][nType - UNIT_TYPE_MOD_FIRST];
+  return sgnThreatBase_g[nAirGround * 228 + nType];
+}
 
 // Forward declarations for this TU. src117/h/TAI_AreaStrength.h, included
 // above, is the contract, and C2556 catches a mismatch at compile time.
@@ -477,7 +488,7 @@ int tai_get_threat_score(CUnit *pUnit, int nAirGround)
 {
   int nScore;
 
-  nScore = sgnThreatBase_g[nAirGround * 228 + pUnit->wType];
+  nScore = ThreatBase(nAirGround, pUnit->wType);  // Hyperion: or a mod's unit's
   if (pUnit->wType == 125)
     nScore = pUnit->GetTotalOccupiedCargo() * sgnThreatBase_g[nAirGround * 228];
 
@@ -570,12 +581,12 @@ CUnit *tai_get_greatest_air_threat_near(CUnit *pUnit)
 //   mov eax, dword ptr [ecx*4+6AC8C0h]   <- row 1, i.e. +228 DWORDs
 int tai_get_air_threat_base(int nUnitType)
 {
-  return sgnThreatBase_g[0 * 228 + nUnitType];
+  return ThreatBase(0, nUnitType);  // Hyperion: or a mod's unit's
 }
 
 int tai_get_ground_threat_base(int nUnitType)
 {
-  return sgnThreatBase_g[1 * 228 + nUnitType];
+  return ThreatBase(1, nUnitType);  // Hyperion: or a mod's unit's
 }
 
 // 0x4A9800 / 0x4A9820 (29 B each) -- the whole-region form of the two above.
@@ -710,6 +721,25 @@ void tai_compute_unit_threat_scores()
     sgnThreatBase_g[0 * 228 + nType] = (dwAir == 1 && dwGround > dwAir) ? 0 : dwAir;
     sgnThreatBase_g[1 * 228 + nType] =
         (dwGround == 1 && dwAir > dwGround) ? 0 : dwGround;
+  }
+
+  // Hyperion: and a mod's unit types the same way, by their own weapons, their turret's
+  // when they have one, and the splash of the unit each takes its looks from
+  for (unsigned t = UNIT_TYPE_MOD_FIRST; UnitTypeMod(t); ++t)
+  {
+    const WORD wAt = guwAttachedUnit[t];
+    const unsigned nFrom = wAt == 228 ? t : wAt;
+    DWORD dw[2];
+    for (int k = 0; k < 2; ++k)
+    {
+      const int nW = k == 0 ? gubUnitWeaponAir[nFrom] : gubUnitWeaponGnd[nFrom];
+      dw[k] = nW == WEAPON_NONE ? 1
+                                : tai_compute_splash_damage_threat(
+                                      static_cast<int>(UnitTypeLooks(t)),
+                                      tai_compute_hit_point_threat(static_cast<int>(t), static_cast<weapon_id_t>(nW)));
+    }
+    s_modThreatBase[0][t - UNIT_TYPE_MOD_FIRST] = (dw[0] == 1 && dw[1] > dw[0]) ? 0 : dw[0];
+    s_modThreatBase[1][t - UNIT_TYPE_MOD_FIRST] = (dw[1] == 1 && dw[0] > dw[1]) ? 0 : dw[1];
   }
 }
 

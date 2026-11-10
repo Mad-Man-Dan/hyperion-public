@@ -28,6 +28,9 @@
 #include "../h/CUnitOrder.h"    // ours: unit_race_matches_refinery_bldg
 #include "../h/hxrules.h"       // Hyperion: HxRules
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
+#include "../port/data/port_moddata.h"  // Hyperion: g_hxModGame
+#include "../port/data/port_modlua.h"  // Hyperion: a mod's on_death
 #include "../h/handicap.h"  // Hyperion: a player's handicap
 
 // order_highlight (0x51B980) -- a WORD table indexed by COrder::bOrderId, compared against
@@ -356,6 +359,8 @@ void CUnit::sub_42A880(int nEnable, order_id_t nOrderId, CUnit *pTarget) {
 
 // CUnit::Suicide -- 0x42A4D0, 89 B.
 void CUnit::Suicide() {
+  if (g_hxModGame)
+    ModLuaDeath(this);  // Hyperion: a mod's script hears of it at the frame's end
   DropInventory();
   RemoveAllOrders();
   order_target_t t;
@@ -613,6 +618,7 @@ void CUnit::SetNextOrder_CUnit(order_id_t bOrderId, CUnit *pTarget) {
 // Whether a unit type is the refinery building of the unit's own race.
 BOOL __fastcall unit_race_matches_refinery_bldg(CUnit *pUnit, WORD wUnitType) {
   BYTE bRace = pUnit->GetRace();
+  wUnitType = static_cast<WORD>(ModRulesGasType(wUnitType));  // Hyperion: or a mod's
   if ((bRace == 0 && wUnitType == 0x95) || (bRace == 1 && wUnitType == 0x6E) ||
       (bRace == 2 && wUnitType == 0x9D))
     return TRUE;

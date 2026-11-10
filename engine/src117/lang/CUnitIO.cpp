@@ -18,6 +18,7 @@
 #include "../h/TAI_Captain.h"       // TSoldier, soldier_id, soldier_ptr
 #include "../h/saveload.h"          // get_upgrade_level
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The globals this TU reaches, dual-spelled: one #ifdef per name, never one over the
 // block, so adding a name cannot undeclare the ones below it.
@@ -160,7 +161,7 @@ void CUnit::DecodeFromSave(int nArg0)
     pUnionD0 = reinterpret_cast<CUnit *>(
         CThingy::GetDoodadThingy((int)reinterpret_cast<intptr_t>(pUnionD0)));
 
-  if (wType == 0x9C)
+  if (ModRulesPowerSource(wType))  // Hyperion: and a mod's power source
     pUnionD0 = reinterpret_cast<CUnit *>(
         CSprite::GetSprite((int)reinterpret_cast<intptr_t>(pUnionD0)));
 
@@ -186,7 +187,7 @@ void CUnit::DecodeFromSave(int nArg0)
     pBurrowLinkNext = CUnit::FromId((DWORD)reinterpret_cast<DWORD_PTR>(pBurrowLinkNext));
   }
 
-  if (wType == 0x9C)
+  if (ModRulesPowerSource(wType))  // Hyperion: and a mod's power source
   {
     pPsiLinkPrev = CUnit::FromId((DWORD)reinterpret_cast<DWORD_PTR>(pPsiLinkPrev));
     pRallyUnit = CUnit::FromId((DWORD)reinterpret_cast<DWORD_PTR>(pRallyUnit));
@@ -288,7 +289,7 @@ void CUnit::EncodeToSave(int nArg0)
     pUnionD0 = reinterpret_cast<CUnit *>((intptr_t)CThingy::GetDoodadThingyID(
         reinterpret_cast<CThingy *>(pUnionD0)));
 
-  if (wType == 0x9C)
+  if (ModRulesPowerSource(wType))  // Hyperion: and a mod's power source
     pUnionD0 = reinterpret_cast<CUnit *>(
         (DWORD_PTR)CSprite::GetSpriteID(reinterpret_cast<CSprite *>(pUnionD0)));
 
@@ -317,7 +318,7 @@ void CUnit::EncodeToSave(int nArg0)
     pBurrowLinkNext = reinterpret_cast<CUnit *>((intptr_t)pBurrowLinkNext->GetUnitID());
   }
 
-  if (wType == 0x9C)
+  if (ModRulesPowerSource(wType))  // Hyperion: and a mod's power source
   {
     pPsiLinkPrev = reinterpret_cast<CUnit *>((intptr_t)pPsiLinkPrev->GetUnitID());
     pRallyUnit = reinterpret_cast<CUnit *>((intptr_t)pRallyUnit->GetUnitID());

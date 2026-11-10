@@ -85,6 +85,11 @@ struct Match {
   int nKey = 2 | 1 << 16, nSpeed = 6;  // the game type's template key, and 1.17's speed 0 to 6
   bool bHyperion = false;  // it plays by Hyperion's rules, the host's choice (hxrules.h)
   MutatorSet mut;          // and its mutators, the host's (port_mutators.h)
+  // and the game mode it is played in, the host's (port_mode.h): the mode's id, "" for none,
+  // the settings off the mode's own defaults as JSON object text, and the run's seed, 0 for one
+  // every seat draws from the game's own. Every seat is sent these with its launch.
+  std::string mode, modeName, modeSettings;
+  uint32_t dwModeSeed = 0;
   int nMapPlayers = 8;
   Seat seats[kPlayers];
   std::vector<int> watchers;

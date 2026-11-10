@@ -3,6 +3,48 @@
   "about": "Hyperion's release notes, newest first (docs/versioning.md). Hyperion.exe carries them: the build compiles this file in, the home screen shows the first three entries as notifications (each with its line), and Patch Notes shows them all. tools/release_notes.py checks it against hyperion/version.h and writes docs/release-notes.md from it.",
   "entries": [
     {
+      "id": "v0.7.3-beta",
+      "kind": "release",
+      "version": "0.7.3-beta",
+      "date": "2026-11-10",
+      "title": "Map and mod groundwork, and fixes",
+      "summary": "Groundwork for larger maps and deeper mods, and fixes for games with more than 8 players.",
+      "line": "Groundwork for larger maps and deeper mods, and fixes for games with more than 8 players.",
+      "changed": [
+        {
+          "title": "Groundwork for maps",
+          "text": "Hyperion’s map format is documented for map editors: maps up to 512 by 512 tiles in any width and height, and up to 64 players. A map can also say it keeps the original’s limits."
+        },
+        {
+          "title": "Groundwork for mods",
+          "text": "Mods can run scripts, mark areas on the map and minimap, add statuses and change the unit panel. Tools for making such mods come in a later release."
+        }
+      ],
+      "fixed": [
+        {
+          "text": "Melee games with more than 8 players no longer start a player with nothing."
+        },
+        {
+          "text": "Replays of games with more than 12 players seat a player who was destroyed before the end."
+        },
+        {
+          "text": "Building placement previews no longer draw over attack overlays, nor health bars over selection circles."
+        },
+        {
+          "text": "Some early-format maps load again as Use Map Settings."
+        },
+        {
+          "text": "A map made for a mod no longer starts without that mod."
+        },
+        {
+          "text": "Screenshots save the window as shown, with the HUD design and full colour."
+        },
+        {
+          "text": "Safer reading of sound files from mods and maps."
+        }
+      ]
+    },
+    {
       "id": "v0.7.2-beta",
       "kind": "release",
       "version": "0.7.2-beta",

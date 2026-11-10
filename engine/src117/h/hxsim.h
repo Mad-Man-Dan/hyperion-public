@@ -147,9 +147,21 @@
 //                  by their size. Seven of classic's images are 256 a
 //                  side (the Ion Cannon, the Xel'Naga Temple and its shadow, a plasma, two
 //                  ice trees and an Installation doodad), which grow by a pixel.
+//  23  2026-11-05  game modes (port_mode.h): a game may carry a mode, a mod whose scripts
+//                  are part of its simulation. Its records are made as the game loads from
+//                  the seed and the settings, units the mode owns are the mode's and not
+//                  the computer's, and a unit's brain and a cast's finder may be the mode's
+//                  Luau. A mod's tech that names no use requirements may be cast by any unit
+//                  whose command card carries the button, where before it could be cast by
+//                  none. A game without a mod or a mode is unchanged.
+//  24  2026-11-05  a mod's statuses and blocks gained the fields its scripts stood in for: a
+//                  status may say the damage its unit takes and name a script its end calls, a
+//                  damage block may take a share of each unit's most life, and a unit may carry
+//                  up to three auras, which its saved state now keeps a count for each of. A
+//                  game without a mod is unchanged.
 #ifndef HXSIM_H
 #define HXSIM_H
 
-#define HX_SIM_REVISION 22
+#define HX_SIM_REVISION 24
 
 #endif

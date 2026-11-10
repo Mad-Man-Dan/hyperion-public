@@ -171,6 +171,14 @@ past 7, or by a Hyperion save that carries one. While it is clear, every player 
 fewer than twelve, and loops run to `PlayerSlots()` or `PlayerLobbySlots()` rather than to
 the build's maximum, so a game plays and hashes the same in a build with more slots.
 
+Of a Hyperion map's slots past 7, a melee game seats players in its seats alone
+(`PlayersMapSeat`): the slots the map opens to a human or a computer that have a start
+location, which `PlayersMapUnit` notes from the map's UNIT sections as the map is looked at
+before its game. `seat_computer_player` passes over the others, `ShuffleStartSlots` leaves
+them out of its mask, so an owner no one plays (rescuable, unused, neutral) keeps its place
+and its record, and the map list counts the seats. Slots 0 to 7 keep classic's shuffle. A
+replay and a save take their slots as recorded, so neither is changed by it.
+
 A per-player global keeps its 1.17 address and type: it is declared as a `PlayerTable`,
 `PlayerGrid` or `PlayerMatrix`, whose `a` is 1.17's array in the data block and whose
 `Extra()` is one static block a tag for the new slots. `PlayerExtraIndex` decides between
@@ -196,6 +204,22 @@ Classic runs exactly 1.17's code. The seams are `AiFrame` (1.17's `sai_update`, 
 `gameloop_update_game`), `AiMeleeScript`, `AiThinkFrames`, `AiDifficulty`, `AiScriptWait`,
 `AiAttackCount`, `AiAttackAllowed`, `AiWorkerTarget`, `AiHarvestExtra` and
 `AiVisionRefresh`.
+
+One more call is not a level's: a unit classic's AI leaves entirely alone, which `AiModeKeeps`
+answers and which is false in every game without a mode. Two kinds of unit are such: one the
+game's mode has taken (`hx.own`, "Game modes" below), and every unit of the player a mode plays
+itself (`PortModeEnemySlot`, for a mode whose block says `"enemy_player"`; `AiMeleeScript`
+returns 0 for that slot, so no script of the game's ever starts for it and it builds, trains and
+attacks only as the mode says). `CUnit::DispatchComputerAI` does not think for such a unit;
+`CUnit::AttachAiRecord` gives one no record at all, so no town, guard post or banker holds it;
+`tai_soldier_add_to_captain` enlists none and `tai_captain_unit_is_recruitable` offers none, so
+no captain's job orders one; `town_add_unit` takes none on; and the two sweeps that order units
+with no record of their own, `tai_send_everything_to_attack` and `aiscript_assign_all_order`,
+pass them by. A mode may take a unit the computer already holds, which it does with the wave it
+has just made, so `tai_captain_service` lets its mode-owned soldiers go before any job runs and
+`guard_update_posts` gives up a post whose unit the mode now owns; both through `SAI_RemoveUnit`,
+which clears the captain, the town, the posts and the banker at once. What such a unit does is
+its mode's to say: with no brain and no orders it stands still.
 
 A level is a row of `kKnobs`: how long a unit waits before it thinks again, how long the
 script's waits run, attack size, worker target, the minutes before the first attack, whole
@@ -264,6 +288,16 @@ target more than 16 tiles off and out of range, through 1.17's `tai_pick_better_
 armed enemy near wins, a building near loses to an armed target. The AI otherwise stays 1.17's;
 a larger rework of it is planned.
 
+### Game modes
+
+A game may also be played with a game mode: a mod of its own whose settings the set-up's Game
+Mode tab chooses and whose scripts run the game from its first frame. The mode layer is
+`data.md`, "A game mode"; what it brings to the gameplay is that a game with one plays by
+Hyperion's rules with `HX_OPT_MODE`, that its records are rolled from a seed as the game starts,
+and that its scripts may take units off a computer (`hx.own`: classic's AI then leaves such a
+unit alone entirely, as the AI boundary above sets out, and the mode orders it through its
+brain), cast, order, win, lose, reveal and say lines. A mode and a content mod play together where the mode says it needs that mod.
+
 ### Mutators
 
 The skirmish set-up's mutators play: one set for every player of a game, chosen with it on
@@ -282,11 +316,14 @@ the set-up's Mutators tab (`front-end.md`, "The Mutators tab").
 | Tech and upgrades | Normal, Researched, No upgrades, No research | Normal | Researched: the players' tech and upgrades as the map loads; the other two: `UpgradeAllowed` and `ResearchAllowed` (`Allowed.cpp`): `MutatorUpgradesForbidden`, `MutatorResearchForbidden` |
 | Rich resources | Off, Past the naturals, Outside a radius, Farthest only, Every base; a distance of 32, 48, 64 or 80 tiles or a quarter, third or half of the map; a chance of 25, 50, 75 or 100% | Off | the read and roll as the map loads (`RichBasesMapLoaded`, below); a harvest (`CUnit::GetHarvest`): `MutatorTrip`; a load taken (`SetHarvestInventory`): `MutatorCarry`; a unit's name (`CUnit::GetName`): `MutatorRichName` |
 
-The unit limit is held with the mutators (`MutatorSet::nUnits`, the record's sixteenth value)
-but chosen in Game Options, not on the tab: Automatic, or 3,400, 6,800, 13,600, 27,200, 54,400,
-108,800 or 262,144 units, the table at least that (`loop.md`, "Caches for large
-games"). No preset sets it, and choosing a preset keeps it. Automatic grows the table with the
-supply cap past 200 (`MUTATOR_REVISION` 2).
+The unit limit is held with the mutators (`MutatorSet::nUnits`, the record's sixteenth value).
+The set-up does not ask for it (the user, 2026-11-09: "leave to max", "remove that question as it
+confuses the user"): a game by Hyperion's rules holds the most, 262,144 units, and one by
+classic's the original's 1,700 (`loop.md`, "Caches for large games"). The set-up drops a limit
+its settings kept from before. `--mutators units=<n>`, a room and the benchmark's set-up still
+name a count, the table at least that; no preset sets it. The full table costs a game about
+420 MB of memory and no time (measured 2026-11-10, four players on Lost Temple: 165 MB to
+586 MB in use, the same frames a second).
 
 The lists are the set-up's (the design's revision, 2026-10-26); a value they left, as Unlimited
 supply, one worker or a build time of ×2, still plays from `--mutators`, a room or an older

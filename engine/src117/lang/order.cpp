@@ -33,6 +33,7 @@ typedef int            BOOL;
 // header, which has to sit after the game headers: it declares each global
 // eagerly, so a type one of them names must already be complete.
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The status-pane selection holds 12 units: order_stim walks gpStatUnits from
 // 0x6AB4C8 up to 0x6AB4F8, which is 0x30 bytes of pointers, and the unported
@@ -342,7 +343,7 @@ void __fastcall order_kill_egg(WORD, BYTE) {
 //            retires both: neither has stack arguments. The callee's second
 //            argument is a WORD, so the unit type is copied in a 32-bit register.
 void __fastcall order_land(WORD wUnitType, BYTE) {
-  placebox_on(0x47, wUnitType);
+  placebox_on(0x47, static_cast<WORD>(ModRulesOwnType(gpStatUnit, wUnitType)));  // Hyperion: a mod's building lands as itself
 }
 
 void __fastcall order_morph(WORD wUnitType, BYTE) {
@@ -371,7 +372,7 @@ void __fastcall order_patrol(WORD, BYTE) {
 
 void __fastcall order_place(WORD wUnitType, BYTE) {
   if (bldg_get_unit_cost(gpStatUnit->bPlayer, wUnitType, 1, 1))
-    placebox_on(0x1E, wUnitType);
+    placebox_on(static_cast<BYTE>(ModRulesWorkerOrder(gpStatUnit, 0x1E)), wUnitType);  // Hyperion: its race's way
 }
 
 void __fastcall order_place_addon(WORD wUnitType, BYTE) {
@@ -387,7 +388,7 @@ void __fastcall order_place_cop(WORD, BYTE) {
 
 void __fastcall order_place_protoss(WORD wUnitType, BYTE) {
   if (bldg_get_unit_cost(gpStatUnit->bPlayer, wUnitType, 1, 1))
-    placebox_on(0x1F, wUnitType);
+    placebox_on(static_cast<BYTE>(ModRulesWorkerOrder(gpStatUnit, 0x1F)), wUnitType);  // Hyperion: its race's way
 }
 
 void __fastcall order_rally(WORD, BYTE) {
@@ -548,5 +549,5 @@ void __fastcall order_upgrade_bldg(WORD wUnitType, BYTE) {
 
 void __fastcall order_zerg_place(WORD wUnitType, BYTE) {
   if (bldg_get_unit_cost(gpStatUnit->bPlayer, wUnitType, 1, 1))
-    placebox_on(0x19, wUnitType);
+    placebox_on(static_cast<BYTE>(ModRulesWorkerOrder(gpStatUnit, 0x19)), wUnitType);  // Hyperion: its race's way
 }

@@ -21,6 +21,8 @@ struct PortJson {
   std::string s;
   std::vector<PortJson> items;                             // an array's
   std::vector<PortJsonMember> members;  // an object's, as name (first) and value (second)
+  int nAt = 0;  // where the value began in the text it was read from, as a count of bytes, so
+                // that a reader can say which line of a file a value is on (PortJsonLineAt)
 
   // A member of an object by name, an item of an array by place, or NONE.
   const PortJson &operator[](const char *pszName) const;
@@ -41,6 +43,10 @@ inline size_t PortJson::size() const { return kind == ARRAY ? items.size() : kin
 
 // Parses pszText. False, with *pszError saying where, when it is not JSON.
 bool PortJsonParse(const char *pszText, PortJson *pOut, std::string *pszError = nullptr);
+
+// The line a value read from pszText begins on, counting from 1, for a message that says where
+// in a file something is wrong; 0 when the text is shorter than the value's place in it.
+int PortJsonLineAt(const char *pszText, int nAt);
 
 // s as a JSON string, quoted: " and \ escaped, a control character as \u00XX, every other
 // byte (UTF-8's included) as it is. Every string the port writes into JSON goes through it.

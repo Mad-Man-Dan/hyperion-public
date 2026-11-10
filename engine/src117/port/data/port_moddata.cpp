@@ -43,10 +43,19 @@
 #include "port_formats.h"  // PortGroupNative
 #include "port_imagefile.h"  // PortImageDecode, a sheet's pictures
 #include "port_modsheet.h"   // ModSheetGroup
+#include "port_modtileset.h"  // ModTilesetLoad, a tileset's changes
+#include "port_modlang.h"    // ModLangApply, the player's language's text
 #include "../render/port_modart.h"  // PortModArtSet, PortModUiSet: art at its own resolution
+#include "../render/port_mapmark.h"  // the looks types.json gives the marks a script draws
 #include "../platform/port_paths.h"  // PortCommandOptions
 #include "../platform/port_standalone.h"  // PortDataBytes, PortDataGrown, PortDataRow, PortDataStore
-#include "port_typenames.h"  // TypeNameFind, the original's rows by name
+#include "port_typenames.h"  // TypeNameFind, TypeNameOf: the original's rows by name
+#include "port_mode.h"       // the game's mode, its settings and seed
+#include "port_modemap.h"    // the map read a mode's generate is given
+#include "../render/port_looks.h"  // PortLooksModeFile, PortLooksModeLooks
+#include "../../h/hxrules.h"       // RulesCampaignMission, the game's rule options
+#include "../../h/Teams.h"          // IsTeamGame
+#include "../../h/point16.h"       // point16_t, the start locations
 #include "port_video.h"  // PortVideoExtensions, a portrait's videos
 #include "port_iscript.h"
 #include "../platform/port_json.h"
@@ -55,9 +64,17 @@
 #include "../gameplay/port_session.h"  // Session
 #include "port_moddata_push.h"
 #include "port_modcheck.h"  // ModCheckFile
+#include "port_modstatus.h"  // ModStatusField, ModStatusLoad: statuses, auras, blocks
+#include "../hud/port_readout.h"  // PortReadoutLoad: the mod's unit readout
+#include "port_modlua.h"     // ModLuaField, ModLuaLoad: the scripts
+#include "port_modrules.h"  // ModRulesRead: a race's building rules and its advisor
+#include "port_modvoice.h"  // ModSoundSubtitle, ModSoundGap
 #include "port_stormapi.h"  // SFileUnloadFile
 #include "../platform/port_globals117.h"
 #include <SDL3/SDL.h>  // SDL_LoadPNG_IO, a mod's icons and wireframes
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // DesignModColumn
+#endif
 
 extern array_data_t gWEAPONSArrayDataTbl_g[25] OC_UNALIGNED;
 extern array_data_t gFLINGYArrayDataTbl_g[8] OC_UNALIGNED;
@@ -67,6 +84,7 @@ extern array_data_t gORDERSArrayDataTbl_g[20] OC_UNALIGNED;
 extern array_data_t gTECHDATAArrayDataTbl_g[12] OC_UNALIGNED;
 extern array_data_t gSFXDATAArrayDataTbl_g[6] OC_UNALIGNED;
 extern array_data_t gPORTDATAArrayDataTbl_g[7] OC_UNALIGNED;
+extern WORD sgTree[546] OC_UNALIGNED;  // the classic units' requirements, TechTree.cpp
 void snd_free_snd(int nSoundId);  // snd.cpp: a sound's buffer let go, read again when next played
 
 // The images' frames and overlay offsets (CImage.cpp), in storage that holds a mod's.
@@ -88,6 +106,7 @@ extern DWORD gPlayback;       // 0x67CC90
 extern void *gpLoadGameFile;  // 0x6A5E34
 extern DWORD g_LocalNationID;
 extern PlayerTable<PlayerData, PlayerTagData> gPlayerData;  // 0x6726C8
+extern PlayerTable<point16_t, PlayerTagStartLocations, 8> gStartLocations;  // 0x534A00
 
 namespace {
 
@@ -284,6 +303,15 @@ Trees g_trees;
 std::map<int, std::string> g_unitNames;    // the name an edit gives a unit, ModUnitName and ModUnitEditName
 std::vector<std::string> g_strings;        // ModString
 std::vector<ModCardButton> g_buttons;      // ModCardButtons
+// A button's new words for an original button (ModCardButton.nWords): its hotkey and text as
+// "cards" gives them, and the string made of them once the original's kind is known.
+struct Words {
+  std::string hotkey, text;
+  WORD wStr = 0;
+};
+std::vector<Words> g_words;
+std::vector<std::string> g_cardAiCalls;    // the functions a button's "ai" names (ModCardAiCall)
+bool g_bAddCards;          // a submission's cards come beside the earlier ones, not in place of them
 std::string g_loadKey;     // the submission being loaded: its mod's id, which its paths are named by
 std::string g_loadFolder;  // and its data folder
 std::map<std::string, std::string> g_mediaFolders;  // each mod's data folder by its id (ModDataFilePath)
@@ -321,6 +349,9 @@ struct Race {
   std::vector<std::pair<int, int>> ai;  // a unit 1.17's AI scripts name, and what its AI makes
   std::vector<std::pair<int, int>> aiTechs;     // a tech they research, and what its AI researches
   std::vector<std::pair<int, int>> aiUpgrades;  // an upgrade, and what its AI upgrades
+  int nConsole = -1;  // the race whose console it shows, -1 its base's
+  int nMusic = -1;    // the race whose music it plays, -1 its base's
+  ModRaceRules rules;  // how its workers build, and its advisor ("rules", "advisor")
 };
 std::vector<Race> g_races;
 BYTE g_slotRace[PLAYER_SLOTS_MAX];      // the game's, ModRaceOf
@@ -621,17 +652,40 @@ bool IsSheetField(const std::string &name) {
          name == "directions";
 }
 
+WORD AddString(const std::string &s);
+
 // The fields a record gives, by the column names above, over its row.
 bool Fields(int t, Record &r) {
   const Table &tab = kTables[t];
   const PortJson &j = *r.pJson;
   for (const auto &f : j.members) {
+    // a weapon's, a tech's or an upgrade's own name: a string of the mod's for its label
+    if (f.first == "name" && (t == WEAPONS || t == TECHS || t == UPGRADES)) {
+      if (f.second.kind != PortJson::STRING || f.second.s.empty())
+        return Fail(std::string(tab.psz) + " " + r.name + ".name takes a text");
+      const int c = ColumnOf(t, "label");
+      Put(r.cols[c], g_tables[t].geo[c].recElem, 0, AddString(f.second.s));
+      continue;
+    }
     // the fields that are no column: read where they are used
     if (f.first == "base" || f.first == "edit" || f.first == "name" || f.first == "grp" || f.first == "buttons" ||
         f.first == "looks" || f.first == "requires" || f.first == "use_requires" || f.first == "comment")
       continue;
+    if (ModStatusField(t, f.first) || ModLuaField(t, f.first))  // statuses, auras, blocks; the scripts' hooks
+      continue;
     if (t == UNITS && (f.first == "icon" || f.first == "wireframe" || f.first == "transport_wireframe"))
       continue;
+    // a sound's subtitle and its least time between plays, read as it plays (ModSoundSubtitle)
+    if (t == SOUNDS && f.first == "subtitle") {
+      if (f.second.kind != PortJson::STRING)
+        return Fail("sounds " + r.name + ".subtitle takes a text");
+      continue;
+    }
+    if (t == SOUNDS && f.first == "min_interval") {
+      if (f.second.kind != PortJson::NUMBER || f.second.d < 0 || f.second.d > 600000)
+        return Fail("sounds " + r.name + ".min_interval takes milliseconds, 0 to 600000");
+      continue;
+    }
     if (t == IMAGES && IsSheetField(f.first))
       continue;
     if (t == PORTRAITS && f.first == "idle_chances") {
@@ -1142,9 +1196,30 @@ bool Requirement(const PortJson &v, const std::string &where, std::vector<WORD> 
   return true;
 }
 
+// The tests a classic unit's requirements make of the building that makes it: landed, not busy
+// with an add-on or a building (the Terran trainers'), and with no add-on and nothing under way
+// (the add-ons'). A unit of the mod's keeps its base's, so a unit made from the Marine is not
+// trained in the air and one made from the Comsat Station is not built beside an add-on.
+std::vector<WORD> BuilderTests(int nBase117) {
+  std::vector<WORD> out;
+  if (nBase117 < 0 || nBase117 >= UNIT_TYPES_117)
+    return out;
+  for (int i = 1; i < 546 && sgTree[i] != 0xFFFF;) {
+    const int nType = sgTree[i++];
+    for (; i < 546 && sgTree[i] != 0xFFFF; ++i)
+      if (nType == nBase117 && (sgTree[i] == 0xFF05 || sgTree[i] == 0xFF07 || sgTree[i] == 0xFF08 || sgTree[i] == 0xFF0C) &&
+          sgTree[i - 1] != 0xFF01 && (i + 1 >= 546 || sgTree[i + 1] != 0xFF01))
+        out.push_back(sgTree[i]);
+    ++i;
+  }
+  return out;
+}
+
 // A unit's "requires" or a tech's "use_requires": its requirements in order, each one met;
-// an array among them is alternatives, any one of which meets it.
-bool Tree(const Record &r, const char *pszField, std::map<int, std::vector<WORD>> *pTrees) {
+// an array among them is alternatives, any one of which meets it. A unit's (nBase117, the
+// classic row it starts from) takes its base's tests of the building that makes it after
+// the requirement that names that building.
+bool Tree(const Record &r, const char *pszField, std::map<int, std::vector<WORD>> *pTrees, int nBase117 = -1) {
   const PortJson &req = r.pJson->operator[](pszField);
   if (req.kind == PortJson::NONE)
     return true;
@@ -1152,8 +1227,10 @@ bool Tree(const Record &r, const char *pszField, std::map<int, std::vector<WORD>
   if (req.kind != PortJson::ARRAY)
     return Fail(where + " is a list");
   std::vector<WORD> tree(1, static_cast<WORD>(r.id));
+  bool bTests = false;
   for (size_t i = 0; i < req.size(); ++i) {
     const PortJson &v = req.At(i);
+    const size_t nAt = tree.size();
     if (v.kind == PortJson::ARRAY) {
       for (size_t k = 0; k < v.size(); ++k) {
         if (k)
@@ -1163,6 +1240,11 @@ bool Tree(const Record &r, const char *pszField, std::map<int, std::vector<WORD>
       }
     } else if (!Requirement(v, where, &tree)) {
       return false;
+    }
+    if (!bTests && std::find(tree.begin() + nAt, tree.end(), 0xFF02) != tree.end()) {
+      bTests = true;
+      for (WORD w : BuilderTests(nBase117))
+        tree.push_back(w);
     }
   }
   tree.push_back(0xFFFF);
@@ -1193,13 +1275,25 @@ WORD AddString(const std::string &s) {
   return static_cast<WORD>(MOD_STRING_FIRST + g_strings.size() - 1);
 }
 
-// "cards": buttons the mod adds to 1.17 units' command cards, by the card's unit.
+// The workers' build menus by the names "cards" gives them, from MOD_BUILD_MENU_FIRST.
+const char *const kBuildMenus[MOD_BUILD_MENUS] = {
+    "zerg_basic_structures",    "terran_basic_structures",    "protoss_basic_structures",
+    "zerg_advanced_structures", "terran_advanced_structures", "protoss_advanced_structures"};
+
+// "cards": buttons the mod adds to 1.17 units' command cards, by the card's unit, and to the
+// workers' build menus, by their names.
 bool Cards() {
   for (const auto &card : g_types["cards"].members) {
     const std::string where = "cards " + card.first;
-    const int nCard = Find(UNITS, card.first);
-    if (nCard < 0 || (nCard >= UNIT_TYPES_117 && nCard < UNIT_TYPE_MOD_FIRST))
-      return Fail(where + ": a card is an original unit's or a mod's unit's");
+    int nCard = Find(UNITS, card.first);
+    int nMenu = -1;
+    for (int i = 0; i < MOD_BUILD_MENUS; ++i)
+      if (card.first == kBuildMenus[i])
+        nMenu = i;
+    if (nMenu >= 0)
+      nCard = MOD_BUILD_MENU_FIRST + nMenu;
+    else if (nCard < 0 || (nCard >= UNIT_TYPES_117 && nCard < UNIT_TYPE_MOD_FIRST))
+      return Fail(where + ": a card is an original unit's, a mod's unit's, or a worker's build menu (\"terran_basic_structures\")");
     for (size_t i = 0; i < card.second.size(); ++i) {
       const PortJson &b = card.second.At(i);
       const int nPos = static_cast<int>(b["position"].Num(0));
@@ -1208,8 +1302,57 @@ bool Cards() {
       ModCardButton m = {};
       m.wCard = static_cast<WORD>(nCard);
       m.wPos = static_cast<WORD>(nPos);
+      m.nWords = -1;
+      m.nAiCall = -1;
       std::string name;
-      if (b["cast"].kind != PortJson::NONE) {
+      if (b["classic"].kind != PortJson::NONE) {
+        // the words of the card's own button at the position: the first there, or the one that
+        // makes, researches or upgrades the record named
+        m.bWords = true;
+        m.wUnit = m.wTech = m.wMatch = 0xFFFF;
+        if (b["classic"].kind == PortJson::STRING) {
+          int n = Find(UNITS, b["classic"].s);
+          if (n < 0)
+            n = Find(TECHS, b["classic"].s);
+          if (n < 0)
+            n = Find(UPGRADES, b["classic"].s);
+          if (n < 0)
+            return Fail(where + ": classic names the unit, tech or upgrade of the card's own button, or is true");
+          m.wMatch = static_cast<WORD>(n);
+        } else if (!(b["classic"].kind == PortJson::BOOL && b["classic"].b)) {
+          return Fail(where + ": classic names the unit, tech or upgrade of the card's own button, or is true");
+        }
+        for (const char *psz : {"build", "train", "cast", "research", "upgrade", "icon", "ai", "target"})
+          if (b[psz].kind != PortJson::NONE)
+            return Fail(where + ": a button that changes a classic one's words has only its text, hotkey and disabled");
+        if (b["text"].kind == PortJson::STRING || b["hotkey"].kind == PortJson::STRING) {
+          Words w;
+          w.hotkey = b["hotkey"].Str();
+          w.text = b["text"].Str();
+          m.nWords = static_cast<short>(g_words.size());
+          g_words.push_back(w);
+        }
+        const std::string dis = b["disabled"].Str();
+        m.wDisabledStr = dis.empty() ? 0 : AddString(dis);
+        if (m.nWords < 0 && m.wDisabledStr == 0)
+          return Fail(where + ": a button that changes a classic one's words gives a text, a hotkey or disabled");
+        g_buttons.push_back(m);
+        continue;
+      }
+      if ((nMenu >= 0) != (b["build"].kind != PortJson::NONE))
+        return Fail(where + ": a build menu's buttons each build, and only a build menu's do");
+      if (b["build"].kind != PortJson::NONE) {
+        // a building of the mod's, placed as the menu's race places its own
+        const int nUnit = Resolve("units", b["build"], where + ".build");
+        if (nUnit < UNIT_TYPE_MOD_FIRST)
+          return Fail(where + ": a build button builds one of the mod's units");
+        static const unsigned char kPlace[3] = {MOD_PLACE_ZERG, MOD_PLACE_TERRAN, MOD_PLACE_PROTOSS};
+        m.wUnit = static_cast<WORD>(nUnit);
+        m.bPlace = kPlace[nMenu % 3];
+        m.wIcon = static_cast<WORD>(b["icon"].Num(ModUnitLooks(static_cast<unsigned>(nUnit))));
+        m.bUnitIcon = b["icon"].kind == PortJson::NONE;
+        name = ModUnitName(static_cast<unsigned>(nUnit));
+      } else if (b["cast"].kind != PortJson::NONE) {
         // a cast: the order, and its tech from the order's row (orders.dat's tech column)
         const int nOrder = Resolve("orders", b["cast"], where + ".cast");
         const Record *pOrder = nullptr;
@@ -1236,6 +1379,18 @@ bool Cards() {
               m.bAi = static_cast<unsigned char>(f + 1);
           if (m.bAi == 0)
             return Fail(where + ": a cast's ai names one of the original's spells, as \"psionic_storm\"");
+        } else if (b["ai"].kind == PortJson::OBJECT) {
+          // the mod's own finder: a function of its scripts, asked every so many seconds for
+          // each caster a computer or a mode owns
+          const std::string call = b["ai"]["call"].Str();
+          if (call.empty() || !ModLuaHasFunction(call))
+            return Fail(where + ": a cast's ai call names a function of the mod's scripts");
+          const double dEvery = b["ai"]["every"].Num(1);
+          if (dEvery <= 0 || dEvery > 600)
+            return Fail(where + ": a cast's ai every is seconds, above 0 and up to 600");
+          m.nAiCall = static_cast<short>(g_cardAiCalls.size());
+          g_cardAiCalls.push_back(call);
+          m.wAiEvery = static_cast<WORD>((std::max)(1.0, floor(dEvery * 24 + 0.5)));
         }
         m.wIcon = static_cast<WORD>(b["icon"].Num(pTech->cols[6][0] | pTech->cols[6][1] << 8));
         name = pOrder->name;
@@ -1299,6 +1454,15 @@ bool Races() {
     r.nBase = base == "zerg" ? 0 : base == "terran" ? 1 : base == "protoss" ? 2 : -1;
     if (r.nBase < 0)
       return Fail(where + ": its base is zerg, terran or protoss");
+    for (const char *psz : {"console", "music"}) {
+      if (j[psz].kind == PortJson::NONE)
+        continue;
+      const std::string look = j[psz].Str();
+      const int n = look == "zerg" ? 0 : look == "terran" ? 1 : look == "protoss" ? 2 : -1;
+      if (n < 0)
+        return Fail(where + ": its " + psz + " is zerg, terran or protoss");
+      (std::string(psz) == "console" ? r.nConsole : r.nMusic) = n;
+    }
     const PortJson &start = j["start"];
     r.bOwnStart = start.kind != PortJson::NONE;
     for (size_t i = 0; i < start.size(); ++i) {
@@ -1338,6 +1502,10 @@ bool Races() {
         return Fail(where + ": a race's ai maps the original's units, techs or upgrades to ones of the same kind");
       (pszTable[0] == 't' ? r.aiTechs : pszTable[1] == 'n' ? r.ai : r.aiUpgrades).push_back(std::make_pair(nFrom, nTo));
     }
+    std::string why;
+    if (!ModRulesRead(j, where, [&](const char *pszTable, const PortJson &v) { return Resolve(pszTable, v, where); },
+                      &r.rules, &why))
+      return Fail(why);
     g_races.push_back(r);
   }
   std::sort(g_races.begin(), g_races.end(), [](const Race &a, const Race &b) { return a.id < b.id; });
@@ -1355,6 +1523,296 @@ const char *Lasting(const std::string &text) {
 
 const Race *RaceAt(int n) {
   return n >= 1 && n <= static_cast<int>(g_races.size()) ? &g_races[n - 1] : nullptr;
+}
+
+// ---- the looks a mark wears ------------------------------------------------------------------
+//
+// types.json's "marks" names the looks the mod's scripts may put on a mark (docs/mod-data.md,
+// "The looks a mark wears"): each is blocks of light with their own values, which hx.area's look
+// asks for by name. A block or a field this build has no name for stops the mod with the line it
+// is on, since a look drawn without one would be drawn wrong and nothing would say why.
+
+std::map<std::string, PortMarkLook> g_markLooks;
+std::string g_markLookNames;  // the names declared, separated by ", ", for saying what there is
+
+// The text being read, so that a refusal names the line a value is on.
+struct MarkRead {
+  const char *pszText;
+
+  bool Bad(const PortJson &v, const std::string &what) const {
+    const int nLine = PortJsonLineAt(pszText, v.nAt);
+    char sz[32] = "";
+    if (nLine > 0)
+      snprintf(sz, sizeof sz, " line %d", nLine);
+    return Fail("types.json" + std::string(sz) + ": " + what);
+  }
+};
+
+bool MarkOnly(const MarkRead &r, const PortJson &o, const std::string &at,
+              const std::vector<const char *> &keys) {
+  if (o.kind != PortJson::OBJECT)
+    return r.Bad(o, at + " is an object");
+  for (const PortJsonMember &m : o.members) {
+    bool bKnown = m.first == "comment" || m.first == "about";
+    for (const char *psz : keys)
+      bKnown = bKnown || m.first == psz;
+    if (!bKnown)
+      return r.Bad(m.second, at + " has no field " + m.first);
+  }
+  return true;
+}
+
+// A value a block may leave out, in which case what is there already stands: the defaults are
+// the drawing's own, so a look that says nothing of a block's field draws as the engine would.
+bool MarkNum(const MarkRead &r, const PortJson &o, const char *pszKey, double dMin, double dMax,
+             double *pd, const std::string &at) {
+  const PortJson &v = o[pszKey];
+  if (v.kind == PortJson::NONE)
+    return true;
+  if (v.kind != PortJson::NUMBER || v.d < dMin || v.d > dMax) {
+    char sz[96];
+    snprintf(sz, sizeof sz, " takes a number from %g to %g", dMin, dMax);
+    return r.Bad(v, at + "." + pszKey + sz);
+  }
+  *pd = v.d;
+  return true;
+}
+
+bool MarkInt(const MarkRead &r, const PortJson &o, const char *pszKey, double dMin, double dMax,
+             int *pn, const std::string &at) {
+  double d = *pn;
+  if (!MarkNum(r, o, pszKey, dMin, dMax, &d, at))
+    return false;
+  *pn = static_cast<int>(d);
+  return true;
+}
+
+bool MarkFlag(const MarkRead &r, const PortJson &o, const char *pszKey, bool *pb,
+              const std::string &at) {
+  const PortJson &v = o[pszKey];
+  if (v.kind == PortJson::NONE)
+    return true;
+  if (v.kind != PortJson::BOOL)
+    return r.Bad(v, at + "." + pszKey + " is true or false");
+  *pb = v.b;
+  return true;
+}
+
+bool MarkRgb(const MarkRead &r, const PortJson &o, const char *pszKey, unsigned int *pn,
+             const std::string &at) {
+  const PortJson &v = o[pszKey];
+  if (v.kind == PortJson::NONE)
+    return true;
+  if (v.kind != PortJson::STRING || !PortMapMarkRgbOf(v.s.c_str(), pn))
+    return r.Bad(v, at + "." + pszKey + " is a colour, \"#rrggbb\"");
+  return true;
+}
+
+// A value named in words, as a script names it: the fade's curve, what answers a crossing, what
+// is drawn outside.
+bool MarkName(const MarkRead &r, const PortJson &o, const char *pszKey, int (*fn)(const char *),
+              int *pn, const std::string &at, const char *pszWhich) {
+  const PortJson &v = o[pszKey];
+  if (v.kind == PortJson::NONE)
+    return true;
+  const int n = v.kind == PortJson::STRING ? fn(v.s.c_str()) : -1;
+  if (n < 0)
+    return r.Bad(v, at + "." + pszKey + " is " + pszWhich);
+  *pn = n;
+  return true;
+}
+
+// Where a block is drawn. The field, the cells and the tear stand up the screen from the edge,
+// which the ground cannot be painted with, so they are drawn over the units and take no other
+// layer; the light outside lies flat and may be painted or drawn over the game.
+bool MarkLayer(const MarkRead &r, const PortJson &o, bool bOverOnly, int *pnLayer,
+               const std::string &at) {
+  const PortJson &v = o["layer"];
+  if (v.kind == PortJson::NONE)
+    return true;
+  const int n = v.kind == PortJson::STRING ? PortMapMarkLayerOf(v.s.c_str()) : -1;
+  if (n < 0)
+    return r.Bad(v, at + ".layer is \"ground\" or \"over\"");
+  if (bOverOnly && n != MAP_MARK_OVER)
+    return r.Bad(v, at + " stands up from the edge, which the ground cannot be painted with, so "
+                        "its layer is \"over\"");
+  *pnLayer = n;
+  return true;
+}
+
+// The cells' rows: each row's height, as a part of the field's.
+bool MarkRows(const MarkRead &r, const PortJson &o, std::vector<double> *pOut,
+              const std::string &at) {
+  const PortJson &v = o["rows"];
+  if (v.kind == PortJson::NONE)
+    return true;
+  if (v.kind != PortJson::ARRAY || v.items.empty() || v.items.size() > 8)
+    return r.Bad(v, at + ".rows is a list of 1 to 8 heights");
+  pOut->clear();
+  for (const PortJson &one : v.items) {
+    if (one.kind != PortJson::NUMBER || one.d < 0.0 || one.d > 4.0)
+      return r.Bad(one, at + ".rows takes a number from 0 to 4");
+    pOut->push_back(one.d);
+  }
+  return true;
+}
+
+bool MarkField(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkField *p) {
+  int nLayer = MAP_MARK_OVER;
+  p->bOn = true;
+  return MarkOnly(r, o, at, {"layer", "height", "bands", "alpha", "fade", "add", "lean",
+                             "edge_on"}) &&
+         MarkLayer(r, o, true, &nLayer, at) &&
+         MarkNum(r, o, "height", 0, 4096, &p->fHigh, at) &&
+         MarkInt(r, o, "bands", 1, 32, &p->nBands, at) &&
+         MarkNum(r, o, "alpha", 0, 1, &p->fAlpha, at) &&
+         MarkNum(r, o, "fade", 0, 1, &p->fFade, at) && MarkFlag(r, o, "add", &p->bAdd, at) &&
+         MarkNum(r, o, "lean", 0, 4, &p->fLean, at) &&
+         MarkNum(r, o, "edge_on", 0, 4, &p->fEdgeOn, at);
+}
+
+bool MarkCells(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkCells *p) {
+  int nLayer = MAP_MARK_OVER;
+  p->bOn = true;
+  if (!MarkOnly(r, o, at, {"layer", "shape", "spacing", "stagger", "radius", "squash", "width",
+                           "alpha", "least", "base", "swing", "rate", "along", "row", "warm",
+                           "rows"}) ||
+      !MarkLayer(r, o, true, &nLayer, at))
+    return false;
+  const PortJson &v = o["shape"];
+  if (v.kind != PortJson::NONE && (v.kind != PortJson::STRING || v.s != "hex"))
+    return r.Bad(v, at + ".shape is \"hex\", the only cell this build draws");
+  return MarkNum(r, o, "spacing", 1, 4096, &p->fStep, at) &&
+         MarkNum(r, o, "stagger", 0, 1, &p->fStagger, at) &&
+         MarkNum(r, o, "radius", 0, 256, &p->fRadius, at) &&
+         MarkNum(r, o, "squash", 0, 4, &p->fSquash, at) &&
+         MarkNum(r, o, "width", 0, 64, &p->fWidth, at) &&
+         MarkNum(r, o, "alpha", 0, 1, &p->fAlpha, at) &&
+         MarkNum(r, o, "least", 0, 1, &p->fLeast, at) &&
+         MarkNum(r, o, "base", 0, 1, &p->fBase, at) &&
+         MarkNum(r, o, "swing", 0, 1, &p->fSwing, at) &&
+         MarkNum(r, o, "rate", 0, 64, &p->fRate, at) &&
+         MarkNum(r, o, "along", 0, 64, &p->fAlong, at) &&
+         MarkNum(r, o, "row", 0, 64, &p->fRow, at) &&
+         MarkNum(r, o, "warm", 0, 1, &p->fWarm, at) && MarkRows(r, o, &p->rows, at);
+}
+
+bool MarkFoot(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkFoot *p) {
+  p->bOn = true;
+  return MarkOnly(r, o, at, {"glow", "alpha"}) && MarkNum(r, o, "glow", 1, 64, &p->fGlow, at) &&
+         MarkNum(r, o, "alpha", 0, 1, &p->fAlpha, at);
+}
+
+bool MarkTear(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkTear *p) {
+  int nLayer = MAP_MARK_OVER;
+  p->bOn = true;
+  return MarkOnly(r, o, at, {"layer", "life", "width", "grow", "height", "alpha", "lean"}) &&
+         MarkLayer(r, o, true, &nLayer, at) && MarkNum(r, o, "life", 0, 60, &p->fLife, at) &&
+         MarkNum(r, o, "width", 0, 4096, &p->fWide, at) &&
+         MarkNum(r, o, "grow", 0, 4096, &p->fGrow, at) &&
+         MarkNum(r, o, "height", 0, 16, &p->fHigh, at) &&
+         MarkNum(r, o, "alpha", 0, 1, &p->fAlpha, at) &&
+         MarkNum(r, o, "lean", 0, 4, &p->fLean, at);
+}
+
+bool MarkRipple(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkRipple *p) {
+  return MarkOnly(r, o, at, {"speed", "width", "life", "flash", "flash_life", "side"}) &&
+         MarkNum(r, o, "speed", 0, 16384, &p->fSpeed, at) &&
+         MarkNum(r, o, "width", 1, 4096, &p->fWide, at) &&
+         MarkNum(r, o, "life", 0.01, 60, &p->fLife, at) &&
+         MarkNum(r, o, "flash", 1, 4096, &p->fFlash, at) &&
+         MarkNum(r, o, "flash_life", 0.01, 60, &p->fFlashLife, at) &&
+         MarkNum(r, o, "side", 0, 1, &p->fSide, at);
+}
+
+bool MarkOutside(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkOutside *p) {
+  return MarkOnly(r, o, at, {"layer", "style", "band", "radius", "alpha", "base", "swing", "beat",
+                             "past", "color", "colour", "far_color", "far_colour"}) &&
+         MarkLayer(r, o, false, &p->nLayer, at) &&
+         MarkName(r, o, "style", PortMapMarkOutsideOf, &p->nStyle, at,
+                  "\"tint\", \"ring\", \"tether\" or \"none\"") &&
+         MarkNum(r, o, "band", 0, 1 << 20, &p->fBand, at) &&
+         MarkNum(r, o, "radius", 1, 4096, &p->fRadius, at) &&
+         MarkNum(r, o, "alpha", 0, 1, &p->fAlpha, at) &&
+         MarkNum(r, o, "base", 0, 1, &p->fBase, at) &&
+         MarkNum(r, o, "swing", 0, 1, &p->fSwing, at) &&
+         MarkNum(r, o, "beat", 0, 64, &p->fBeat, at) && MarkNum(r, o, "past", 0, 64, &p->fPast, at) &&
+         MarkRgb(r, o, "color", &p->nNear, at) && MarkRgb(r, o, "colour", &p->nNear, at) &&
+         MarkRgb(r, o, "far_color", &p->nFar, at) && MarkRgb(r, o, "far_colour", &p->nFar, at);
+}
+
+bool MarkMini(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkMini *p) {
+  p->bOn = true;
+  if (!MarkOnly(r, o, at, {"on", "fill", "edge", "width", "dash", "player", "color", "colour"}) ||
+      !MarkFlag(r, o, "on", &p->bOn, at) || !MarkNum(r, o, "fill", 0, 1, &p->fFill, at) ||
+      !MarkNum(r, o, "edge", 0, 1, &p->fEdge, at) || !MarkNum(r, o, "width", 0, 64, &p->fWidth, at) ||
+      !MarkNum(r, o, "dash", 0, 4096, &p->fDash, at) ||
+      !MarkInt(r, o, "player", 0, 31, &p->nPlayer, at))
+    return false;
+  const unsigned int nWas = p->nRgb;
+  if (!MarkRgb(r, o, "color", &p->nRgb, at) || !MarkRgb(r, o, "colour", &p->nRgb, at))
+    return false;
+  p->bRgb = p->nRgb != nWas || o["color"].kind != PortJson::NONE || o["colour"].kind != PortJson::NONE;
+  return true;
+}
+
+// One look: the mark's own values it asks for, the colour its blocks answer a unit on its way
+// out in, and then the blocks themselves. A block the look leaves out is not drawn at all.
+bool MarkLook(const MarkRead &r, const PortJson &o, const std::string &at, PortMarkLook *p) {
+  PortMarkAsks &asks = p->asks;
+  if (!MarkOnly(r, o, at, {"warn", "fill", "edge", "edge_width", "dash", "soft", "pulse",
+                           "pulse_depth", "curve", "crossing", "field", "cells", "foot", "tear",
+                           "ripple", "outside", "minimap"}) ||
+      !MarkRgb(r, o, "warn", &p->nWarn, at) || !MarkNum(r, o, "fill", 0, 1, &asks.fFill, at) ||
+      !MarkNum(r, o, "edge", 0, 1, &asks.fEdge, at) ||
+      !MarkNum(r, o, "edge_width", 0, 1024, &asks.fWidth, at) ||
+      !MarkNum(r, o, "dash", 0, 4096, &asks.fDash, at) ||
+      !MarkNum(r, o, "soft", 0, 4, &asks.fSoft, at) ||
+      !MarkNum(r, o, "pulse", 0, 60, &asks.fPulse, at) ||
+      !MarkNum(r, o, "pulse_depth", 0, 1, &asks.fDepth, at) ||
+      !MarkName(r, o, "curve", PortMapMarkCurveOf, &asks.nCurve, at,
+                "\"smooth\", \"even\" or \"sharp\"") ||
+      !MarkName(r, o, "crossing", PortMapMarkCrossingOf, &asks.nCross, at,
+                "\"ripple\", \"flash\", \"stamp\", \"arc\" or \"none\""))
+    return false;
+  const PortJson &field = o["field"], &cells = o["cells"], &foot = o["foot"];
+  const PortJson &tear = o["tear"], &ripple = o["ripple"], &outside = o["outside"];
+  if (field.kind != PortJson::NONE && !MarkField(r, field, at + ".field", &p->field))
+    return false;
+  if (cells.kind != PortJson::NONE && !MarkCells(r, cells, at + ".cells", &p->cells))
+    return false;
+  if (foot.kind != PortJson::NONE && !MarkFoot(r, foot, at + ".foot", &p->foot))
+    return false;
+  if (tear.kind != PortJson::NONE && !MarkTear(r, tear, at + ".tear", &p->tear))
+    return false;
+  if (ripple.kind != PortJson::NONE && !MarkRipple(r, ripple, at + ".ripple", &p->ripple))
+    return false;
+  if (outside.kind != PortJson::NONE && !MarkOutside(r, outside, at + ".outside", &p->outside))
+    return false;
+  const PortJson &mini = o["minimap"];
+  return mini.kind == PortJson::NONE || MarkMini(r, mini, at + ".minimap", &p->mini);
+}
+
+// types.json's "marks", read into the looks this build holds. A look of a name already loaded,
+// the mode's over the mod's, replaces it.
+bool MarkLooksRead(const PortJson &marks, const char *pszText) {
+  const MarkRead r = {pszText};
+  if (marks.kind == PortJson::NONE)
+    return true;
+  if (marks.kind != PortJson::OBJECT)
+    return Fail("types.json's marks is an object, a look to a name");
+  for (const PortJsonMember &m : marks.members) {
+    if (m.first == "comment")
+      continue;
+    PortMarkLook look;
+    if (!MarkLook(r, m.second, "marks." + m.first, &look))
+      return false;
+    g_markLooks[m.first] = look;
+  }
+  g_markLookNames.clear();
+  for (const auto &one : g_markLooks)
+    g_markLookNames += (g_markLookNames.empty() ? "" : ", ") + one.first;
+  return true;
 }
 
 // One submission: types.json and iscript.txt from the data folder, or the texts given (a
@@ -1380,13 +1838,21 @@ bool Load(const std::string &key, const std::string &folder, const std::string *
   if (!PortJsonParse(reinterpret_cast<const char *>(text.data()), &g_types, &error) ||
       g_types.kind != PortJson::OBJECT)
     return Fail("types.json does not read: " + error);
+  // the player's language's text in place of the mod's own, before anything is made of it
+  ModLangApply(key, &g_types);
   const int nSub = ++g_nSubs;
   g_subFolders[nSub] = folder;
   size_t anFrom[TABLES];
   std::vector<Record> edits[TABLES];  // the submission's edits, in the order of their names
   for (const auto &m : g_types.members)
-    if (TableIndex(m.first.c_str()) < 0 && m.first != "cards" && m.first != "races")
+    if (TableIndex(m.first.c_str()) < 0 && m.first != "cards" && m.first != "races" && m.first != "statuses" &&
+        m.first != "tilesets" && m.first != "marks" && m.first != "game" && m.first != "generate" &&
+        m.first != "comment")
       return Fail("types.json has no table " + m.first);
+  // the looks its marks may wear, which nothing else reads, checked here so that a look with a
+  // field this build has no name for stops the mod rather than being drawn without it
+  if (!MarkLooksRead(g_types["marks"], reinterpret_cast<const char *>(text.data())))
+    return false;
 
   auto byName = [](const Record &a, const Record &b) { return a.name < b.name; };
   for (int t = 0; t < TABLES; ++t) {
@@ -1457,6 +1923,21 @@ bool Load(const std::string &key, const std::string &folder, const std::string *
       return false;
   for (size_t i = anFrom[UNITS]; i < g_tables[UNITS].recs.size(); ++i)
     LooksVoices(g_tables[UNITS].recs[i]);
+  // a mod's add-on sits where the classic add-on it looks like sits: the game keeps add-on
+  // positions for the classic buildings only (ModRulesAddOnOffset)
+  for (size_t i = anFrom[UNITS]; i < g_tables[UNITS].recs.size(); ++i) {
+    const Record &r = g_tables[UNITS].recs[i];
+    const std::vector<BYTE> &flags = r.cols[ColumnOf(UNITS, "flags")];
+    const int nLooks = Resolve("units", (*r.pJson)["looks"], "units " + r.name + ".looks");
+    const unsigned looks = static_cast<unsigned>(nLooks >= 0 && nLooks < UNIT_TYPES_117 ? nLooks : r.base117);
+    if (flags.empty() || !(flags[0] & 2))
+      continue;
+    const std::vector<BYTE> classic =
+        looks < UNIT_TYPES_117 ? FileRow(UNITS, static_cast<int>(looks))[ColumnOf(UNITS, "flags")] : std::vector<BYTE>();
+    if (looks - 106 >= 96 || classic.empty() || !(classic[0] & 2))
+      return Fail("units " + r.name + " is an add-on, so it is made from a classic add-on or looks like one, "
+                  "whose place beside its building it takes");
+  }
   for (size_t i = anFrom[UNITS]; i < g_tables[UNITS].recs.size(); ++i)
     if (!UnitArtOf(g_tables[UNITS].recs[i]))
       return false;
@@ -1467,11 +1948,11 @@ bool Load(const std::string &key, const std::string &folder, const std::string *
   // record; an edit's of one of the original's rows are kept apart (ModTreeEdit)
   auto trees = [&](int t, const char *pszField, int nKind) {
     for (size_t i = anFrom[t]; i < g_tables[t].recs.size(); ++i)
-      if (!Tree(g_tables[t].recs[i], pszField, &g_trees.own[nKind]))
+      if (!Tree(g_tables[t].recs[i], pszField, &g_trees.own[nKind], t == UNITS ? g_tables[t].recs[i].base117 : -1))
         return false;
     for (const Record &e : edits[t]) {
       const bool bOwn = std::any_of(changed[t].begin(), changed[t].end(), [&](const Record *p) { return p->id == e.id; });
-      if (!Tree(e, pszField, bOwn ? &g_trees.own[nKind] : &g_trees.edit[nKind]))
+      if (!Tree(e, pszField, bOwn ? &g_trees.own[nKind] : &g_trees.edit[nKind], t == UNITS ? e.base117 : -1))
         return false;
     }
     return true;
@@ -1488,10 +1969,31 @@ bool Load(const std::string &key, const std::string &folder, const std::string *
   for (int s = 0; s < PLAYER_SLOTS_MAX; ++s)
     if (const Race *r = RaceAt(g_slotRace[s]))
       slotRaceIds[s] = r->id;
-  if (g_types["cards"].kind != PortJson::NONE || nSub == 1)
-    g_buttons.clear();
+  if (g_types["cards"].kind != PortJson::NONE || nSub == 1) {
+    if (!g_bAddCards) {
+      g_buttons.clear();
+      g_words.clear();
+      g_cardAiCalls.clear();
+    }
+  }
   if (g_types["races"].kind != PortJson::NONE || nSub == 1)
     g_races.clear();
+  // the statuses, auras and action blocks, once every record has its id
+  std::vector<ModStatusRecord> statusRecs;
+  for (int t : {UNITS, WEAPONS, ORDERS}) {
+    for (size_t i = anFrom[t]; i < g_tables[t].recs.size(); ++i)
+      statusRecs.push_back({t, g_tables[t].recs[i].id, g_tables[t].recs[i].name, g_tables[t].recs[i].pJson});
+    for (const Record &e : edits[t])
+      statusRecs.push_back({t, e.id, e.name, e.pJson});
+  }
+  // the scripts first, whose functions the blocks and a card's ai may name
+  std::vector<std::pair<std::string, std::string>> luaFiles;
+  if (!ModLuaLoad(g_types, folder, nSub, statusRecs, &luaFiles, &error))
+    return Fail(error);
+  for (const auto &f : luaFiles)
+    Hash(hHash, f.first, std::vector<BYTE>(f.second.begin(), f.second.end()));
+  if (!ModStatusLoad(g_types, nSub, statusRecs, &error))
+    return Fail(error);
   if ((g_types["cards"].kind != PortJson::NONE && !Cards()) || (g_types["races"].kind != PortJson::NONE && !Races()))
     return false;
   for (int t = 0; t < TABLES; ++t) {
@@ -1538,7 +2040,11 @@ struct Kept {
   std::map<int, UnitArt> unitArt;
   std::vector<std::string> strings;
   std::vector<ModCardButton> buttons;
+  std::vector<Words> words;
+  std::vector<std::string> cardAiCalls;
   std::vector<Race> races;
+  std::map<std::string, PortMarkLook> markLooks;
+  std::string markLookNames;
   HxTypeCounts counts;
   int nSubs;
   std::string id;
@@ -1558,7 +2064,11 @@ void Keep(Kept *p) {
   p->unitArt = g_unitArt;
   p->strings = g_strings;
   p->buttons = g_buttons;
+  p->words = g_words;
+  p->cardAiCalls = g_cardAiCalls;
   p->races = g_races;
+  p->markLooks = g_markLooks;
+  p->markLookNames = g_markLookNames;
   p->counts = g_counts;
   p->nSubs = g_nSubs;
   p->id = g_id;
@@ -1584,10 +2094,16 @@ void PutBack(const Kept &k) {
   g_unitArt = k.unitArt;
   g_strings = k.strings;
   g_buttons = k.buttons;
+  g_words = k.words;
+  g_cardAiCalls = k.cardAiCalls;
   g_races = k.races;
+  g_markLooks = k.markLooks;
+  g_markLookNames = k.markLookNames;
   g_counts = k.counts;
   MediaCountsSet();
   g_nSubs = k.nSubs;
+  ModStatusTrim(k.nSubs);
+  ModLuaTrim(k.nSubs);
   g_id = k.id;
   g_depends = k.depends;
 }
@@ -1639,6 +2155,10 @@ void ModDataStartUp() {
   std::vector<int> chain;
   std::string depends;
   bool bOk = PortModChain(nMod, &chain, &g_error);
+  std::vector<std::string> langChain;
+  for (int k : chain)
+    langChain.push_back(mods[k].id);
+  ModLangChain(langChain);
   if (bOk && std::all_of(chain.begin(), chain.end(), [&](int k) { return mods[k].data.empty(); }))
     return;
   BCRYPT_HASH_HANDLE hHash = NULL;
@@ -1651,6 +2171,9 @@ void ModDataStartUp() {
     if (m.data.empty())
       continue;
     bOk = Load(m.id, m.folder + m.data, nullptr, nullptr, hHash);
+    if (bOk) {
+      bOk = ModTilesetLoad(g_types, m.folder + m.data, &g_error);  // its tilesets' changes
+    }
     if (!bOk && chain[i] != nMod)
       g_error = "in " + m.name + ", which it depends on: " + g_error;
     if (bOk && chain[i] != nMod)
@@ -1667,6 +2190,7 @@ void ModDataStartUp() {
     // put back as if it had not been, with no fingerprint, so a LAN game sees a Hyperion
     // without a mod; what it wrote past 1.17's rows (frames, rows) no count reaches
     PutBack(before);
+    ModTilesetClear();
     memset(g_abFingerprint, 0, sizeof g_abFingerprint);
     return;
   }
@@ -1690,6 +2214,10 @@ void ModDataStartUp() {
 
 const char *ModDataId() {
   return g_id.c_str();
+}
+
+void ModDataNote(const char *pszWhat) {
+  Note(pszWhat);
 }
 
 bool ModDataCheckResult(std::string *pError, std::vector<std::string> *pNotes, std::vector<std::string> *pTables,
@@ -1723,6 +2251,8 @@ bool ModDataCheckResult(std::string *pError, std::vector<std::string> *pNotes, s
     pTables->push_back("scripts: " + std::to_string(g_scripts.size()));
   if (!g_races.empty())
     pTables->push_back("races: " + std::to_string(g_races.size()));
+  for (const std::string &s : ModTilesetSummary())
+    pTables->push_back(s);
 
   // the files the records name, those the folders have (the load noted the others)
   auto Add = [&](const std::string &where, const std::string &path, const std::string &game, ModCheckKind kind) {
@@ -1817,6 +2347,236 @@ namespace {
 Kept g_startUp;  // before the first push of the game, put back as a new game starts
 bool g_bPushed;  // the game being played has had a push
 std::string g_liveMod;  // the mod pushed last
+// ---- a game's mode (port_mode.h) --------------------------------------------------------------------
+// A mode's own data loads as a submission over the active mod's as the game's tables are
+// written, and the records its generate makes as a second one. Both go away with the game, as a
+// push does, so the front end and the next game have the data loaded at start-up.
+
+bool g_bMode;             // the game's mode loaded, so its submissions are put away after it
+std::string g_modeRun;    // what its generate returned as run, read by the scripts as hx.run
+
+// The name of a row of a table: a mod's record of that id, else the original's name; "" for
+// neither.
+std::string NameOfRow(int t, int id) {
+  for (const Record &r : g_tables[t].recs)
+    if (r.id == id)
+      return r.name;
+  const char *psz = TypeNameOf(kTables[t].psz, id);
+  return psz != nullptr ? psz : std::string();
+}
+
+// A column's value of a record's row, as the record's own fields write it.
+long long ValueOf(int t, const Record &r, int c) {
+  const Geometry &g = g_tables[t].geo[c];
+  long long v = 0;
+  for (DWORD b = 0; b < g.recElem && b < r.cols[c].size(); ++b)
+    v |= static_cast<long long>(r.cols[c][b]) << (8 * b);
+  return v;
+}
+
+// ctx.row: the row a record would clone, by its record or classic name. Its columns come at the
+// record's own scale (hit points in whole points), and a column that points at another table
+// carries that type's name too, since a generated record names its base by name.
+bool RowOf(const std::string &table, const std::string &name, PortJson *pOut) {
+  const int t = TableIndex(table.c_str());
+  if (t < 0)
+    return false;
+  Record r;
+  r.name = name;
+  PortJson base;
+  base.kind = PortJson::STRING;
+  base.s = name;
+  const std::string errWas = g_error;
+  if (!BaseRow(t, base, r)) {
+    g_error = errWas;
+    return false;
+  }
+  pOut->kind = PortJson::OBJECT;
+  for (int c = 0; c < kTables[t].nColumns; ++c) {
+    const Column &col = kTables[t].pColumns[c];
+    PortJsonMember m;
+    m.first = col.psz;
+    if (c < PathColumns(t)) {
+      const char *psz = PathOf(r.cols[c]);
+      m.second.kind = PortJson::STRING;
+      m.second.s = psz != nullptr ? psz : "";
+      pOut->members.push_back(m);
+      continue;
+    }
+    const long long v = ValueOf(t, r, c);
+    m.second.kind = PortJson::NUMBER;
+    m.second.d = static_cast<double>(col.nScale > 1 ? v / col.nScale : v);
+    pOut->members.push_back(m);
+    if (col.pszRef != nullptr && strcmp(col.pszRef, "scripts") != 0) {
+      const int tRef = TableIndex(col.pszRef);
+      const std::string ref = tRef >= 0 ? NameOfRow(tRef, static_cast<int>(v)) : std::string();
+      PortJsonMember n;
+      n.first = std::string(col.psz) + "_name";
+      n.second.kind = ref.empty() ? PortJson::NULLV : PortJson::STRING;
+      n.second.s = ref;
+      pOut->members.push_back(n);
+    }
+  }
+  return true;
+}
+
+// A generated record's name starts gen_, so a roll never stands in for one of the mode's own
+// records or for a row of the game's. False with why for the first that does not.
+bool GenNamesOk(const PortJson &types, std::string *pWhy) {
+  for (const PortJsonMember &m : types.members) {
+    if (TableIndex(m.first.c_str()) < 0 || m.second.kind != PortJson::OBJECT)
+      continue;
+    for (const PortJsonMember &r : m.second.members)
+      if (r.first.compare(0, 4, "gen_") != 0) {
+        *pWhy = "generate returned the " + m.first + " " + r.first +
+                ", and a record it makes is named gen_<something>";
+        return false;
+      }
+  }
+  return true;
+}
+
+// The slots that play, and which of them the mode treats as the enemy base. A slot's start
+// comes from the map read, since the map itself is not loaded when a mode's generate runs.
+void ModePlayers(ModLuaGenCtx *pCtx, const ModeMapRead *pMap) {
+  for (int s = 0; s < PlayerSlots(); ++s) {
+    if (s == PLAYER_NEUTRAL || (gPlayerData[s].nType != 1 && gPlayerData[s].nType != 2))
+      continue;
+    ModLuaGenPlayer p;
+    p.nPlayer = s;
+    p.kind = gPlayerData[s].nType == 1 ? "computer" : "human";
+    const int nModRace = ModRaceOf(s);
+    p.race = nModRace > 0 ? ModRaceName(nModRace)
+                          : gPlayerData[s].nRace == 0   ? "zerg"
+                            : gPlayerData[s].nRace == 1 ? "terran"
+                            : gPlayerData[s].nRace == 2 ? "protoss"
+                                                        : "random";
+    if (pMap != nullptr)
+      for (const ModeMapStart &one : pMap->starts)
+        if (one.nSlot == s) {
+          p.x = one.x;
+          p.y = one.y;
+        }
+    pCtx->players.push_back(p);
+  }
+  const int nEnemy = PortModeEnemyFind();
+  for (size_t i = 0; i < pCtx->players.size() && pCtx->nEnemy < 0; ++i)
+    if (pCtx->players[i].nPlayer == nEnemy)
+      pCtx->nEnemy = static_cast<int>(i);
+}
+
+// The mode's data and its generated records, loaded before the game's tables are written.
+void ModeLoad() {
+  g_modeRun.clear();
+  const char *pszMode = PortModeInGame();
+  if (pszMode[0] == '\0' || RulesCampaignMission() != 0)
+    return;
+  const std::string folder = PortModeFolderOfGame();
+  if (folder.empty()) {
+    Log("modes: %s has no data folder, so the game is played without it", pszMode);
+    return;
+  }
+  if (!g_startUp.bKept)
+    Keep(&g_startUp);
+  Kept before;
+  Keep(&before);
+  BCRYPT_HASH_HANDLE hHash = NULL;
+  if (BCryptCreateHash(BCRYPT_SHA1_ALG_HANDLE, &hHash, NULL, 0, NULL, 0, 0) != 0)
+    return;
+  g_error.clear();
+  // the mode's own types.json, scripts and looks, unless the active mod already brought them
+  bool bOk = g_id == pszMode || Load(pszMode, folder, nullptr, nullptr, hHash);
+  if (bOk)
+    bOk = ModTilesetLoad(g_types, folder, &g_error);
+  // then the records its generate makes for this game alone
+  std::string typesText, looksText;
+  if (bOk && ModLuaHasGenerate()) {
+    ModLuaGenCtx ctx;
+    ctx.dwSeed = PortModeSeedOfGame();
+    PortJson settings;
+    const std::string &s = PortModeSettingsOfGame();
+    if (!s.empty() && PortJsonParse(s.c_str(), &settings) && settings.kind == PortJson::OBJECT)
+      ctx.pSettings = &settings;
+    ctx.pMap = ModeMapOf(nullptr);
+    ModePlayers(&ctx, ctx.pMap);
+    std::string who;
+    for (const ModLuaGenPlayer &p : ctx.players) {
+      char sz[96];
+      snprintf(sz, sizeof sz, "%s%d %s %s at %d,%d", who.empty() ? "" : ", ", p.nPlayer, p.kind.c_str(),
+               p.race.c_str(), p.x, p.y);
+      who += sz;
+    }
+    Log("modes: the run is rolled for %s; the enemy base is %s", who.c_str(),
+        ctx.nEnemy >= 0 ? std::to_string(ctx.players[ctx.nEnemy].nPlayer).c_str() : "none");
+    ctx.row = RowOf;
+    std::string run;
+    bOk = ModLuaGenerate(ctx, &typesText, &run, &g_error);
+    if (bOk)
+      g_modeRun = run;
+  }
+  if (bOk && !typesText.empty()) {
+    // the looks it returned are looks.json's own shape, not a table of the game's
+    PortJson types;
+    if (!PortJsonParse(typesText.c_str(), &types) || types.kind != PortJson::OBJECT) {
+      g_error = "generate returned text that is not an object";
+      bOk = false;
+    } else {
+      PortJson looks;
+      looks.kind = PortJson::OBJECT;
+      std::vector<PortJsonMember> kept;
+      for (PortJsonMember &m : types.members) {
+        if (m.first == "looks") {
+          PortJsonMember l;
+          l.first = "looks";
+          l.second = m.second;
+          looks.members.push_back(l);
+        } else {
+          kept.push_back(m);
+        }
+      }
+      types.members = kept;
+      bOk = GenNamesOk(types, &g_error);
+      if (bOk && !looks.members.empty())
+        looksText = PortJsonWrite(looks);
+      const std::string text = bOk ? PortJsonWrite(types) : std::string();
+      const PortJson empty = []() {
+        PortJson j;
+        j.kind = PortJson::OBJECT;
+        return j;
+      }();
+      if (bOk) {
+        ModLuaPushTexts(&empty);  // the generated records bring no scripts of their own
+        g_bAddCards = true;       // their cards come beside the mode's, not in place of them
+        const std::string iscript;
+        bOk = Load(std::string(pszMode) + " run", folder, &text, &iscript, hHash);
+        g_bAddCards = false;
+        ModLuaPushTexts(nullptr);
+      }
+    }
+  }
+  BYTE abHash[20];
+  BCryptFinishHash(hHash, abHash, sizeof abHash, 0);
+  BCryptDestroyHash(hHash);
+  if (!bOk) {
+    Log("modes: %s's data does not load: %s", pszMode, g_error);
+    PutBack(before);
+    return;
+  }
+  PortModeFingerprintSet(abHash);
+  CountsSet();
+  g_bMode = true;
+  g_bPushed = true;  // put away with the game, as a push is
+  g_hxModGame = true;
+  size_t nRecords = 0;
+  for (const ModTable &m : g_tables)
+    nRecords += m.recs.size();
+  Log("modes: %s loaded, %u records in the tables, run %u bytes", pszMode, static_cast<unsigned>(nRecords),
+      static_cast<unsigned>(g_modeRun.size()));
+  if (!looksText.empty())
+    PortLooksModeLooks(looksText);
+  PortLooksModeFile(folder + "looks.json");
+}
+
 
 struct Push {
   int nSub;
@@ -2291,11 +3051,60 @@ void PushesPutAway() {
   PutBack(g_startUp);
   g_startUp = Kept();
   g_bPushed = false;
+  g_bMode = false;
+  g_modeRun.clear();
   g_pushes.clear();
-  Log("mods: the pushes of %s are put away", g_liveMod);
+  ModeMapForget();
+  PortLooksModeFile(std::string());
+  PortLooksModeLooks(std::string());
+  Log("mods: what the game's pushes and its mode brought is put away (%s)", g_liveMod);
 }
 
 }  // namespace
+
+// The seat a mode treats as the enemy base, over any set of seats: the set-up's rows before the
+// game is made and the game's own players once it is. One rule in one place, so a mode is
+// offered the seat the launch will really give it, and a mode that plays the player itself takes
+// the one its generate was given as ctx.enemy (PortModeEnemySlot).
+int PortModeEnemyOf(const PortSeat *pSeats, int nSeats, bool bTeams) {
+  int nPerson = -1;
+  for (int s = 0; s < nSeats && nPerson < 0; ++s)
+    if (pSeats[s].nKind == PORT_SEAT_PERSON)
+      nPerson = s;
+  const int nMine = nPerson < 0 ? 0 : pSeats[nPerson].nTeam;
+  for (int s = 0; s < nSeats; ++s)
+    if (pSeats[s].nKind == PORT_SEAT_COMPUTER &&
+        (!bTeams || nMine == 0 || pSeats[s].nTeam == 0 || pSeats[s].nTeam != nMine))
+      return s;
+  return -1;
+}
+
+int PortModeEnemyFind() {
+  // the teams the set-up gave the slots, which a game and a replay of it both have before the
+  // map is loaded; the map's alliances are not read, since the map sets them after a mode's
+  // records are made. The teams count where the game has them, and in a melee game every other
+  // slot plays against this one whatever force the map put it in.
+  std::vector<PortSeat> seats(static_cast<size_t>(PlayerSlots()));
+  for (size_t s = 0; s < seats.size(); ++s) {
+    if (static_cast<int>(s) == PLAYER_NEUTRAL)
+      continue;
+    seats[s].nKind = gPlayerData[s].nType == 1   ? PORT_SEAT_COMPUTER
+                     : gPlayerData[s].nType == 2 ? PORT_SEAT_PERSON
+                                                 : PORT_SEAT_NOBODY;
+    seats[s].nTeam = gPlayerData[s].nTeam;
+  }
+  return PortModeEnemyOf(seats.data(), static_cast<int>(seats.size()),
+                         IsTeamGame() || (g_hxRuleOptions & HX_OPT_TEAMS) != 0);
+}
+
+const PortMarkLook *ModMarkLook(const char *pszId) {
+  const auto it = g_markLooks.find(pszId);
+  return it == g_markLooks.end() ? nullptr : &it->second;
+}
+
+const char *ModMarkLookNames() {
+  return g_markLookNames.c_str();
+}
 
 bool ModDataPush(const char *pszFolder, const char *pszMod, const std::string *pTypes, const std::string *pScript,
                  std::string *pAnswer) {
@@ -2410,13 +3219,20 @@ void ModDataAfterGame() {
 
 void ModDataForGame() {
   PushesPutAway();  // a game that did not end through ModDataAfterGame
-  if (!g_hxModGame || g_id.empty()) {
+  ModeLoad();       // the game's mode, its data and the records its generate makes
+  ModVoiceForGame();
+  if (!g_hxModGame || (g_id.empty() && !g_bMode)) {
     g_hxTypes = {UNIT_TYPES_117,  WEAPON_TYPES_117, FLINGY_TYPES_117, SPRITE_TYPES_117,
                  IMAGE_TYPES_117, ORDER_TYPES_117,  TECH_TYPES_117,   UPGRADE_TYPES_117};
     EditsPutBack();
     ArtBuild(false);
     StatcmdModCards(false);
     PortModArtGame(false);
+    ModLuaModeForGame(std::string(), std::string(), std::string());
+    ModStatusForGame();
+    ModLuaForGame();
+    PortReadoutLoad();
+    PortReadoutForGame();
     return;
   }
   for (const Record &r : g_tables[TECHS].recs)
@@ -2436,6 +3252,12 @@ void ModDataForGame() {
   ArtBuild(true);
   PortModArtGame(true);
   StatcmdModCards(true);  // after the counts: a mod's unit's card is its own
+  ModLuaModeForGame(PortModeInGame(), PortModeSettingsOfGame(), g_modeRun);
+  ModStatusForGame();
+  ModLuaForGame();
+  // the mod's readout.json, read for the game and its effects dropped (port_readout.h)
+  PortReadoutLoad();
+  PortReadoutForGame();
 }
 
 const char *ModUnitName(unsigned nType) {
@@ -2448,6 +3270,29 @@ const char *ModUnitName(unsigned nType) {
       return Lasting(name.kind == PortJson::STRING ? name.s : r.name);
     }
   return "";
+}
+
+// A sound's member that is no column: the newest record or edit of the row that gives it, in a
+// game with the mod.
+static const PortJson *SoundMember(unsigned nSound, const char *pszName) {
+  if (!g_hxModGame)
+    return nullptr;
+  const PortJson *p = nullptr;
+  for (const std::vector<Record> *pv : {&g_tables[SOUNDS].recs, &g_tables[SOUNDS].edits})
+    for (const Record &r : *pv)
+      if (r.id == static_cast<int>(nSound) && (*r.pJson)[pszName].kind != PortJson::NONE)
+        p = &(*r.pJson)[pszName];
+  return p;
+}
+
+const char *ModSoundSubtitle(unsigned nSound) {
+  const PortJson *p = SoundMember(nSound, "subtitle");
+  return p != nullptr && p->kind == PortJson::STRING && !p->s.empty() ? Lasting(p->s) : nullptr;
+}
+
+int ModSoundGap(unsigned nSound) {
+  const PortJson *p = SoundMember(nSound, "min_interval");
+  return p != nullptr && p->kind == PortJson::NUMBER ? static_cast<int>(p->d) : -1;
 }
 
 const char *ModUnitEditName(unsigned nType) {
@@ -2481,6 +3326,25 @@ const unsigned short *ModUnitTree(unsigned nType) {
 
 const unsigned short *ModTechUseTree(unsigned nTech) {
   return g_hxModGame ? TreeOf(g_trees.own[MOD_TREE_TECH_USE], nTech) : nullptr;
+}
+
+int ModOrderHandler(unsigned nOrder, unsigned nTech) {
+  if (!g_hxModGame)
+    return 0;
+  for (const Record &o : g_tables[ORDERS].recs)
+    if (o.id == static_cast<int>(nOrder)) {
+      switch (o.base117) {
+      case 137: case 139: case 141: case 148: case 182: case 184:
+        return o.base117;
+      }
+      break;
+    }
+  if (nTech == 0)
+    return MOD_ORDER_STIM;
+  for (const Record &t : g_tables[TECHS].recs)
+    if (t.id == static_cast<int>(nTech))
+      return t.base117 == 0 ? MOD_ORDER_STIM : 0;
+  return 0;
 }
 
 const unsigned short *ModTechResearchTree(unsigned nTech) {
@@ -2543,6 +3407,22 @@ const char *const kModAiFinders[MOD_AI_FINDERS] = {
 const ModCardButton *ModCardButtons(int *pnCount) {
   *pnCount = static_cast<int>(g_buttons.size());
   return g_buttons.data();
+}
+
+const char *ModCardAiCall(short n) {
+  return n >= 0 && n < static_cast<short>(g_cardAiCalls.size()) ? g_cardAiCalls[n].c_str() : nullptr;
+}
+
+WORD ModCardWordsString(int nWords, const char *pszOriginal) {
+  if (nWords < 0 || nWords >= static_cast<int>(g_words.size()) || !pszOriginal || !pszOriginal[0] || !pszOriginal[1])
+    return 0;
+  Words &w = g_words[static_cast<size_t>(nWords)];
+  if (w.wStr == 0) {
+    const std::string key = w.hotkey.empty() ? std::string(1, pszOriginal[0]) : w.hotkey;
+    w.wStr = w.text.empty() ? AddString(key.substr(0, 1) + pszOriginal[1] + std::string(pszOriginal + 2))
+                            : AddString(ButtonText(key, pszOriginal[1], w.text));
+  }
+  return w.wStr;
 }
 
 int ModTypeByName(const char *pszTable, const char *pszName) {
@@ -2661,7 +3541,8 @@ int ModRaceBase(int nRace) {
 
 int ModRaceByName(const char *psz) {
   for (size_t i = 0; i < g_races.size(); ++i)
-    if (lstrcmpiA(g_races[i].id.c_str(), psz) == 0 || lstrcmpiA(g_races[i].name.c_str(), psz) == 0)
+    if (lstrcmpiA(g_races[i].id.c_str(), psz) == 0 || lstrcmpiA(g_races[i].name.c_str(), psz) == 0 ||
+        (psz[0] != '\0' && lstrcmpiA(ModLangOwnText("race/" + g_races[i].id).c_str(), psz) == 0))
       return static_cast<int>(i) + 1;
   return 0;
 }
@@ -2724,6 +3605,36 @@ void ModRacesForGame() {
   memset(g_recordedRaces, 0, sizeof g_recordedRaces);
 }
 
+// The local player's race of the mod: a new game's as chosen (its slot plays the race's base), a
+// replay's or save's as recorded, else as the game set it.
+static const Race *LocalRace() {
+  if (!g_hxModGame || g_races.empty() || g_LocalNationID >= PLAYER_SLOTS_MAX)
+    return nullptr;
+  if (gPlayback || gpLoadGameFile != NULL)
+    return RaceAt(g_recordedRaces[g_LocalNationID] ? g_recordedRaces[g_LocalNationID] : g_slotRace[g_LocalNationID]);
+  const Race *r = RaceAt(Session().aRow[0].nModRace);
+  return r && gPlayerData[g_LocalNationID].nRace == r->nBase ? r : nullptr;
+}
+
+int ModRaceLook(int nWhat, int nRace) {
+  const Race *r = LocalRace();
+  const int n = !r ? -1 : nWhat == 0 ? r->nConsole : r->nMusic;
+  return n >= 0 ? n : nRace;
+}
+
+const ModRaceRules *ModRaceRulesOf(int nRace) {
+  const Race *r = RaceAt(nRace);
+  return r ? &r->rules : nullptr;
+}
+
+int ModRaceMusicTrack(int nTrack) {
+  // the three races' tracks are 1 to 9, three each from zerg's
+  if (nTrack < 1 || nTrack > 9)
+    return nTrack;
+  const int nMusic = ModRaceLook(1, -1);
+  return nMusic < 0 ? nTrack : 1 + 3 * nMusic + (nTrack - 1) % 3;
+}
+
 int ModRaceOf(int nSlot) {
   return nSlot >= 0 && nSlot < PLAYER_SLOTS_MAX ? g_slotRace[nSlot] : 0;
 }
@@ -2764,6 +3675,14 @@ int ModRaceAiUnit(int nPlayer, int nType) {
   return nType;
 }
 
+int ModRaceAiClassic(int nPlayer, int nType) {
+  if (const Race *r = RaceAt(ModRaceOf(nPlayer)))
+    for (const std::pair<int, int> &m : r->ai)
+      if (m.second == nType)
+        return m.first;
+  return nType;
+}
+
 int ModRaceAiTech(int nPlayer, int nTech) {
   if (const Race *r = RaceAt(ModRaceOf(nPlayer)))
     for (const std::pair<int, int> &m : r->aiTechs)
@@ -2798,3 +3717,153 @@ bool ModUnitForPlayer(unsigned nType, int nPlayer) {
       }
   return !bNamed;
 }
+
+#ifdef HX_DESIGN
+// The loader's tables as the studio reads them (design_hooks.h): what the loader starts a record
+// from and what it built, so the studio works out a record's values by the loader's own numbers
+// and checks its own against the loader's after a push (studio_verify).
+bool DesignModTable(int t, const char **ppszName, int *pnRows117, int *pnModFirst, int *pnModMax) {
+  if (t < 0 || t >= TABLES)
+    return false;
+  *ppszName = kTables[t].psz;
+  *pnRows117 = kTables[t].nRows117;
+  *pnModFirst = kTables[t].nModFirst;
+  *pnModMax = kTables[t].nModMax;
+  return true;
+}
+
+int DesignModColumns(int t) {
+  return t >= 0 && t < TABLES ? kTables[t].nColumns : 0;
+}
+
+bool DesignModColumnOf(int t, int c, DesignModColumn *pOut) {
+  if (t < 0 || t >= TABLES || c < 0 || c >= kTables[t].nColumns)
+    return false;
+  if (g_tables[t].file.empty() && !LoadTableFile(t))
+    return false;
+  const Column &col = kTables[t].pColumns[c];
+  const Geometry &g = g_tables[t].geo[c];
+  pOut->pszName = col.psz;
+  pOut->pszRef = col.pszRef ? col.pszRef : "";
+  pOut->nScale = col.nScale;
+  pOut->nCount = static_cast<int>(g.rowBytes / g.elemSize);
+  pOut->bPath = c < PathColumns(t);
+  return true;
+}
+
+namespace {
+// A row's columns, from the build's widths to numbers, element by element.
+void Numbers(int t, const std::vector<std::vector<BYTE>> &cols, std::vector<std::vector<long long>> *pOut,
+             std::vector<std::string> *pPaths) {
+  pOut->assign(cols.size(), std::vector<long long>());
+  if (pPaths)
+    pPaths->assign(cols.size(), std::string());
+  for (size_t c = 0; c < cols.size(); ++c) {
+    if (static_cast<int>(c) < PathColumns(t)) {
+      const char *psz = PathOf(cols[c]);
+      if (pPaths && psz)
+        (*pPaths)[c] = psz;
+      continue;
+    }
+    const Geometry &g = g_tables[t].geo[c];
+    const DWORD nPer = g.rowBytes / g.elemSize;
+    for (DWORD k = 0; k < nPer; ++k) {
+      unsigned long long v = 0;
+      for (DWORD b = 0; b < g.recElem && b < 8; ++b)
+        v |= static_cast<unsigned long long>(cols[c][k * g.recElem + b]) << (8 * b);
+      (*pOut)[c].push_back(static_cast<long long>(v));
+    }
+  }
+}
+}  // namespace
+
+bool DesignModClassicRow(int t, int nRow, std::vector<std::vector<long long>> *pCols,
+                         std::vector<std::string> *pPaths) {
+  if (t < 0 || t >= TABLES || nRow < 0 || nRow >= kTables[t].nRows117)
+    return false;
+  if (g_tables[t].file.empty() && !LoadTableFile(t))
+    return false;
+  Numbers(t, FileRow(t, nRow), pCols, pPaths);
+  return true;
+}
+
+bool DesignModLoaded(int t, const std::string &name, int *pnId, int *pnSub,
+                     std::vector<std::vector<long long>> *pCols) {
+  if (t < 0 || t >= TABLES)
+    return false;
+  const Record *pFound = nullptr;
+  for (const Record &r : g_tables[t].recs)
+    if (r.name == name && r.state == 2)
+      pFound = &r;
+  if (pFound == nullptr)
+    return false;
+  *pnId = pFound->id;
+  *pnSub = pFound->sub;
+  Numbers(t, pFound->cols, pCols, nullptr);
+  return true;
+}
+#endif
+
+
+
+bool ModDataModeRoll(const char *pszMap, const char *pszSettings, unsigned dwSeed, const char *pszRace,
+                     std::string *pTypes, std::string *pRun, std::string *pWhy, int nPlayers) {
+  if (!ModLuaHasGenerate()) {
+    *pWhy = "it has no generate";
+    return false;
+  }
+  const ModeMapRead *pMap = ModeMapOf(pszMap);
+  if (pMap == nullptr) {
+    *pWhy = std::string("the map ") + (pszMap != nullptr ? pszMap : "") + " does not read";
+    return false;
+  }
+  PortJson settings;
+  ModLuaGenCtx ctx;
+  ctx.dwSeed = dwSeed;
+  if (pszSettings != nullptr && pszSettings[0] != 0 && PortJsonParse(pszSettings, &settings) &&
+      settings.kind == PortJson::OBJECT)
+    ctx.pSettings = &settings;
+  // the player at the first start, computers of the same race at the starts after it, as many
+  // as were asked for and the map has
+  for (int i = 0; i < nPlayers && i < static_cast<int>(pMap->starts.size()); ++i) {
+    ModLuaGenPlayer p;
+    p.nPlayer = i;
+    p.race = pszRace;
+    p.kind = i == 0 ? "human" : "computer";
+    p.x = pMap->starts[i].x;
+    p.y = pMap->starts[i].y;
+    ctx.players.push_back(p);
+  }
+  // the last of them is the mode's enemy base, as it is in the game of two the check rolls
+  ctx.nEnemy = ctx.players.size() > 1 ? static_cast<int>(ctx.players.size()) - 1 : -1;
+  ctx.pMap = pMap;
+  ctx.row = RowOf;
+  if (!ModLuaGenerate(ctx, pTypes, pRun, pWhy))
+    return false;
+  PortJson types;
+  if (!PortJsonParse(pTypes->c_str(), &types) || types.kind != PortJson::OBJECT) {
+    *pWhy = "generate returned text that is not an object";
+    return false;
+  }
+  return GenNamesOk(types, pWhy);
+}
+
+int ModDataSpriteImage(int nSprite) {
+  const int t = TableIndex("sprites");
+  if (t < 0 || nSprite < 0)
+    return -1;
+  PortJson base;
+  base.kind = PortJson::NUMBER;
+  base.d = nSprite;
+  Record r;
+  const std::string errWas = g_error;
+  if (!BaseRow(t, base, r)) {
+    g_error = errWas;  // asking is not a load's failure
+    return -1;
+  }
+  for (int c = 0; c < kTables[t].nColumns; ++c)
+    if (strcmp(kTables[t].pColumns[c].psz, "image") == 0)
+      return static_cast<int>(ValueOf(t, r, c));
+  return -1;
+}
+

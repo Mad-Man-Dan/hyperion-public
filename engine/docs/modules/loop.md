@@ -135,11 +135,9 @@ history, and the harness's Hyperion references re-recorded (`replaytest.py hxrec
 - The AI domain reuses a captain's hashed stream when it equals the previous captain's but
   for its region, patching the region in (`CaptainsAlike`).
 - The pools are sized per game (`port_pools.cpp`): a 1.17 game keeps 1.17's sizes exactly.
-  The unit table: a game past 1.17's limits, or with a supply cap past 200, holds
-  the map's own units (its first pass counts the `UNIT` records, `PoolsMapUnit`) and, for each
-  player, its supply cap in units and 100 for its buildings, rounded up to 1,700s, at least
-  1,700 for each 8 slots; the unit limit (Game Options, `MutatorSet::nUnits`) takes it to at
-  least its count, up to 262,144 (`POOL_UNITS_MAX`). The other pools follow in 1.17's
+  The unit table: a game by Hyperion's rules holds the most, 262,144 (`POOL_UNITS_MAX`); a
+  unit limit (`MutatorSet::nUnits`, from `--mutators`, a room or the benchmark) names another
+  count, at least 1,700 for each 8 slots. The other pools follow in 1.17's
   proportions (`PoolsForUnits`), and the AI's six with them (`h/aipools.h`). A replay (`UNTS`)
   and a save (`HXUN`) record a table other than the slots', since a save does not read its map
   again. A game past 1.17's limits or table has 25,600 paths, or one a unit past that, where

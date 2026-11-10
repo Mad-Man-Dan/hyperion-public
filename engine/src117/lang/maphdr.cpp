@@ -1766,10 +1766,10 @@ static void MapDeriveSet(const chunkset_t *pFrom, bool bStrx, bool bCrgb, chunkh
   }
   if (bCrgb)
     MapAddHandler(&pTbl[n++], "CRGB", maphdr_CRGB);
-  // Hyperion: a set that does not place the units counts them, for the unit table
-  // (port_pools.cpp)
+  // Hyperion: a set that does not place the units counts them, for the unit table,
+  // (port_pools.cpp), and notes the slots with a start location (port_players.cpp)
   if (!bUnits)
-    MapAddHandler(&pTbl[n++], "UNIT", PoolsMapUnit);
+    MapAddHandler(&pTbl[n++], "UNIT", PlayersMapUnit);
   pTo->pTbl = pTbl;
   pTo->nCount = n;
 }

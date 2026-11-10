@@ -99,8 +99,10 @@ The commands, by what they do:
   click, its second press as a window with CS_DBLCLKS gets it; `phase` `down` or `up` for half a
   press, so a drag is a down, moves with `move`, then an up), and `trainer` for a key with
   modifiers a posted key cannot carry.
-- added by another part with `PortControlCommand`, which answers them: the AI lab's
-  `lab_status`, `lab_start`, `lab_pace`, `lab_stop`, `lab_games` and `lab_watch` (`lab.md`).
+- added by another part with `PortControlCommand`, which answers them: the mods' scripts'
+  `scripts`, `script_call` and `script_trace` (`data.md`, "The trace of what the scripts do"),
+  and the AI lab's `lab_status`, `lab_start`, `lab_pace`, `lab_stop`, `lab_games` and
+  `lab_watch` (`lab.md`).
 - `subscribe {topics}`: from then, every message another part publishes on those topics
   (`PortControlPublish`) is sent to the client as `{"topic": ..., "data": ...}`, until it closes
   or subscribes again; a client more than 8 MB behind misses them until it catches up. The AI

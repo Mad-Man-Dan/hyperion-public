@@ -21,6 +21,9 @@ void PortGpuCoverChanged(void);
 void PortGpuAheadSet(int nAhead);  // Settings, "Frames ahead": 1 to 3
 void PortGpuArtFilterSet(int nStep);  // Settings, "Classic art filtering": 0 sharp to 3 filtered
 void PortGpuFullColourSet(bool bOn);  // Settings, "Player colours": Exact is the map in full colour
+// Whether the last pass drew the map in full colour, which is what the scene's full-colour-only
+// primitives need: a look's light and a mod's marks painted on the ground (port_mapmark.h).
+bool PortGpuFullColourShown(void);
 const char *PortGpuDriver(void);
 
 // Draws the 8-bit screen (nWidth x nHeight, rows nWidth apart) through the palette
@@ -43,6 +46,14 @@ bool PortGpuFrame(const Uint8 *pScreen, const Uint8 *pCover, int nWidth, int nHe
 void PortGpuSnapAsk(const char *pszPath);
 bool PortGpuSnapPending(void);
 bool PortGpuSnapTake(bool *pbOk, int *pnWidth, int *pnHeight);
+
+// The player's screenshot (PortScreenshot, port_present.cpp): the window's own picture, at the
+// window's resolution, so the file has what the player sees -- the frame in full colour, a
+// cinematic over it, the HUD design and the overlay. It is taken from the frame drawn next,
+// which the caller draws; PortGpuShotTake then says how it went and drops an ask no frame
+// answered.
+void PortGpuShotAsk(const char *pszFile);
+bool PortGpuShotTake(bool *pbOk, int *pnWidth, int *pnHeight);
 
 // The check's counts so far: frames compared, and those that differed.
 void PortGpuCheckCounts(ULONG *pnChecked, ULONG *pnMismatched);

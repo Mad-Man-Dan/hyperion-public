@@ -13,6 +13,7 @@
 #include "../gameplay/port_ai.h"            // AiChosenThisGame
 #include "../gameplay/port_handicap.h"      // HandicapChosenThisGame
 #include "../gameplay/port_mutators.h"      // MutatorsChosenThisGame
+#include "../data/port_mode.h"              // PortModeChosenThisGame
 #include "../gameplay/port_session.h"       // Session
 #include "../tools/port_bench.h"            // PortBenchStressChosen
 #include "../../gen/globals117.h"
@@ -51,7 +52,8 @@ unsigned ChosenOptions() {
   return (pszBudget != NULL && strcmp(pszBudget, "117") == 0 ? HX_OPT_PATH_BUDGET_117 : 0) |
          (TeamsThisGame() ? HX_OPT_TEAMS : 0) | (AiChosenThisGame() ? HX_OPT_AI_LEVELS : 0) |
          (PortBenchStressChosen() ? HX_OPT_STRESS : 0) | (HandicapChosenThisGame() ? HX_OPT_HANDICAP : 0) |
-         (MutatorsChosenThisGame() ? HX_OPT_MUTATORS : 0) | HX_OPT_ORDER_QUEUE | HX_OPT_SELECTION;
+         (MutatorsChosenThisGame() ? HX_OPT_MUTATORS : 0) | (PortModeChosenThisGame() ? HX_OPT_MODE : 0) |
+         HX_OPT_ORDER_QUEUE | HX_OPT_SELECTION;
 }
 
 }  // namespace
@@ -78,14 +80,16 @@ void RulesForGame() {
     g_hxRuleOptions = g_recordedOptions;
     g_hxModGame = g_recordedMod;
   } else {
-    // A new game has the mod's types when a mod's data loaded, and plays by Hyperion's
-    // rules with them; a campaign's mission never has them, and plays as the
-    // campaign was made (the user, 2026-10-27)
-    g_hxModGame = ModDataId()[0] != '\0' && RulesCampaignMission() == 0;
+    // A new game has the mod's types when a mod's data loaded, or when it carries a game
+    // mode, whose own data loads with it, and plays by Hyperion's rules with them; a
+    // campaign's mission never has them, and plays as the campaign was made (the user,
+    // 2026-10-27)
+    g_hxModGame = (ModDataId()[0] != '\0' || PortModeChosenThisGame()) && RulesCampaignMission() == 0;
     // chosen teams are Hyperion's too (port_teams.h), computers at a level (port_ai.h), a
     // stress run (port_bench.h), a handicap (port_handicap.h) and a mutator (port_mutators.h)
     g_hxRulesGame = ChosenHyperion() || g_hxModGame || TeamsThisGame() || AiChosenThisGame() ||
-                    PortBenchStressChosen() || HandicapChosenThisGame() || MutatorsChosenThisGame();
+                    PortBenchStressChosen() || HandicapChosenThisGame() || MutatorsChosenThisGame() ||
+                    PortModeChosenThisGame();
     g_hxRuleOptions = ChosenOptions();
   }
 }

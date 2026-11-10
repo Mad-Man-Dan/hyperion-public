@@ -133,6 +133,13 @@ int PlayersMapSlotCount();
 int __stdcall PlayersMapHxpl(void *pFile, int nSize, void *pDest);
 // HXRG: the full RGB colours of the slots from 8 on (port_players.cpp, stage G).
 int __stdcall PlayersMapHxrg(void *pFile, int nSize, void *pDest);
+// UNIT, as a map is looked at before its game: the units counted for the pools
+// (PoolsMapUnit) and the slots that have a start location noted.
+int __stdcall PlayersMapUnit(void *pFile, int nSize, void *pDest);
+// Whether a Hyperion map's slot past 7 is a seat: one the map opens to a human or a
+// computer, with a start location once the map's units have been read. A melee game seats
+// and shuffles players among the seats alone; an owner no one plays keeps its place.
+bool PlayersMapSeat(int nSlot);
 
 // The computers a launch asks for past the 7 that 1.17's Play Custom table holds, and their
 // races, which the session keeps (port_session.h); with none asked for, one in each slot past

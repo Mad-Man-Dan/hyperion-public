@@ -7,6 +7,7 @@
 #include "../port/gameplay/port_eud.h"  // Hyperion: EUD maps
 #include "../port/gameplay/port_handicap.h"  // Hyperion: handicaps
 #include "../port/gameplay/port_mutators.h"  // Hyperion: mutators
+#include "../port/data/port_mode.h"  // Hyperion: PortModeForGame
 #include "../port/render/port_looks.h"  // Hyperion: PortLooksGameBegin
 #include "../h/map_load.h"
 #include "../h/minimap.h"
@@ -377,7 +378,7 @@ extern WORD  gwLastScrollMtxY;         // 0x54320C
 void game_init_theme()
 {
     gamesnd_reset(1);
-    switch (byte_5264C2) {
+    switch (ModRaceLook(0, byte_5264C2)) {  // Hyperion: a mod's race may show another race's console
     case 0:
         sgpCurrConsoleDlgGrp_g = dlg_load_theme(reinterpret_cast<intptr_t>(sgszZergGrp),reinterpret_cast<intptr_t>(ReadGroupFile),reinterpret_cast<intptr_t>(sgszGameCpp), 0xB0);
         word_5264BE_g = 1;
@@ -425,6 +426,7 @@ BOOL game_init()
     AiForGame();  // Hyperion: and the computers' levels (port_ai.h)
     HandicapForGame();  // Hyperion: and the players' handicaps (port_handicap.h)
     MutatorsForGame();  // Hyperion: and its mutators (port_mutators.h)
+    PortModeForGame();  // Hyperion: and its game mode, whose data CUnit::InitUnits loads (port_mode.h)
     if (gpLoadGameFile == 0)
       gametype_mutator_resources();  // Hyperion: and their start resources, which game_ui_init set before them
     ReplayHxNoteGame();  // Hyperion: whether its replay is Hyperion's, for a room's feed as it goes

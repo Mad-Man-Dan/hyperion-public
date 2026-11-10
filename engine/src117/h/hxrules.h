@@ -46,9 +46,14 @@
 // start resources and workers, the supply cap and the supply each supplier gives. The replay
 // and the save hold them (port_mutators.h).
 #define HX_OPT_MUTATORS 0x100u
+// The game is played with a game mode, a mod whose mod.json says "kind": "mode"
+// (port_mode.h). What its scripts do is part of the simulation, so the replay and the save
+// hold the mode's id, version, fingerprint, settings and seed, and one naming a mode this
+// build has not installed is refused.
+#define HX_OPT_MODE 0x200u
 // The options this build plays back and loads.
 #define HX_OPT_KNOWN (HX_OPT_PATH_BUDGET_117 | HX_OPT_TEAMS | HX_OPT_AI_LEVELS | HX_OPT_STRESS | HX_OPT_EUD | \
-                      HX_OPT_ORDER_QUEUE | HX_OPT_SELECTION | HX_OPT_HANDICAP | HX_OPT_MUTATORS)
+                      HX_OPT_ORDER_QUEUE | HX_OPT_SELECTION | HX_OPT_HANDICAP | HX_OPT_MUTATORS | HX_OPT_MODE)
 
 // The rule versions' names, as the rule record holds them.
 #define HX_RULE_CLASSIC "1.17"

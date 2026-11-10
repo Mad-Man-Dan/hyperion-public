@@ -31,4 +31,24 @@ unsigned char PortMinimapDotColour(int nOwner, int nType, unsigned char bColour)
 struct PortJson;
 void PortMinimapHud(const PortJson &minimap);
 
+// ---- a mod's marks on the minimap -----------------------------------------------------------
+//
+// A mark a mod set with hx.area, drawn on the minimap's own picture as well as on the ground,
+// for the marks whose minimap block asks for it (port_mapmark.h). The picture is palette
+// indices with no alpha, so a mark there is its colour's nearest palette entry and an opacity
+// is drawn as a part of the pixels rather than a weaker colour. Nothing fades: a perimeter
+// shows on the minimap whole, whatever the ground's light is doing.
+//
+// The pass runs after the terrain and the fog and before the unit dots (minimap.cpp,
+// draw_minimap_body), so a mark never hides a dot and nothing here touches the dots' own walk,
+// whose counts the multiplayer game's hash takes.
+void PortMinimapMarks(unsigned char *pbPixels, int nWidth, int nHeight, int nScale);
+
+// The minimap's picture as the scale ladder settles it (minimap.cpp, sub_46D850): its size in
+// pixels and the map pixels one of them covers. The size and the scale are the minimap's own
+// and no other file can read them, so the minimap hands them over as it sizes itself; a mod
+// asks for them with hx.minimap and false is the answer before a game's minimap is made.
+void PortMinimapSized(int nWidth, int nHeight, int nScale);
+bool PortMinimapSize(int *pnWidth, int *pnHeight, int *pnScale);
+
 #endif

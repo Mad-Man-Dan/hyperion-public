@@ -67,8 +67,22 @@ map, which only Hyperion plays. Its slots past neutral's are 12 and up, and the 
 list leaves out slot 11: entry 11 is slot 12, entry 12 slot 13, and so on. A unit's or
 doodad's `owner` is the slot's number (0 to 10, then 12 and up) or `"neutral"`. Triggers
 name any slot by its number, and the groups reach every slot (Trigger, below). The
-compiled map carries those slots in HXPL and their RGB colours in HXRG
-(`engine/docs/maps.md`).
+compiled map carries those slots in HXPL and their RGB colours in HXRG (Hyperion's sections
+in a compiled map, below).
+
+Neutral's slot and slots 8 to 10 are classic's and unchanged: neutral owns the resources and
+critters, and 8 to 10 are owners a map gives units to, whom no lobby seats. On a Hyperion map
+a slot from 8 on is a player when its `slot` is `human` or `computer`, and otherwise an owner
+no one plays, as in classic. Those owners are for Use Map Settings. In a melee game, of the
+slots from 8 on only the seats take a player, the `human` and `computer` slots that have a
+start location; slots 0 to 7 keep classic's rule, whose start shuffle seats players in
+`rescuable`, `unused` and `neutral` slots as well, so one of those that no one plays is
+`inactive` on a map meant for melee.
+
+`"limits": "classic"` says a map is not a Hyperion map whatever its slots 8 to 10 are called.
+A classic map that calls one of them a human or a computer, which no lobby seats, converts
+with it, and so converts back to the map it was. Added 2026-11-09 within version 1: left out,
+a map means what it did.
 
 ## The document
 
@@ -80,6 +94,7 @@ compiled map carries those slots in HXPL and their RGB colours in HXRG
 | `tileset` | name or 0-7 | required | `badlands`, `platform`, `installation`, `ashworld`, `jungle`, `desert`, `ice`, `twilight` |
 | `size` | `[width, height]` in tiles | required | |
 | `expansion` | bool | `true` | the map needs Brood War |
+| `limits` | `classic` | none | `classic`: the map keeps to classic's limits and is never a Hyperion map. Slots 8 to 10 are owners no lobby seats whatever their `slot`, and a map past the limits in another way is refused. Left out, the map's content decides (Players, above) |
 | `text_encoding` | `utf-8` or `cp1252` | `utf-8` | how text goes into a 1.17 map: `cp1252` writes each string in 1.17's code page when it can, as the classic editors did |
 | `players` | list of player | | the slots, in order |
 | `neutral` | player | inactive | the neutral player's slot record |
@@ -120,7 +135,7 @@ compiled map carries those slots in HXPL and their RGB colours in HXRG
 
 | Field | Default | Meaning |
 |---|---|---|
-| `type` | required | a unit name or number |
+| `type` | required | a unit name or number, or the name of a unit a mod adds (Units a mod adds, below) |
 | `x`, `y` | required | the unit's centre, in pixels |
 | `owner` | 0 | a player or `"neutral"` |
 | `id` | its index | the unit's number, which `link` refers to |
@@ -133,6 +148,19 @@ compiled map carries those slots in HXPL and their RGB colours in HXRG
 | `unused` | 0 | |
 
 A `start_location` unit owned by a player is where that player starts.
+
+#### Units a mod adds
+
+A unit's `type` (and a doodad's `unit`, and a trigger's `unit`) may be the name a mod gives
+one of its units, as `"hybrid_reaver"`. Such a map loads only in a game with that mod's
+data (`--mod <id>`, or the mod chosen in the Mods menu); without it the map is refused as
+naming an unknown unit. A mod's unit has no fixed number, so a map names it. Added
+2026-10-14 within version 1: such names were refused before, so no map changes meaning. The
+compiled map writes the unit's number in the game the mod's data gives, from 256 up, in
+UNIT's 16-bit type; the compile is kept for that mod's data alone, so a game with other data
+compiles the map again. `settings` and `availability` reach classic's 228 units, 61 upgrades
+and 44 techs: a mod's unit named there is left out, and a mod's upgrade or tech is refused.
+Naming the mod a map is made for is planned (`hxm-for-editors.md`).
 
 ### Doodad
 
@@ -234,9 +262,27 @@ A map past those limits, more than 256 tiles a side, players from list entry 8 o
 part, triggers for slots past 11 or a mod's units, gets a VER of its own: 1206, or 1064 when
 `expansion` is false. No Blizzard version uses either, so a map site or an editor tells such
 a CHK from a classic one by its VER alone, whatever the file is called. Hyperion reads them
-as Remastered's 206 and 64, with STR or STRx. A map within the limits keeps the classic
+as Remastered's 206 and 64, with STR or STRx, so their MRGN holds 255 locations: a map of
+version 59, which holds 64, gets the rest as empty ones when its VER is raised. A map within the limits keeps the classic
 versions (59, 63, 64, 205, 206), and one converted back from 1206 or 1064 gets 205 or 206,
 63 or 64.
+
+### Hyperion's sections in a compiled map
+
+A compiled Hyperion map has up to three sections no classic map has. Each begins with a DWORD
+version, 1 for all three today, and Hyperion refuses the map when it does not read that
+version or the section's size is not what its counts give. They may come anywhere in the
+file: Hyperion reads HXPL before the sections that need the slots, wherever it is.
+
+| Section | After the version | When |
+|---|---|---|
+| `HXPL` | a DWORD count of slots, 9 to 65, which counts neutral's once it passes 11; then four bytes for each slot from 8 on: its kind (OWNR's values), its race (SIDE's), its force and its colour's number, 0xFF for none. Slot 11's four bytes are 0 | a player from slot 8 on takes part |
+| `HXRG` | the same count; then four bytes for each slot from 8 on: 1 when it has a colour, then red, green and blue | such a player has `rgb` |
+| `HXTE` | a DWORD count of TRIG's triggers; then a QWORD for each, bit n set when it runs for slot n | a trigger runs for a slot past 11 |
+
+A condition or an action names a slot past 11 as the player code 0x100 + slot, and UNIT's
+owner byte is the slot's number. Classic refuses a VER it does not know, so it never reads
+these as something else.
 
 `python -m tools.hxmap roundtrip` checks every map it is given: the sections the game
 reads come back byte for byte, and those with text come back with the same document. The

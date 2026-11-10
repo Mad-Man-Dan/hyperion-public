@@ -98,7 +98,7 @@ the screens: it is drawn over a game, outside the screens' loop ("The game menu"
 | `src117/port/front/port_front_load.cpp` | Load Game over the campaign screen, and over a game the game menu's Load Game and Save Game; `lang/save_dlg.cpp` sends what they choose | `LoadGameOpen`, `LoadGameDialog`, `LoadGameKeys`, `GameSavesOpen`, `GameSavesStep`; in `lang/`: `PortGameSave`, `PortGameLoad` |
 | `src117/port/front/port_front_mods.cpp` | the Mods screen | `ModsOpen`, `ModsDialog`, `ModsKeys` |
 | `src117/port/front/port_front_internal.h` | what those four share, in `namespace Front`: `SCREEN_*`, the nav's and Settings' tabs, the screens' state, the functions one calls in another | |
-| `src117/port/front/port_ui.cpp`, `port_ui.h` | primitives, the glyph and picture atlases, Clay's draw, the per-element motion, the eases | `UiBegin`, `UiLayoutBegin`/`End`, `UiFill`/`Gradient`/`Ring`/`Line`/`Blur`, `UiText`, `UiPictureSet`, `UiPicture`, `UiMotionSet`, `UiEase`, `UiSpan`, `UiPrims` |
+| `src117/port/front/port_ui.cpp`, `port_ui.h` | primitives, the glyph and picture atlases, Clay's draw, the per-element motion, the eases | `UiBegin`, `UiLayoutBegin`/`End`, `UiFill`/`FillAdd`/`Gradient`/`Ring`/`Line`/`Blur`, `UiText`, `UiPictureSet`, `UiPicture`, `UiMotionSet`, `UiEase`, `UiSpan`, `UiPrims` |
 | `src117/port/front/port_clay.cpp` | Clay's implementation, compiled once as C++20 | (`CLAY_IMPLEMENTATION` only) |
 | `src117/port/front/port_text.cpp`, `port_text.h` | Hyperion's text in the player's language: the catalog for the language chosen, the plural rules, the slots | `PortText`, `PortTextC`, `PortTextN`, `PortTextF`, `PortTextNF`, `PortTextFill`, `PT_`, `PTC_`, `PortTextLocale`, `PortTextLanguages` |
 | `src117/port/front/port_frontkit.cpp`, `port_frontkit.h` | the themed colours, Clay without its macros, SC2's controls, the frame's input, the theme solver | `Open`, `Close`, `Text`, `TextGlow`, `Over`, `Clicked`, `DoubleClicked`, `Key`, `Custom`, `FileDate`, `Thousands`, `Elide`, `GameTypeName`, `kDot`, `Sc`, `Fs`, `Box`, `Spacer`, `DialogTitle`, `WheelRows`, `WheelPixels`, `ScButton`, `ScCheck`, `ScMini`, `ScMiniTab`, `ScEdit`, `ThemeApply`, `ThemeShow`, `LayoutCheckBegin`/`End` |
@@ -107,6 +107,7 @@ the screens: it is drawn over a game, outside the screens' loop ("The game menu"
 | `src117/port/front/port_front_skirmish.cpp` | the map browser and the set-up: slots, colours, teams, game options, rules | `SkirmishOpen`, `SkirmishScreen`, `SkirmishKeys`, `SkirmishResult`, `SkirmishGameNow`, `StartGame` |
 | `src117/port/front/port_front_colours.cpp`, `port_front_colours.h` | the colours a row may take: the game's 65, how the game draws a colour, the clash rule, the Any colour field | `ColourName`, `ColourRgb`, `ColourOrder`, `ColourLookOf`, `ColourGap`, `ColourCloseOn`, `ColourAnyField`, `ColourAnyValues`, `ColourAnyTyping` |
 | `src117/port/front/port_front_mutators.cpp`, `port_front_mutators.h` | the set-up's Mutators tab, its tabs over the right column and the options' word on the mutators | `MutatorsViewTabs`, `MutatorsTab`, `MutatorsSummary`, `MutatorsTabKeys` |
+| `src117/port/front/port_front_modes.cpp`, `port_front_modes.h` | the modes in the set-up: their entries in the Game type list, the chosen one's own tab with the map beside it, and Game Options' card of what it changed, drawn from a mode's declaration alone (`../data/port_mode.h`) | `ModesTypes`, `ModesWhyNot`, `ModesChoose`, `ModesTab`, `ModesTabBox`, `ModesSummary`, `ModesTabKeys`, `ModesChanged`, `ModesChosen`, `ModesChosenName`, `ModesTypeName`, `ModesRulesNote`, `ModesAny`, `ModesRemember` |
 | `src117/port/front/port_front_campaign.cpp` | the episode cards with 1.17's Smacker figures, an episode's missions and cinematics | `CampaignOpen`, `CampaignScreen`, `CampaignGluesMode`, `CampaignWatchStart`, `CampaignDone`, `CampaignReread` |
 | `src117/port/front/port_front_replays.cpp` | the replays list | `ReplaysOpen`, `ReplaysScreen`, `ReplaysResult`, `ReplaysKeys` |
 | `src117/port/front/port_front_score.cpp` | the score screen after a game: the head, the tabs, the rows and their densities, the team modes, the count-up and its sounds, the sort and the mark, Save Replay; the numbers are `port_score.cpp`'s (`gameplay.md`, "The score") | `ScoreOpen`, `ScoreScreen`, `ScoreKeys`, `ScoreResult`, `ScoreClose`, `PortFrontScore` (in `port_front.cpp`) |
@@ -179,6 +180,16 @@ names an element, `Over`, `Clicked` and `DoubleClicked` ask about the pointer (a
 click is the same row clicked again within 450 ms), and `Floating` attaches a panel
 to an element or a corner. Text goes through `Text` or `TextGlow`, which measure with
 stb_truetype and rasterize each glyph once at the size it is drawn.
+
+A fill covers what is under it. `UiFillAdd` adds its light instead, so two of them overlapping
+are brighter than one and neither hides what is beneath: it is what a mark's look asks for with
+`field.add` (`docs/mod-data.md`). The renderer draws the list in runs of like blend, one run and
+one draw where nothing adds, so a frame of the front end costs what it did before there were
+two blends. An adding fill gives no alpha of its own, which is what lets the light pile up, so
+it shows only where the pixels under it are already opaque: over the game (`GpuUiOverlay` loads
+the swapchain) and on the front end's own frame (cleared opaque) it draws as meant, and on a
+texture cleared clear -- a HUD layer through `GpuUiDrawInto` -- its colour is multiplied away
+when that texture is composited unless something opaque is under it in the same layer.
 
 Anything SC2 draws with art is drawn by hand instead: `Custom` hangs a draw function
 (`DrawScFrame`, `DrawScRaised`, `DrawScCheck`, `DrawScSlider`, `DrawScQuery`, `DrawScBox`) and
@@ -334,14 +345,16 @@ as teams and levels go (`PlayersSeatNote`).
 
 ### The Mutators tab
 
-The skirmish set-up's right column is two tabs, the design's take A2 (2026-10-26, the design
+The skirmish set-up's right column is tabs, the design's take A2 (2026-10-26, the design
 center's `11-front-end`, `lobby.js` `viewTabs`, `mutBrief` and `mutSummary`, `mutators.js`):
-Game Options (O) with the map, and Mutators (U), which takes the column
+Game Options (O) with the map, the game mode's own tab (M) where a mod's mode is the game type
+(below), and Mutators (U), which takes the column
 (`port_front_mutators.cpp`). A host's own box, a LAN room's or the trainer's, stays under the
 options and the map, which are then 462 high; with none they take the column, and the options say
-at their foot which mutators are on, with a button to the tab (`MutatorsSummary`). The strip
-over the column counts the mutators on and names the set: "No mutators · as Classic", or the
-preset's name or "Custom set", with Hyperion rules.
+at their foot which mutators are on, with a button to their tab (`MutatorsSummary`). The strip
+over the column counts the mutators on and names what is on: "No mutators · as Classic", or the
+mode's name and the mutators' preset or "Custom set", with Hyperion rules. A game mode is a game
+type in the options' own list, with a tab of its own for its settings, below.
 
 The tab is the presets (the engine's five, Custom lit for any other set and never a choice),
 the list of the ten by group, and the briefing of one: what it does, a picture of Classic
@@ -381,6 +394,91 @@ The pictures are drawn in a space 240 high and at least 340 wide, in the console
 card's icons (`cmdicons.grp` through `ticon.pcx`) and the console's resource icons
 (`game\icons.grp`): the player's own art, read as the tab is first shown into the picture
 atlas's slot 41; the fog's two masks are slot 42.
+
+### A game mode as a game type
+
+A game mode is a game type (the user, 2026-11-05: a tab of its own "makes no sense"). The
+set-up's Game type list is the classic types, then one entry for every mode installed, each
+named as the mode's own declaration says (`typeName`), with the mod it comes from at its right --
+"from Survival mod", the declaration's `typeTag` -- and its line in its tip (`ModesTypes`,
+`PulldownRows`). An entry is greyed, saying why on the row and in its tip, when
+the mode says its needs are not met (`needsMet`, `whyNot`) or when the set-up seats fewer
+players than `playersMin` or more than `playersMax` (`ModesWhyNot`). A classic type is the
+default and means no mode; choosing one turns the mode off, and choosing a mod's turns it on
+with the settings that mode was last set up with (`ModesChoose`, `ModeFromType`). An entry plays
+on the template of the classic type the mode names (`typePlays`, Melee unless its `game_type`
+block says another), so the rest of the set-up and the launch read it as they read that type
+(`AddModeTypes`). A map that offers no template of that type is played as Melee instead, which
+every map has, rather than leaving the mode off the list; nothing says so, since the fallback is
+the set-up's and not the declaration's, so a mode asking for use map settings on a melee map is
+listed and played as a melee game.
+
+Nothing here knows a mode by name: everything drawn comes from the mode's declaration
+(`../data/port_mode.h`, `PortModeList`), so a mode written by anyone needs no work here.
+
+#### The mode's own tab
+
+The mode's settings are a tab of its own, named for the mode, between Game Options and Mutators
+(the design's Option E in its list layout, `design/58-mode-mods/options.js` `takeE`, `tabHead`,
+`kitRow`, `sumCard`, `topTabs`; the user's pick, 2026-11-05). The strip carries it only while a
+mod's mode is the game type (`MutatorsViewTabs`'s `pszMode`): a mark saying the tab is a mod's,
+the mode's own name, and a badge counting the settings off the mode's own. Its key is M, which
+goes to the tab and back, and the key is in its tip rather than underlined in its name, since a
+mode's name need not hold an M. A classic type means no tab and no card.
+
+Game Options itself keeps the classic rows, with a card of what the mode has changed under the
+Game type row (`ModesSummary`): the mode's name and its mod's tag, then a chip for every setting
+off the mode's own, in the mutators' summary's own look -- "As the mode sets it." with nothing
+changed, the preset's name where the set is a preset's -- and the way to the tab ("The ‹type›
+tab", M). With the card the column can hold more than it is tall, so everything under the title
+scrolls together (`skoptsclip`), and the mutators' word stays at the box's foot. The Rules row
+is held at Hyperion's for a mode that changes what the game computes, with "Required by ‹type›"
+as its note (`ModesRulesNote`); the reason is `ForcedWhy`'s, so the foot's mark names it too.
+
+The tab is the Game Options box's place and width, with the map's box beside it where the map's
+own is (`ModesTab`, `ModesTabBox`, `port_front_modes.cpp`). Its head is the mode's name and
+version, a tag naming its mod with the declaration's `about` in its tip, the mode's line, and,
+where the mode has presets, a Preset row whose pulldown lists the mode's own set first (marked
+"the mode's") and says "Settings of your own" for a set that is no preset's. Then the settings by
+`group`, each drawn as Game Options draws its own rows: the name at the left and the control at
+the right -- a choice as a pulldown of its choices, a number as a pulldown of its steps (the
+mode's own marked; a number with more steps than a pulldown can list keeps the slider), a toggle
+as the check box, which the row's own click turns over, a list as a pulldown of all of them or
+Choose, which opens its things as check boxes under the row, and a seed as the number typed in,
+empty for one drawn as the game starts. A row off the mode's own default is marked in the theme's
+gold and a `hard` choice in the mutators' dark red. A setting the mode does not show
+(`PortModeShown` false: one another setting makes meaningless, or one the mode keeps for a tool,
+as a wave to start a test at) is left out, so nothing a player never chose is named to them. The
+rows scroll in the tab (`skmodeclip`), and the foot says how many of them are off the mode's own
+with Mode Defaults (R) beside it, greyed until something has changed.
+
+The box beside it is the map the game is played on, as Game Options' own box draws it, with its
+name, its starts and its size, and then the setting the player is on: its group, name and `gist`,
+the value (", the mode's own" where the player has not changed it), the mode's sentence for that
+value (`PortModeEffect`), what the mode works out for this map ("On this map: ...",
+`PortModeRead`, given the map's own file), and the mode's `notes` at the box's foot. The row
+pointed at is briefed until the pointer leaves the rows; otherwise it is the row the keys are on.
+The picture is the map and its starts, not the mode's own reading of it: a mode hands the set-up
+words, through its `read`, and no shapes, so there is nothing of its marks to draw there.
+
+Up and Down move through the settings, Left and Right step the one they are on, and a setting the
+arrows take is brought into sight (`ModesTabKeys`). Esc goes back to Game Options. Each of the
+mode's three calls runs its Luau, so the answers are worked out once for a set of values and
+asked again only when the values, the mode or the map change, never once a frame. A guest sees
+the host's mode and chooses nothing, with every control locked: a room's match is played in the
+host's mode, which reaches every seat with the room's settings (`lan.md`, "Starting a match").
+
+What the set-up keeps is a `PortModeChoice`: the mode's id, the settings that are off the mode's
+own defaults as a JSON object (the rest left out), and the run's seed in its own field, 0 for one
+the game draws. `StartGame` hands it to `PortModeChoose` before the game is made, and refuses
+with the mode's own reason where the game no longer fits it (players seated since the type was
+chosen), which the mode's block says as well. The choice is also kept in the settings file
+(`hyperion`/`gameMode`, `gameModeSettings`, `gameModeSeed`), so the set-up opens on the mode last
+played and its type is the one chosen in the list (`TypeFromMode`); `--mode` outranks it, and a
+mode no longer installed comes back as no mode. A mode that changes what the game computes is a
+reason for Hyperion's rules (`ForcedWhy`), so the foot's mark names it.
+`HYPERION_FRONT_MODE=<n>[:<id>]` chooses the mode by id, opens its tab and takes the nth of its
+settings, for a check without a person; `-` for the number leaves Game Options up.
 
 ### Starting a game, and coming back
 
@@ -592,6 +690,7 @@ in the row's `pszKey` or in its read and write.
 | `HYPERION_FRONT_MAP=<folder>\<file>` | then opens the set-up of that map, under `maps` (`port_front_skirmish.cpp`) |
 | `HYPERION_FRONT_WATCH=<speed>[:<level>,...]` | with `HYPERION_FRONT_MAP`: the player's seat made a computer, the speed 0 to 10 (7 to 10 Fastest ×2 to ×16), the seats' levels in order (`port_ai.h`, 0 Classic to 7 Elite), and Start Game, to watch the game (`gameplay.md`, "Watching a skirmish of computers") |
 | `HYPERION_FRONT_MUTATORS=<n>[:<list>]` | with `HYPERION_FRONT_MAP`: the Mutators tab with the nth in its list briefed (0 Mineral fields to 9 Tech and upgrades), or Game Options for `-`, and `--mutators`' list as the set |
+| `HYPERION_FRONT_MODE=<n>[:<id>]` | with `HYPERION_FRONT_MAP`: the mode of that id chosen as the game type, with the nth of its settings taken by the arrows (Up and Down's order); an id no mode has leaves the mode as it was |
 | `HYPERION_FRONT_SETTINGS=<tab>` | opens Settings on that tab (`kTabs`) |
 | `HYPERION_FRONT_WORLD=<slug>` | shows that world behind the screens (`port_world_table.h`) |
 | `HYPERION_FRONT_ENTER` | 1 plays the entrance when a check would leave it out, 0 never |

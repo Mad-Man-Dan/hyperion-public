@@ -3016,7 +3016,7 @@ public:
   // the narrowing is on this side, since Build's call site pushes a zero-extended WORD out
   // of wBuildQueue. Exits mov eax, esi (the geyser it found) and xor eax, eax, consumed by
   // the caller as mov edi, eax / test edi, edi.
-  CUnit *ReplaceGeyser(BYTE bUnitType);
+  CUnit *ReplaceGeyser(WORD wUnitType);  // Hyperion: a WORD, for a mod's gas building
 
   // External callees this block reaches, unported, so the thunk covers them.
 

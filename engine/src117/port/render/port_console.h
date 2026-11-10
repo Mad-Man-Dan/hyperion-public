@@ -137,6 +137,58 @@ bool PortConsoleSmallWire(unsigned nLooks, FRAME *pFrame);
 void PortConsoleLighten(unsigned char *pRgb);
 const unsigned char *PortConsoleLightRemap(void);
 
+// A mod readout's marks over one box of the group view, where several units are selected: the
+// rank's pip in the box's top right corner, a pixel wider for each rank above the first, and a
+// dot for each of the first three things on the unit down the box's left, in its side's colour
+// (port_readout.h). The selection panel draws them over its own boxes and a
+// HUD design over the cells of its grid, from the same values, so the two cannot drift.
+#define PORT_ROLL_DOTS 3
+// Down a tile's left: a square of PORT_ROLL_MARK pixels every PORT_ROLL_PITCH, the first at
+// PORT_ROLL_EDGE, in the tile's own pixels. Both consoles place them by these, so a tile of the
+// panel and a cell of a design's grid carry the same marks in the same places.
+#define PORT_ROLL_MARK 7
+#define PORT_ROLL_PITCH 8
+#define PORT_ROLL_EDGE 1
+struct PortRollMark {
+  int nRank = 0;                  // the rank's place among the readout's, plus one; 0 for a unit
+                                  // the hook gave no rank the file names, which takes no pip
+  unsigned int nRgb = 0xFFFFFFu;  // that rank's colour
+  int nStyle = 0;                 // how the things show: PortReadoutGroupMark
+  int nMarks = 0;                 // the things marked, up to PORT_ROLL_DOTS, strongest first
+  int anKind[PORT_ROLL_DOTS] = {0, 0, 0};             // each one's kind, for its glyph
+  unsigned int anHue[PORT_ROLL_DOTS] = {0, 0, 0};     // and its hue
+  unsigned char abHue[PORT_ROLL_DOTS] = {0, 0, 0};    // 1 where the status named that colour
+                                                      // itself, so a glyph is drawn in it rather
+                                                      // than in its side's green or red
+  unsigned char abFor[PORT_ROLL_DOTS] = {0, 0, 0};    // 1 for one that works for the unit
+  int nThings = 0;                // how many are on it in all
+};
+// A unit's marks: false when no mod readout is in force, when the hook gives this unit none, or
+// when it has nothing to mark. The pip wants the readout's "rank_pips"; what the things look like
+// is the readout's "status_look" (its glyphs by default, its dots or its tile edge instead).
+bool PortConsoleRollMarkOf(const CUnit *pUnit, PortRollMark *pOut);
+// The marks drawn into the bitmap being drawn, the box the control's own rectangle in it. The
+// panel is eight bit, so each colour goes to the palette's nearest and the rank's hues are
+// approximate there; a HUD design draws the same marks in full colour.
+void PortConsoleRollMarks(int x, int y, int w, int h, const PortRollMark &mark);
+// What the group view says of a unit when the pointer rests on its box: the name the readout
+// gives it, and the things on it with the time each has left, or that it has none. False when
+// the hook gives the unit no readout and the box keeps classic's words. Two buffers and their
+// sizes rather than strings, since the game's own TUs include this header.
+bool PortConsoleRollTip(const CUnit *pUnit, char *pszName, int cchName, char *pszThings, int cchThings);
+// A mod readout's words for one of the panel's stat icons, by the control's own index: classic's
+// words with the readout's under them, or the readout's own in place of them
+// (port_readout.h, PortReadoutSlotTip). False for a control that is no stat icon and for a unit
+// with no readout, and the tooltip stays as it was. pszClassic may be null.
+bool PortConsoleRollIconTip(int nIndex, const char *pszClassic, char *pszOut, int cchOut);
+// A mod readout's words for the parts classic gives no tooltip: the wireframe's life and the
+// name's rolled changes (port_readout.h, PortReadoutPartTip). The point decides which, in the
+// panel's own pixels, because both are an image or a text control and those answer no hit test,
+// so nothing of classic's ever hands them to the panel's hover. *pnIndex is the control the
+// bubble is shown against, so it anchors where classic's own do. False for a point over neither,
+// and for a unit with no readout.
+bool PortConsoleRollPartTipAt(int x, int y, int *pnIndex, char *pszOut, int cchOut);
+
 // The console's art panels as laid out now (statfluf.cpp): the four races' lists, 26 records
 // in all, each list ending in a wX of 0xFFFF.
 struct fluf_t;

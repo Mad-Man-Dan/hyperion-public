@@ -343,7 +343,9 @@ void MotionApply(const Motion &mo, size_t nFirst)
     const UiPrimKind kind = static_cast<UiPrimKind>(static_cast<int>(p.shape[2]));
     if (kind != UI_GLYPH && kind != UI_PICTURE) {
       p.shape[0] *= s;
-      p.shape[1] *= s;
+      // shape[1] is a width for a ring and a blur, and a fill's adding flag, which is no length
+      if (kind == UI_RING || kind == UI_BLUR)
+        p.shape[1] *= s;
       if (p.uv[0] != 0.0f) {
         p.uv[1] = X(p.uv[1]);
         p.uv[2] = Y(p.uv[2]);
@@ -488,6 +490,20 @@ void UiFill(float x, float y, float w, float h, UiColor c, float fRadius)
   if (w <= 0.0f || h <= 0.0f || c.a <= 0.0f)
     return;
   Push(x, y, w, h, c, UI_FILL)->shape[0] = fRadius;
+}
+
+void UiFillAdd(float x, float y, float w, float h, UiColor c, float fRadius)
+{
+  if (w <= 0.0f || h <= 0.0f || c.a <= 0.0f)
+    return;
+  UiPrim *p = Push(x, y, w, h, c, UI_FILL);
+  p->shape[0] = fRadius;
+  p->shape[1] = 1.0f;
+}
+
+bool UiPrimAdds(const UiPrim &p)
+{
+  return p.shape[2] == UI_FILL && p.shape[1] != 0.0f;
 }
 
 void UiGradient(float x, float y, float w, float h, UiColor c, UiColor c2, bool bAcross, float fRadius)
@@ -660,21 +676,35 @@ void UiBlur(float x, float y, float w, float h, float fRadius, float fBlur)
   p->shape[1] = fBlur;
 }
 
-void UiLine(float x0, float y0, float x1, float y1, UiColor c, float fWidth)
+// A line as one fill, upright where it can be and turned where it cannot. A turned stroke sets
+// the turn itself and puts back what was there, so it stands in for a turn around it rather than
+// turning with it: a stroke drawn inside a UiSetTurn is drawn at its own angle alone.
+static void Stroke(float x0, float y0, float x1, float y1, UiColor c, float fWidth, bool bAdd)
 {
+  void (*fill)(float, float, float, float, UiColor, float) = bAdd ? UiFillAdd : UiFill;
   if (y0 == y1) {
-    UiFill(fminf(x0, x1), y0 - fWidth * 0.5f, fabsf(x1 - x0), fWidth, c);
+    fill(fminf(x0, x1), y0 - fWidth * 0.5f, fabsf(x1 - x0), fWidth, c, 0.0f);
   } else if (x0 == x1) {
-    UiFill(x0 - fWidth * 0.5f, fminf(y0, y1), fWidth, fabsf(y1 - y0), c);
+    fill(x0 - fWidth * 0.5f, fminf(y0, y1), fWidth, fabsf(y1 - y0), c, 0.0f);
   } else {
     const float turn[3] = {g_turn[0], g_turn[1], g_turn[2]};
     const float mx = (x0 + x1) * 0.5f;
     const float my = (y0 + y1) * 0.5f;
     const float len = sqrtf((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
     UiSetTurn(atan2f(y1 - y0, x1 - x0), mx, my);
-    UiFill(mx - len * 0.5f, my - fWidth * 0.5f, len, fWidth, c);
+    fill(mx - len * 0.5f, my - fWidth * 0.5f, len, fWidth, c, 0.0f);
     UiSetTurn(turn[0], turn[1], turn[2]);
   }
+}
+
+void UiLine(float x0, float y0, float x1, float y1, UiColor c, float fWidth)
+{
+  Stroke(x0, y0, x1, y1, c, fWidth, false);
+}
+
+void UiLineAdd(float x0, float y0, float x1, float y1, UiColor c, float fWidth)
+{
+  Stroke(x0, y0, x1, y1, c, fWidth, true);
 }
 
 void UiSetTurn(float fAngle, float x, float y)

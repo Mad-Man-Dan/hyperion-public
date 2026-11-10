@@ -37,6 +37,9 @@
 #include "../h/CUnitBounds.h"   // Hyperion: g_bFinderSideCheck, FinderSideDiffer
 #include <vector>               // Hyperion: the captains' unit slots
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../port/data/port_moddata.h"  // Hyperion: ModRaceAiClassic
+#include "../port/gameplay/port_ai.h"    // Hyperion: AiModeKeeps: a unit classic's AI leaves alone
+#include "../h/typelimits.h"  // Hyperion: UnitTypeValid
 
 // The globals this TU reaches, dual-spelled, one `#ifndef` per name: the plain
 // `extern` arm alone would make the --dll-mode check vacuous, and the literal
@@ -1189,10 +1192,27 @@ void tai_captain_job_defend(TAI_Captain *pCaptain)
 // 0, 6, 3, 7, {8,9}, {4,5}, {1,2}. MSVC emits case blocks in source order, so numeric order
 // would move the table's entries. Each arm is a tail jump. The `__declspec(noinline)` is for
 // tai_captain_service_round_robin's sake (see the note there).
+// Hyperion: the soldiers whose units the game's mode has taken let go of their AI record, so
+// the captain stops counting them and its job stops ordering them. A mode may take a unit the
+// computer had already enlisted, and this is where such a one is let go; SAI_RemoveUnit clears
+// it out of the captain, the town, the guard posts and the banker at once.
+void CaptainDropModeSoldiers(TAI_Captain *pCaptain)
+{
+  TSoldier *pNext;
+
+  for (TSoldier *pSoldier = pCaptain->pSoldiers; pSoldier != NULL; pSoldier = pNext) {
+    pNext = pSoldier->pNext;  // the unlink puts the record on the pool's free list
+    CUnit *const pUnit = pSoldier->pUnit;
+    if (pUnit != NULL && AiModeKeeps(pUnit))
+      SAI_RemoveUnit(pUnit, 0);
+  }
+}
+
 __declspec(noinline) void tai_captain_service(int nNation, int nArea)
 {
   TAI_Captain *pCaptain = &sgCaptain[nNation][nArea];
 
+  CaptainDropModeSoldiers(pCaptain);  // Hyperion
   pCaptain->bFlags &= ~0x04;
   if (pCaptain->bTimer != 0)
     pCaptain->bTimer--;
@@ -1670,7 +1690,8 @@ void aiscript_assign_all_order(int nNation, int nOrderId, mrect_t rect)
   CUnit *pUnit;
 
   for (; (pUnit = *pp) != NULL; pp++) {
-    if (pUnit->bPlayer == nNation)
+    // Hyperion: a unit the mode has taken keeps the order its own scripts gave it (hx.own)
+    if (pUnit->bPlayer == nNation && !AiModeKeeps(pUnit))
       pUnit->SetOrder(nOrderId);
   }
   finish_unit_iteration(ppList);
@@ -2414,7 +2435,9 @@ void tai_soldier_try_stim(CUnit *pUnit)
   CUnit *pTarget;
   int nFull;
 
-  if (pUnit->wType != 0 && pUnit->wType != 0x20)
+  // Hyperion: a mod's race's stand-ins as theirs
+  const int nRole = ModRaceAiClassic(pUnit->bPlayer, pUnit->wType);
+  if (nRole != 0 && nRole != 0x20)
     return;
   pTarget = pUnit->pOrderTarget;
   if (pTarget == NULL)
@@ -2532,6 +2555,8 @@ int tai_captain_unit_is_recruitable(CUnit *pUnit, int nUnitType, int nArg2)
 {
   int nType;
 
+  if (AiModeKeeps(pUnit))  // Hyperion: the mode plays the units it has taken (hx.own)
+    return 0;
   if (pUnit->IsDeadOrDying() ||
       (gulUnitTypeFlags[nType = pUnit->wType] & 0x10) != 0)
     return 0;
@@ -2549,6 +2574,7 @@ int tai_captain_unit_is_recruitable(CUnit *pUnit, int nUnitType, int nArg2)
   if (nArg2 != 0 && (pUnit->dwFlags & 0x20) != 0)
     return 0;
 
+  nType = ModRaceAiClassic(pUnit->bPlayer, nType);  // Hyperion: a mod's race's stand-ins as theirs
   if (nType == 0 && pUnit->bOrderId == 0x5C)
     return 0;
   if (nType == 0 || nType == 0x20 || nType == 0x25 || nType == 0x26 ||
@@ -2669,7 +2695,7 @@ void tai_captain_request_missing_units(TAI_Captain *pCaptain)
   for (i = 0; i < nCount; i++) {
     const int nType = anTypes[i];
 
-    if (static_cast<unsigned>(nType) >= 0xE4)
+    if (!UnitTypeValid(static_cast<unsigned>(nType)))  // Hyperion: the classic 228, and a mod's units
       continue;
     if (!tai_captain_enlist_type(pCaptain, nType, nArg))
       banker_demand_unit_for_captain(pCaptain->bNation, reinterpret_cast<intptr_t>(pCaptain), nType,
@@ -2809,7 +2835,7 @@ static __declspec(noinline) BOOL guard_unit_is_soldier_local(CUnit *pUnit)
 // two copies into one address.
 static __declspec(noinline) BOOL IsPureSpellcaster_local(CUnit *pUnit)
 {
-  switch (pUnit->wType) {
+  switch (ModRaceAiClassic(pUnit->bPlayer, pUnit->wType)) {  // Hyperion: a mod's race's stand-ins as theirs
   case 9:
   case 45:
   case 46:
@@ -2921,6 +2947,11 @@ void tai_soldier_add_to_captain(TAI_Captain *pCaptain, CUnit *pUnit, int nY)
   TSoldier *pSoldier;
   int nX;
 
+  // Hyperion: a unit the game's mode has taken is the mode's to play (hx.own), so no captain
+  // enlists it and no job of one sends it anywhere
+  if (AiModeKeeps(pUnit))
+    return;
+
   if (pCaptain->bJob == 3 && nY == 0) {
     const BYTE bNation = pUnit->bPlayer;
 
@@ -2974,7 +3005,9 @@ void tai_soldier_update(CUnit *pUnit)
     return;
 
   pCaptain = pSoldier->pCaptain;
-  if ((pUnit->wType == 0 || pUnit->wType == 0x20) &&
+  // Hyperion: a mod's race's stand-ins as theirs
+  const int nRole = ModRaceAiClassic(pUnit->bPlayer, pUnit->wType);
+  if ((nRole == 0 || nRole == 0x20) &&
       tai_soldier_enter_bunker_in_region(pUnit, pCaptain->wRegion))
     return;
   if (ai_update_unit_spells(pUnit, 0))
@@ -4047,7 +4080,7 @@ BOOL tai_captain_find_two_high_templar(int nPlayer, CUnit **ppFirst, CUnit **ppS
        pUnit = pUnit->pPlayerUnitNext) {
     if (pUnit->IsDeadOrDying())
       continue;
-    if (pUnit->wType != 0x43)
+    if (ModRaceAiClassic(nPlayer, pUnit->wType) != 0x43)  // Hyperion: or a mod's race's stand-in
       continue;
     if (!(pUnit->dwFlags & 1) || (pUnit->dwFlags & 0x40))
       continue;
@@ -4962,6 +4995,8 @@ void tai_send_everything_to_attack(int nation, BYTE bAll)
         continue;
       if (pUnit->IsAttackable(NULL))
         continue;
+      if (AiModeKeeps(pUnit))  // Hyperion: the mode's own units are not swept up with these
+        continue;
       tai_send_unit_at_nearest_enemy(pUnit);
     }
     return;
@@ -4976,6 +5011,8 @@ void tai_send_everything_to_attack(int nation, BYTE bAll)
     if (pUnit->IsDeadOrDying())
       continue;
     if (pUnit->dwUnion134 == 0)
+      continue;
+    if (AiModeKeeps(pUnit))  // Hyperion: the mode's own, not this attack's
       continue;
     if (pUnit->IsATransport())
       continue;
@@ -5841,7 +5878,7 @@ void __fastcall tai_unit_was_attacked(CUnit *pUnit, CUnit *pAttacker, int a3, in
   if (!a3 && IsAiUsableSpellOrder(nOrder))
     return;
   nType = pUnit->wType;
-  if (nType == 0 && nOrder == 0x5C)
+  if (ModRaceAiClassic(pUnit->bPlayer, nType) == 0 && nOrder == 0x5C)  // Hyperion: or a mod's race's stand-in
     return;
   bUnint = pUnit->IsUninterruptable();
   if (!bUnint && ai_update_unit_spells(pUnit, a3))

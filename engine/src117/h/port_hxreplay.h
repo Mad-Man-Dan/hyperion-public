@@ -15,6 +15,9 @@
 bool ReplayHxGame();
 void ReplayHxNoteGame();
 bool ReplayHxNoted();
+// The slots past 1.17's twelve as the game starts, kept where classic's header takes its
+// twelve (replay_set_gamedata), so the replay seats a player who leaves or is defeated later
+void ReplayHxKeepSlots();
 // After the map block: Hyperion's sections. 0 on a write error.
 int ReplayHxWrite(void *pFile);
 // After the map block of an "hxRS" replay: its sections. 0 when they are missing or broken,

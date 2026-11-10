@@ -80,6 +80,9 @@
 #include "../h/mapmsg.h"
 #include "../h/tile2.h"
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
+#include "../port/data/port_modstatus.h"  // Hyperion: ModStatusUnitMade
+#include "../port/data/port_modlua.h"  // Hyperion: ModLuaUnitMade
 #include "../h/gamedata.h"  // Hyperion: array_data_t
 #include "../h/hxrules.h"  // Hyperion: HxRules (revision 11)
 #include "../h/typelimits.h"  // Hyperion: a mod's types
@@ -1115,7 +1118,7 @@ BOOL CUnit::sub_425270() {
   if (!(pSprite->flags.b & 0x20)) {
     // The call re-reads wType rather than passing nType; with nType the
     // compiler folds the case constant into ECX.
-    switch (nType) {
+    switch (ModRulesGasType(nType)) {  // Hyperion: a mod's gas building as its looks'
     case 0x95:
       remove_creep_completely(wType, PosS(pSprite->wPosX),
                               PosS(pSprite->wPosY),
@@ -1159,6 +1162,15 @@ void CUnit::sub_4253A0() {
   }
   if (IsMineralSrc() || IsRefinery())
     sub_423400();
+  // Hyperion: a mod's power source leaves the grid as the Pylon does
+  if (wType != 0x9C && ModRulesPowerSource(wType)) {
+    if (pPowerTemplate != NULL) {
+      pPowerTemplate->Kill();
+      pPowerTemplate = NULL;
+    }
+    RemoveFromPsiLink();
+    RequestJuiceUpdate();
+  }
   switch (wType) {
   case 0x49:
   case 0x55:
@@ -1605,6 +1617,10 @@ BOOL CUnit::sub_425710(int nUnitType, int x, int y, int nPlayer, BYTE bRand) {
   memset(&pUnion74, 0, offsetof(CUnit, _unmapped_90) - offsetof(CUnit, pUnion74));  // Hyperion: the same fields, 0x1C bytes in 1.17
   memset(&wTimeToLive, 0, offsetof(CUnit, _unmapped_130) - offsetof(CUnit, wTimeToLive));  // Hyperion: the same fields, 0x20 bytes in 1.17
   UnitHxClear(this);  // Hyperion: and the casters past 7
+  if (g_hxModGame) {
+    ModStatusUnitMade(this);  // Hyperion: a unit made where one died has none of its statuses
+    ModLuaUnitMade(this);     // nor its scripts' values
+  }
   MutatorUnitMade(static_cast<int>(this - CUnit::Head()));  // Hyperion: not rich (rich bases)
   dwFlags = 0;
   bUnion93 = 0;

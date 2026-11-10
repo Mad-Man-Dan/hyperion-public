@@ -70,6 +70,9 @@ std::string MatchJson(const Match &m, uint64_t qwNow)
                   ",\"speed\":" + PortJsonQuote(m.speed) + ",\"speedN\":" + std::to_string(m.nSpeed) +
                   ",\"rules\":" + PortJsonQuote(m.bHyperion ? "hyperion" : "classic") +
                   ",\"mutators\":" + MutatorsJson(m.mut) +
+                  ",\"mode\":" + PortJsonQuote(m.mode) + ",\"modeName\":" + PortJsonQuote(m.modeName) +
+                  ",\"modeSettings\":" + PortJsonQuote(m.modeSettings) +
+                  ",\"modeSeed\":" + std::to_string(m.dwModeSeed) +
                   ",\"mapPlayers\":" + std::to_string(m.nMapPlayers) +
                   (m.pic.empty() ? std::string() : ",\"pic\":" + PortJsonQuote(m.pic) + ",\"picStarts\":" + m.picStarts) +
                   ",\"seats\":[";
@@ -485,6 +488,15 @@ void Admin(Device &d, const std::string &t, const PortJson &j)
       m->bHyperion = j["rules"].Str() == "hyperion";
     if (j["mutators"].kind == PortJson::OBJECT)
       m->mut = MutatorsFromJson(j["mutators"]);
+    // the game mode the match is played in, the host's (port_mode.h)
+    if (j["mode"].kind == PortJson::STRING)
+      m->mode = j["mode"].Str();
+    if (j["modeName"].kind == PortJson::STRING)
+      m->modeName = j["modeName"].Str();
+    if (j["modeSettings"].kind == PortJson::STRING)
+      m->modeSettings = j["modeSettings"].Str();
+    if (j["modeSeed"].kind == PortJson::NUMBER)
+      m->dwModeSeed = static_cast<uint32_t>(j["modeSeed"].Num());
     if (j["name"].kind == PortJson::STRING)
       m->name = j["name"].Str();
   } else if (t == "mappic" && m) {

@@ -12,8 +12,13 @@
 #include <string.h>
 #include "port_hudbind.h"
 #include "port_hudstate.h"
+#include "../data/port_modlua.h"  // ModLuaHudOf: a game mode's own values
 
 namespace {
+
+// The mode.<key> names the bindings read, in the order they were first seen: a mode sets them
+// by name, so they are not in the fixed table.
+std::vector<std::string> g_modeNames;
 
 // hudplayer.js's NAMES, in its order, then the ten groups
 const char *const kNames[] = {
@@ -347,6 +352,18 @@ int HudNameIndex(const char *pszName, size_t nLen) {
   for (int i = 0; i < kNameCount; ++i)
     if (strlen(kNames[i]) == nLen && strncmp(kNames[i], pszName, nLen) == 0)
       return i;
+  // a game mode's own value, mode.<key>, which its scripts set by name (hx.hud): any name is
+  // one, and it comes after the fixed names
+  if (nLen > 5 && strncmp(pszName, "mode.", 5) == 0) {
+    const std::string key(pszName + 5, nLen - 5);
+    for (size_t i = 0; i < g_modeNames.size(); ++i)
+      if (g_modeNames[i] == key)
+        return kNameCount + static_cast<int>(i);
+    if (g_modeNames.size() >= 256)
+      return -1;
+    g_modeNames.push_back(key);
+    return kNameCount + static_cast<int>(g_modeNames.size()) - 1;
+  }
   return -1;
 }
 
@@ -355,7 +372,7 @@ int HudNameCount(void) { return kNameCount; }
 const char *HudNameAt(int nIndex) { return nIndex >= 0 && nIndex < kNameCount ? kNames[nIndex] : ""; }
 
 void HudEnv::Fill(const PortHudState &s) {
-  values.assign(kNameCount, HudVal());
+  values.assign(kNameCount + g_modeNames.size(), HudVal());
   static const char *const kRace[3] = {"zerg", "terran", "protoss"};
   char sz[32];
   values[N_MINERALS] = HudVal::Num(s.nMinerals);
@@ -413,6 +430,17 @@ void HudEnv::Fill(const PortHudState &s) {
   values[N_REPLAY_SEEKING] = HudVal::Bool(s.bSeeking);
   for (int g = 0; g < 10; ++g)
     values[N_GROUP_0 + g] = HudVal::Num(s.anGroups[g]);
+  // the mode's values as its scripts last set them; a value that reads as a number is one, so a
+  // design can count with it
+  for (size_t i = 0; i < g_modeNames.size(); ++i) {
+    const char *psz = ModLuaHudOf(g_modeNames[i].c_str());
+    if (psz == NULL)
+      continue;
+    char *pszEnd = NULL;
+    const double d = strtod(psz, &pszEnd);
+    values[kNameCount + i] =
+        pszEnd != NULL && *pszEnd == '\0' && pszEnd != psz ? HudVal::Num(d) : HudVal::Str(psz);
+  }
 }
 
 const HudVal &HudEnv::Get(int nName) const {

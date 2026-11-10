@@ -7,7 +7,7 @@
 // the game's own view, which never changes for it. PortCameraZoom is the zoom drawn, 1 the
 // game's view, 2 twice the map across and down; PortCameraZoomTo and PortCameraWheel (in
 // notches, out positive) set where it eases to, up to PortCameraZoomMax (the "zoomMax"
-// setting, 2 unless set). PortCameraStep eases it once a pass and says whether it is still
+// setting, 2 unless set; the design engine and the studio read "designZoomMax", 8 unless set). PortCameraStep eases it once a pass and says whether it is still
 // moving. PortCameraForced is HYPERION_ZOOM_FORCE: the render view's path at zoom 1 too.
 double PortCameraZoom(void);
 double PortCameraZoomTarget(void);  // where the zoom eases to

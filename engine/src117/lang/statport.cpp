@@ -35,6 +35,7 @@
 #include "../port/render/port_view.h"  // Hyperion: g_portView
 #include "../port/render/port_console.h"  // Hyperion: PortConsoleRace, PortConsoleRebuilding
 #include "../port/data/port_moddata.h"  // Hyperion: ModPortraitChance, a mod's portraits
+#include "../port/data/port_modvoice.h"  // Hyperion: ModVoiceSpoken, a mod's subtitles
 
 // Callees no header of ours declares yet, each spelled exactly as the TU that
 // owns it spells it: another spelling would be a different mangled name.
@@ -989,6 +990,8 @@ void statport_talk_timer(intptr_t nArg0, WORD wArg1) {
 // before the blink stores.
 void __fastcall statport_talking_portrait(CUnit *pUnit, int nDeadlineMs, int a3, int a4,
                            int nSoundId) {
+  // Hyperion: the words a mod gives the line, on the message line
+  ModVoiceSpoken(nSoundId, pUnit != NULL ? pUnit->wType : -1, pUnit != NULL ? pUnit->bPlayer : -1);
   if (dword_6AB3D0 != 0)
     return;
 

@@ -71,6 +71,10 @@ enum ScenePrimKind {
                              // in full colour only, over nClip1's box at nX, nY: nClip0 its
                              // centre (x low, y high, signed), nEntry its numbers, nParam the
                              // look, PORT_LOOK_LIGHT or _PLUME at bits 8 and a seed at 16
+  SCENE_PRIM_MARK = 14,      // a mod's mark painted on the ground (port_mapmark.h), drawn in
+                             // full colour only, over nClip1's box at nX, nY: nEntry its
+                             // numbers in the marks' bytes. Recorded where the sprite pass
+                             // begins, so every sprite drawn after it covers it
   SCENE_PRIM_MIRROR = 0x100  // or'ed in: the frame drawn mirrored left to right
 };
 
@@ -146,6 +150,10 @@ struct SceneFrame {
   const unsigned short *pPrimLook;
   const unsigned char *pLooks;
   unsigned int nLooksBytes;
+  // The marks painted on the ground, nMarksBytes of them, which a mark primitive's nEntry
+  // is a byte offset into (port_mapmark.h); NULL for a pass with none.
+  const unsigned char *pMarks;
+  unsigned int nMarksBytes;
   // And its GRP's largest frame, the canvas the image is centred in (width low, height
   // high), or 0: half of it back from the frame's offset is the image's anchor.
   const unsigned int *pPrimGrp;
@@ -280,6 +288,12 @@ int PortSceneSpan(const void *pFirst, unsigned int nCount, unsigned int nStride,
 int PortSceneStar(const void *pPixels, int nX, int nY, int nW, int nH);
 // A look's light on the ground or its plume (SCENE_PRIM_LOOK, port_looks.cpp).
 void PortSceneLook(int nX, int nY, int nW, int nH, unsigned int nCentre, unsigned int nNumbers, unsigned int nParam);
+// A mod's mark painted on the ground (SCENE_PRIM_MARK, port_mapmark.cpp): the box it covers in
+// the view's pixels, and where its numbers start in the marks' bytes, which the pass hands over
+// with PortSceneMarks. Recorded where the sprite pass begins (PortSceneMarksBegin), so every
+// sprite drawn after it covers the paint.
+void PortSceneMark(int nX, int nY, int nW, int nH, unsigned int nNumbers);
+void PortSceneMarks(const unsigned char *pBytes, unsigned int nBytes);
 // The fog: the light map (pLight, nBytes of it, nPitch to a row, the view's first block at
 // nFirst), the 32 shades, and the smoothed grid it is made from with 1.17's ramp
 // (dword_670A80), for the GPU to make it from.

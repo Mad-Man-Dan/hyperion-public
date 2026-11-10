@@ -48,8 +48,11 @@ struct PortOverlayLayer {
 // match's and a watched farm game's never show together.
 enum {
   PORT_OVERLAY_MOTION = 100,    // the picture's black and cinema bars (port_motion.cpp)
+  PORT_OVERLAY_MARKS = 150,     // a mod's marks on the map (port_mapmark.cpp)
   PORT_OVERLAY_CUTSCENE = 200,  // a cutscene's words (port_cutscene.cpp)
   PORT_OVERLAY_SUBTITLES = 250, // a cinematic's subtitles (port_subtitles.cpp)
+  PORT_OVERLAY_READOUT = 270,   // a mod's unit readout over the classic console (port_readoutdraw.cpp)
+  PORT_OVERLAY_MODE = 280,      // a game mode's own parts (port_modeview.cpp)
   PORT_OVERLAY_DEBUG = 300,     // Debug Tools' (port_debugview.cpp)
   PORT_OVERLAY_TRAINER = 400,   // the trainer's strip and Tape (port_trainerview.cpp)
   PORT_OVERLAY_LAB = 450,       // a game of the AI lab's farm watched, its panel (port_labwatch.cpp)

@@ -1379,6 +1379,9 @@ void __fastcall sub_46D850(ctrl_t *pDlg)
     sgMiniCacheBMP_g.nHeight = (short)wMiniH;
     bmp_create(&sgMiniCacheBMP_g, "minimap.cpp", 0x664);
     bmp_create(&sgMiniBMP, "minimap.cpp", 0x665);
+    // Hyperion: the size and the scale are this file's own, so a mod asking for them is
+    // answered from what is handed over here (hx.minimap, port_minimap.h)
+    PortMinimapSized(wMiniW, wMiniH, (WORD)sgwMiniScale_g);
   }
 
   {
@@ -1714,6 +1717,13 @@ static __forceinline void draw_minimap_body(void) {
     sub_46E840();
     dword_671FC4();
   }
+  // Hyperion: a mod's marks, between the ground and the dots, so that a mark is a piece of the
+  // map here as it is on it and a dot is never lost under one (port_minimap.h). The lobby's own
+  // preview of a map draws on this picture too and has no mod running, so it is left alone.
+  // the size is the bitmap's own and not sgwMiniWdt_g's, so that the pass can only ever walk
+  // the picture it is writing into
+  if (sgbIsMinimapPreview_g != 1)
+    PortMinimapMarks(sgMiniBMP.pPixels, sgMiniBMP.nWidth, sgMiniBMP.nHeight, (WORD)sgwMiniScale_g);
   sub_46D510();
   sub_46D3F0();
   ctrl_set_update(sgpMinimapCtrl);
@@ -1864,6 +1874,7 @@ void __fastcall minimap_dlg_deactivate(ctrl_t *pDlg) {
   }
   bmp_destroy(&sgMiniCacheBMP_g);
   bmp_destroy(&sgMiniBMP);
+  PortMinimapSized(0, 0, 0);  // Hyperion: there is no minimap to tell a mod the size of
 }
 
 // Installs the image control's draw handler and does one full rebuild. The

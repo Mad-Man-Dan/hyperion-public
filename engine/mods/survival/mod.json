@@ -1,0 +1,152 @@
+{
+  "id": "survival",
+  "name": "Survival",
+  "by": "Hyperion",
+  "version": "1.0.4",
+  "kind": "mode",
+  "line": "Hold one base inside a perimeter while the waves come, then take the enemy base. The enemies are rolled from the run's seed, so no two runs send the same army.",
+  "holds": ["mode", "units", "spells"],
+  "rules": "changed",
+  "language": "enUS",
+  "data": "./",
+  "comment": "data is the mod's own folder: types.json, scripts/, looks.json and lang/ sit beside mod.json. See API-NEEDS.md, \"A mode mod's own folder\".",
+  "mode": {
+    "sim": true,
+    "enemy_player": true,
+    "players": [1, 4],
+    "needs": "any race",
+    "line": "Waves until the count runs out, then the push.",
+    "about": "One home inside a perimeter read from the map. A build-up with no waves, then a wave every gap, cleared or not, out of the enemy base. Every fifth wave is an assault, a quarter again as big, through two gates, led by an elite. Clearing the last wave lifts the perimeter; with the push on, the enemy base is then an ordinary computer player and its last building ends the game.",
+    "notes": [
+      "The waves are the race the enemy base plays, chosen in its slot like any computer. Random is drawn from the run's seed.",
+      "Units outside the perimeter lose a share of their own life every second. The four tiles just outside it are a warning only.",
+      "The perimeter grows four tiles every fifth wave cleared."
+    ],
+    "preview": "LsPreview",
+    "settings": [
+      {
+        "id": "difficulty",
+        "kind": "choice",
+        "name": "Difficulty",
+        "group": "The run",
+        "gist": "How many waves come, how big they are, how far apart, from which wave elites ride, and how the enemy base plays after the lift.",
+        "choices": [
+          {"id": "recruit", "name": "Recruit"},
+          {"id": "veteran", "name": "Veteran"},
+          {"id": "hardened", "name": "Hardened"},
+          {"id": "brutal", "name": "Brutal", "hard": true},
+          {"id": "nightmare", "name": "Nightmare", "hard": true},
+          {"id": "insane", "name": "Insane", "hard": true}
+        ],
+        "base": "hardened",
+        "effect": "LsEffectDifficulty"
+      },
+      {
+        "id": "perimeter",
+        "kind": "choice",
+        "name": "Perimeter",
+        "group": "The ground you hold",
+        "gist": "How far the edge sits from your base. It is read from the map, not set in tiles, so one choice fits every map.",
+        "choices": [
+          {"id": "tight", "name": "Tight"},
+          {"id": "standard", "name": "Standard"},
+          {"id": "wide", "name": "Wide"}
+        ],
+        "base": "standard",
+        "effect": "LsEffectPerimeter",
+        "read": "LsReadPerimeter"
+      },
+      {
+        "id": "allies_perimeter",
+        "kind": "choice",
+        "name": "Allies' perimeter",
+        "group": "The ground you hold",
+        "gist": "With two to four players, one perimeter round every home or one round each.",
+        "choices": [
+          {"id": "shared", "name": "Shared"},
+          {"id": "each", "name": "One each"}
+        ],
+        "base": "shared",
+        "effect": "LsEffectAlliesPerimeter",
+        "shown": "LsShownAlliesPerimeter"
+      },
+      {
+        "id": "push",
+        "kind": "toggle",
+        "name": "Push the enemy base",
+        "group": "The ending",
+        "gist": "On, clearing the last wave lifts the perimeter and the enemy base is yours to take. Off, clearing the last wave is the win.",
+        "base": true,
+        "effect": "LsEffectPush"
+      },
+      {
+        "id": "unique_groups",
+        "kind": "number",
+        "name": "Unique groups",
+        "group": "The run",
+        "gist": "How often a group that walks in is a unique group: every unit in it sharing one rolled set of effects, with a name and a look of its own. Stronger than the line it comes with, weaker than an elite.",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "base": 15,
+        "effect": "LsEffectUniqueGroups"
+      },
+      {
+        "id": "show_next_wave",
+        "kind": "toggle",
+        "name": "Show next wave",
+        "group": "The ending",
+        "gist": "The counter names what the next wave carries, its elites and the rolled mid-bosses among them.",
+        "base": true
+      },
+      {
+        "id": "elites",
+        "kind": "number",
+        "name": "Elites",
+        "group": "The run",
+        "gist": "How strong the elites are and how often they ride, against the run's own schedule. Every elite is rolled, whatever body it wears: its stats, its affixes, its spell and its name are new each run.",
+        "min": 0,
+        "max": 200,
+        "step": 10,
+        "unit": "%",
+        "base": 100,
+        "effect": "LsEffectElites"
+      },
+      {
+        "id": "start_wave",
+        "kind": "number",
+        "name": "Start at wave",
+        "group": "The run",
+        "gist": "The wave the run begins at, for trying a wave without playing up to it. 1 plays the whole run.",
+        "min": 1,
+        "max": 40,
+        "step": 1,
+        "base": 1,
+        "shown": "LsShownStartWave"
+      },
+      {
+        "id": "seed",
+        "kind": "seed",
+        "name": "Run",
+        "group": "The run",
+        "gist": "The number the whole run is rolled from: its waves, its elites, the mid-bosses and their spells. Type one in to play the same run again.",
+        "base": 0
+      }
+    ],
+    "presets": [
+      {
+        "id": "holdout",
+        "name": "Holdout",
+        "line": "A perimeter each and no base to take: hold your own start until the waves run out.",
+        "values": {"push": false, "allies_perimeter": "each"}
+      },
+      {
+        "id": "gauntlet",
+        "name": "The gauntlet",
+        "line": "Insane, tight, no preview: forty waves on one base, and nothing named before it arrives.",
+        "values": {"difficulty": "insane", "perimeter": "tight", "show_next_wave": false}
+      }
+    ]
+  }
+}

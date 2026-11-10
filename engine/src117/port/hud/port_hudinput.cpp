@@ -19,6 +19,7 @@
 #include "../render/port_maptext.h"  // MapTextUtf8
 #include "../render/port_view.h"     // g_portView
 #include "port_hudplay.h"             // HudTipContent
+#include "port_readout.h"             // PORT_READOUT_W, PORT_READOUT_H
 #include "CUnit.h"
 #include "../gameplay/port_keys.h"     // PortHotkey, PortHotkeyName
 #include "../../h/selectlimits.h"     // SelectionWide, StatUnits
@@ -180,10 +181,12 @@ bool PartOf(const HudHit &h, int nPlace, SlotPart *pPart) {
   if (!PortConsoleHudPart(nSource, nIndex, &pPart->pDlg, &pPart->rc))
     return false;
   // the part's picture as drawn, fitted in the box; a console button's face is the whole slot
+  const double sw = pPart->rc.right - pPart->rc.left + 1, sh = pPart->rc.bottom - pPart->rc.top + 1;
   memcpy(pPart->fit, box, sizeof box);
-  if (nSource != PORT_HUD_SRC_BUTTON)
-    HudFit(pPart->rc.right - pPart->rc.left + 1, pPart->rc.bottom - pPart->rc.top + 1, box[0], box[1], box[2],
-           box[3], pPart->fit);
+  if (nSource == PORT_HUD_SRC_SELECTION && PortReadoutDraws())
+    HudReadoutBox(sw, sh, box[0], box[1], box[2], box[3], pPart->fit);  // placed as it is drawn
+  else if (nSource != PORT_HUD_SRC_BUTTON)
+    HudFit(sw, sh, box[0], box[1], box[2], box[3], pPart->fit);
   return true;
 }
 
@@ -787,14 +790,25 @@ bool GridMouse(const HudHit &h, double lx, double ly, WORD wTag) {
     }
     HudTipContent c;
     c.title = MapTextUtf8(get_unit_name_from_type(pUnit->wType));
-    const char *psz = status_get_str(0x329);  // Click: Select Unit, Shift: Deselect, Ctrl: its type
-    for (const char *p = psz; p != NULL && *p != '\0';) {
-      const char *pEnd = strchr(p, '\n');
-      const std::string line = MapTextUtf8(std::string(p, pEnd != NULL ? pEnd - p : strlen(p)).c_str());
-      if (!line.empty() && c.lines.size() < HUD_TIP_LINES)
-        c.lines.push_back(line);
-      p = pEnd != NULL ? pEnd + 1 : p + strlen(p);
+    // every line of a text, as the tooltip holds them, up to its own limit
+    auto lines = [&c](const char *psz, bool bMapText) {
+      for (const char *p = psz; p != NULL && *p != '\0';) {
+        const char *pEnd = strchr(p, '\n');
+        std::string line(p, pEnd != NULL ? pEnd - p : strlen(p));
+        if (bMapText)
+          line = MapTextUtf8(line.c_str());
+        if (!line.empty() && c.lines.size() < HUD_TIP_LINES)
+          c.lines.push_back(line);
+        p = pEnd != NULL ? pEnd + 1 : p + strlen(p);
+      }
+    };
+    // a mod readout names the unit and says its rank and what is on it, above 1.17's own words
+    char szName[0x40], szThings[0x100];
+    if (PortConsoleRollTip(pUnit, szName, sizeof szName, szThings, sizeof szThings)) {
+      c.title = szName;
+      lines(szThings, false);
     }
+    lines(status_get_str(0x329), true);  // Click: Select Unit, Shift: Deselect, Ctrl: its type
     g.Cell(nCell, q);
     OwnTipAt(1000 + nFirst + nCell, c, h, q);
     return true;
@@ -1123,6 +1137,95 @@ std::string PortHudHitsJson(void) {
     j += sz;
   }
   return j + "]";
+}
+
+// The design's selection slot as laid out this frame, for the readout's room and placing.
+const HudHit *ReadoutSlot(void) {
+  if (!PortConsoleHudOn() || PortHudSlotHidden(HUD_SLOT_SELECTION))
+    return NULL;
+  double lw = 0.0;
+  const std::vector<HudHit> &hits = PortHudHits(&lw);
+  for (const HudHit &h : hits)
+    if (h.nSlot == HUD_SLOT_SELECTION && h.w > 0 && h.h > 0)
+      return &h;
+  return NULL;
+}
+
+void PortHudReadoutRoom(int *pnWidth, int *pnHeight) {
+  *pnWidth = PORT_READOUT_W;
+  *pnHeight = PORT_READOUT_H;
+  const HudHit *pSlot = ReadoutSlot();
+  if (pSlot == NULL)
+    return;
+  double w = 0, h = 0;
+  HudRoomIn(PORT_READOUT_W, PORT_READOUT_H, pSlot->w, pSlot->h, &w, &h);
+  *pnWidth = static_cast<int>(w);
+  *pnHeight = static_cast<int>(h);
+}
+
+PortReadoutSurfaceFn g_pfnReadoutInk;
+
+void PortHudReadoutSurfaceSet(PortReadoutSurfaceFn pfn) {
+  g_pfnReadoutInk = pfn;
+}
+
+PortReadoutSurfaceFn PortHudReadoutSurface(void) {
+  return g_pfnReadoutInk;
+}
+
+bool PortHudReadoutPlace(PortReadoutPlace *pOut) {
+  if (pOut == NULL)
+    return false;
+  *pOut = PortReadoutPlace();
+  const HudHit *pSlot = ReadoutSlot();
+  if (pSlot == NULL) {
+    // the classic console: the panel is the dialog's own rectangle, a readout pixel a pixel
+    if (gwGameMode != 3 || sgpStatDataDlg == NULL || (sgpStatDataDlg->dwFlags & 8) == 0)
+      return false;
+    pOut->bOn = true;
+    pOut->x = sgpStatDataDlg->rc.left;
+    pOut->y = sgpStatDataDlg->rc.top;
+    pOut->w = sgpStatDataDlg->rc.right - sgpStatDataDlg->rc.left + 1;
+    pOut->h = sgpStatDataDlg->rc.bottom - sgpStatDataDlg->rc.top + 1;
+    return true;
+  }
+  double box[4];
+  HudReadoutBox(PORT_READOUT_W, PORT_READOUT_H, 0, 0, pSlot->w, pSlot->h, box);
+  if (box[2] <= 0 || box[3] <= 0)
+    return false;
+  // the box's corners through the slot's placing and into the game's pixels, as PortHudCage
+  // takes the minimap's
+  double lw = 0.0;
+  PortHudHits(&lw);
+  if (lw <= 0.0)
+    return false;
+  double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
+  for (int c = 0; c < 4; ++c) {
+    const double bx = box[0] + (c & 1 ? box[2] : 0), by = box[1] + (c & 2 ? box[3] : 0);
+    double ax = 0, ay = 0;
+    ToGame(pSlot->m[0] * bx + pSlot->m[2] * by + pSlot->m[4], pSlot->m[1] * bx + pSlot->m[3] * by + pSlot->m[5],
+           lw, &ax, &ay);
+    x0 = ax < x0 ? ax : x0, y0 = ay < y0 ? ay : y0, x1 = ax > x1 ? ax : x1, y1 = ay > y1 ? ay : y1;
+  }
+  pOut->bOn = true;
+  pOut->x = x0, pOut->y = y0, pOut->w = x1 - x0, pOut->h = y1 - y0;
+  pOut->fScale = pOut->w / PORT_READOUT_W;
+  // the room the slot leaves, in the same pixels: beside the panel where the slot gives columns,
+  // under it where it gives rows
+  int nRoomW = PORT_READOUT_W, nRoomH = PORT_READOUT_H;
+  PortHudReadoutRoom(&nRoomW, &nRoomH);
+  if (nRoomW > PORT_READOUT_W) {
+    pOut->roomX = pOut->x + pOut->w;
+    pOut->roomY = pOut->y;
+    pOut->roomW = (nRoomW - PORT_READOUT_W) * pOut->fScale;
+    pOut->roomH = pOut->h;
+  } else if (nRoomH > PORT_READOUT_H) {
+    pOut->roomX = pOut->x;
+    pOut->roomY = pOut->y + pOut->h;
+    pOut->roomW = pOut->w;
+    pOut->roomH = (nRoomH - PORT_READOUT_H) * pOut->fScale;
+  }
+  return true;
 }
 
 void PortHudCage(rect32_t *pRect) {

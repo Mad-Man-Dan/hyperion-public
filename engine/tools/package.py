@@ -18,7 +18,10 @@ comment, not committed), unless built with --no-install (tools/build_engine_x64.
 user's own Hyperion folder (the user, 2026-10-21: "when you build the next windows build going
 forward it pushes the data, and any new tools to E:\\Hyperion").
 
-The build zip holds Hyperion.exe, the x64 SDL3.dll, README.txt and docs\\, the documents for
+The build zip holds Hyperion.exe, HyperionStudio.exe with the field list it reads in studio\\
+and the MCP server its Claude panel runs in tools\\control\\ (once the studio is ready,
+STUDIO_READY; until then only an install has them, with the mods of NOT_READY_MODS),
+the x64 SDL3.dll, README.txt and docs\\, the documents for
 editors (the map format, the live channel and the live guide to read offline), and everything
 else in Data\\ (the user, 2026-10-21): Data\\mods\\ with Hyperion's own mods but its test ones
 (UNSHIPPED_MODS), tools\\ with the
@@ -37,8 +40,9 @@ went in; earlier ones are kept.
 
 The Linux package holds the same, with the Linux program Hyperion.x86_64 (or
 Hyperion.aarch64) and libSDL3.so.0 beside it (tools/build_engine_linux.py), a README for Linux, text with Linux's
-line ends, and without the C++ client, which is built on WinHTTP. It goes in a folder of its
-own the same way.
+line ends, and without the C++ client, which is built on WinHTTP, or HyperionStudio.exe, which
+is built on the design engine and so is Windows only. It goes in a folder of its own the same
+way.
 
 The Mac package is made on the Mac, after tools/build_engine_linux.py there
 (tools/mac_sync.py sends the tree): Hyperion.app, with the program and libSDL3.0.dylib in
@@ -69,6 +73,11 @@ MODS = ENGINE / "mods"
 # public release those don't go with the build for now as its testing use"): the Hybrid Test the
 # replay suite plays and the AI Lab
 UNSHIPPED_MODS = ("hybrid-test", "lab")
+# What is not ready for players: in the folders an install writes, the user's own, and in no
+# package (the user, 2026-11-09: "the survival game mode is not ready", "I also dont want the
+# studio build also provided as thats not ready")
+NOT_READY_MODS = ("survival",)
+STUDIO_READY = False
 # and the maps for Hyperion's own testing: the Hybrid Test's, which places the mod's unit,
 # the trigger and selection tests, and the RGB colours' test, named as Big Game Hunters 2x is
 # (the user, 2026-10-27)
@@ -84,6 +93,14 @@ WEB = ENGINE / "web"
 # Hyperion's built-in HUD designs: layouts, styles and their sounds, from engine/huds/
 HUDS = ENGINE / "huds"
 WEB_PROGRAM = [ENGINE / "src117" / "build" / "web" / "play" / n for n in ("hyperion.js", "hyperion.wasm")]
+# Hyperion Studio, the program mods are made in (tools/build_studio_x64.py): the exe beside
+# Hyperion's, and the field list it reads beside itself in studio\. Windows only, since the
+# design engine it is built on is (tools/build_engine_linux.py builds neither).
+STUDIO = ENGINE / "src117" / "build" / "studio" / "HyperionStudio.exe"
+STUDIO_DATA = ENGINE / "studio"
+# and the MCP server its Claude panel runs, which it looks for in tools\control\ from its own
+# folder up (studio_claude.cpp), with the channel client it imports
+STUDIO_MCP = [ENGINE / "tools" / "control" / n for n in ("hyperion_mcp.py", "hyperion_ctl.py", "directions.py")]
 # the live channel's clients and the sample scenes, under tools\ in the zip, and the live guide
 # (served at /guide from the mod) also as docs\live-guide.html to read offline
 TOOLS = [ENGINE / "tools" / "hxlive.py"] + sorted((MODS / "debug-tools" / "cutscenes").glob("*.json"))
@@ -113,6 +130,31 @@ def font_licenses() -> str:
     return "".join(parts)
 
 
+# the README, and two parts of it by whether Hyperion Studio is in the package
+README_BESIDE_STUDIO = """Beside Hyperion.exe are HyperionStudio.exe, the program mods are made in (below), SDL3.dll,
+this README, docs\\ with the documents (docs\\licenses\\
+has the licenses of the typefaces inside Hyperion), studio\\ and tools\\, which belong to the
+studio, and Data\\ with
+"""
+README_BESIDE = """Beside Hyperion.exe are SDL3.dll, this README, docs\\ with the documents
+(docs\\licenses\\ has the licenses of the typefaces inside Hyperion), and Data\\ with
+"""
+README_STUDIO = """Hyperion Studio
+HyperionStudio.exe, beside Hyperion.exe, is the program mods are made in. It opens a mod from
+Data\\mods\\ and shows every unit, weapon, tech, upgrade, status and effect it holds, each value
+beside where that value comes from, and changes the mod through edits that can be undone. A
+game runs next to it to try the mod in: a unit against another, a race played on a real map,
+two versions of a unit fought against each other. It writes the same Data\\mods\\ Hyperion plays
+from, so what you try in the studio is what the game loads.
+
+Start it from the same folder as Hyperion.exe, so it finds your mods and the game's files. Its
+own settings and layout are kept in Data\\ with Hyperion's. File, New mod starts one; Data\\mods\\
+holds the mods that came with Hyperion to look at.
+
+A mod can also be a game mode, with its rules written in Lua, and the studio has a workspace
+for that: its settings, what it needs, and its generator rolled to see what a run would hold.
+
+"""
 README = """Hyperion {version}
 
 Hyperion plays StarCraft: Brood War with an engine of its own: the game's maps, and its
@@ -140,9 +182,7 @@ ones it finds (StarCraft from Battle.net where Battle.net installed it), and whi
 game reads; Settings, Data and mods, Game files switches to the other later. The map list shows
 the game's own maps from that install beside Hyperion's.
 
-Beside Hyperion.exe are SDL3.dll, this README, docs\\ with the documents (docs\\licenses\\
-has the licenses of the typefaces inside Hyperion), and Data\\ with
-everything else Hyperion brings: its mods, maps, tools and web pages. Hyperion keeps
+{beside}everything else Hyperion brings: its mods, maps, tools and web pages. Hyperion keeps
 everything of its own in Data\\ too: profiles, saved games, replays, settings, logs and its
 cache. To remove Hyperion, delete its folder.
 
@@ -164,7 +204,7 @@ looks on your screen. A HUD of your own goes in Data\\huds\\, as a folder or a .
     Hyperion.exe --hud-check <file, folder or .hud>
 checks one without starting a game. The designs need the GPU renderer (Settings, Graphics).
 
-Starting a game from the command line
+{studio}Starting a game from the command line
     Hyperion.exe --map <map file> [--race zerg|terran|protoss|random] [--computers <n>]
     Hyperion.exe --map <map file> --ums      (Use Map Settings: the map's triggers run)
     Hyperion.exe --map <map file> --rules classic|hyperion   (the original game's rules, or Hyperion's, the default)
@@ -526,11 +566,13 @@ def shipped_maps() -> list:
     return [m for m in sorted(MAPS.glob("*.hxm")) if m.name not in UNSHIPPED_MAPS] if MAPS.exists() else []
 
 
-def shipped_mod_files() -> list:
+def shipped_mod_files(own: bool = False) -> list:
     """The mods' files a package carries: not a mod's art/, which is built from the player's own
-    game files (tools/hxunit.py), nor the mods of UNSHIPPED_MODS."""
+    game files (tools/hxunit.py), nor the mods of UNSHIPPED_MODS, nor, but for the user's own
+    install, those of NOT_READY_MODS."""
+    out = UNSHIPPED_MODS if own else UNSHIPPED_MODS + NOT_READY_MODS
     return [f for f in sorted(MODS.rglob("*")) if f.is_file() and "art" not in f.relative_to(MODS).parts
-            and f.relative_to(MODS).parts[0] not in UNSHIPPED_MODS]
+            and f.relative_to(MODS).parts[0] not in out]
 
 
 def version() -> str:
@@ -702,10 +744,20 @@ def package_mac(args, ver: str) -> int:
     return 0
 
 
-def windows_files(ver: str) -> list:
-    """The Windows zip's files: each its name in the zip and its source, a file or the bytes."""
+def windows_files(ver: str, own: bool = False) -> list:
+    """The Windows zip's files: each its name in the zip and its source, a file or the bytes.
+    own: the user's own install, which has what is not ready for a package too."""
+    studio = STUDIO.is_file() and (own or STUDIO_READY)
     files = [("Hyperion.exe", BUILT), ("SDL3.dll", SDL3)]
-    for f in shipped_mod_files():
+    if studio:
+        files.append(("HyperionStudio.exe", STUDIO))
+        for f in sorted(STUDIO_DATA.rglob("*")) if STUDIO_DATA.is_dir() else []:
+            if f.is_file():
+                files.append(("studio/" + f.relative_to(STUDIO_DATA).as_posix(), f))
+        for f in STUDIO_MCP:
+            if f.is_file():
+                files.append(("tools/control/" + f.name, crlf(f.read_text(encoding="utf-8"))))
+    for f in shipped_mod_files(own):
         files.append(("Data/mods/" + f.relative_to(MODS).as_posix(), f))
     for f in sorted((NOTES / "media").rglob("*")) if (NOTES / "media").is_dir() else []:
         if f.is_file():
@@ -728,7 +780,8 @@ def windows_files(ver: str) -> list:
         files.append(("Data/tools/hxlive_cpp/" + t.name, crlf(t.read_text(encoding="utf-8"))))
     files.append(("docs/live-guide.html", crlf(GUIDE.read_text(encoding="utf-8"))))
     files.append(("docs/licenses/fonts.txt", crlf(font_licenses())))
-    files.append(("README.txt", crlf(README.format(version=ver))))
+    files.append(("README.txt", crlf(README.format(version=ver, beside=README_BESIDE_STUDIO if studio else README_BESIDE,
+                                                   studio=README_STUDIO if studio else ""))))
     for m in shipped_maps():
         files.append(("Data/maps/Hyperion/" + ("Experimental/" if experimental(m) else "") + m.name, m))
     return files
@@ -743,7 +796,10 @@ def keep_symbols(ver: str, release: bool, program: Path = BUILT) -> None:
     GNU build id or the UUID. A packaged build's are kept, with release.txt; of the others, the
     last SYMBOLS_KEEP."""
     from crash_symbols import elf_id, macho_id, pe_id
+    # the studio links the x64 build's objects, so its build is that build's
     build_id = program.parent / "build_id.h"
+    if not build_id.is_file() and program == STUDIO:
+        build_id = BUILT.parent / "build_id.h"
     if program.suffix == ".exe":
         found = pe_id(program) if program.is_file() else None
         keep = [program, program.with_suffix(".pdb")]
@@ -803,7 +859,7 @@ def install(folders: list, ver: str) -> int:
     for p in [BUILT, SDL3, *DOCS]:
         if not p.exists():
             sys.exit(f"missing {p}")
-    files = windows_files(ver)
+    files = windows_files(ver, own=True)
     failed = 0
     for folder in folders:
         if not folder.is_dir():
@@ -811,7 +867,7 @@ def install(folders: list, ver: str) -> int:
             failed += 1
             continue
         # an earlier install's renamed program, once nothing runs it
-        for name in ("Hyperion.exe.old", "SDL3.dll.old"):
+        for name in ("Hyperion.exe.old", "HyperionStudio.exe.old", "SDL3.dll.old"):
             try:
                 (folder / name).unlink(missing_ok=True)
             except PermissionError:
@@ -832,6 +888,8 @@ def install(folders: list, ver: str) -> int:
         for line in changed:
             print(line)
     keep_symbols(ver, release=False)
+    if STUDIO.is_file():
+        keep_symbols(ver, release=False, program=STUDIO)
     return 1 if failed else 0
 
 
@@ -873,9 +931,9 @@ def main() -> int:
         if not folders:
             sys.exit(f"--install: no folder given and none in {INSTALL_TO}")
         return install(folders, version())
-    for p in [BUILT, SDL3, *DOCS]:
+    for p in [BUILT, SDL3, *([STUDIO] if STUDIO_READY else []), *DOCS]:
         if not p.exists():
-            sys.exit(f"missing {p}")
+            sys.exit(f"missing {p}" + (" (python tools/build_studio_x64.py)" if p == STUDIO else ""))
 
     ver = version()
     out = args.out / f"hyperion_{ver}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -896,6 +954,8 @@ def main() -> int:
     maps = [name for name, _ in files if name.startswith("Data/maps/")]
     (out / "contents.txt").write_bytes(crlf("\n".join(listing) + "\n"))
     keep_symbols(ver, release=True)
+    if STUDIO_READY:
+        keep_symbols(ver, release=True, program=STUDIO)
     print(f"{build_zip}  ({build_zip.stat().st_size:,} bytes)")
     print(f"{len(maps)} test maps; contents.txt lists everything")
     return 0

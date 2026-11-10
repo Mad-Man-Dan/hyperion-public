@@ -134,7 +134,11 @@ a skirmish; a computer's handicap is the host's (`handicap` in `slot`), a person
 follows the person from match to match, and puts each seat's in `RoomJson`. The mutators are the
 match's too (`mutators` in `match` and `newmatch`, an object of ten numbers, `MutatorsJson`),
 the host's choice in the box its set-up shares with the Room box; a guest's set-up shows them
-locked, and the page names them under the match's line.
+locked, and the page names them under the match's line. The game mode is the match's in the same
+way (`mode`, `modeName`, `modeSettings` and `modeSeed` in `match` and `newmatch`, the mode's id,
+its name for the page, the settings off the mode's own defaults as JSON text, and the run's seed,
+0 for one every seat draws): the host chooses it as the game type, a guest's set-up shows the
+host's and chooses nothing, and the page names it under the match's line.
 The room sends its whole state as JSON (`RoomJson`) to every device when something changed and at
 least once a second, so every screen and the page draw from one source. The lobby's map file goes
 to each installed seat (`SendLobbyMaps`) so its set-up can show the picture. The page's picture
@@ -157,8 +161,10 @@ every person is in, the computers are made with their races, the map download is
 Start Game goes. A browser's seat that is not in yet holds the launch for up to 30 seconds while
 the room starts it (`m.qwSeating`). Every seat takes the launch's rules (`RulesChooseNext`),
 its handicaps (`HandicapChooseNet`: people by name, computers in the launch's order, which is
-the order the creator seats them) and its mutators (`MutatorsChooseNet`), so each one starts the
-same game (`gameplay.md`, "Handicaps" and "Mutators"). The game's replay is noted Hyperion's or 1.17's as it starts (`ReplayHxNoteGame`
+the order the creator seats them), its mutators (`MutatorsChooseNet`) and its game mode
+(`PortModeChooseNet`, with the mode's settings and the run's seed, so every seat rolls the same
+run; a seat that has not the mode installed refuses the launch and says so rather than playing
+the same map by other rules), so each one starts the same game (`gameplay.md`, "Handicaps" and "Mutators"). The game's replay is noted Hyperion's or 1.17's as it starts (`ReplayHxNoteGame`
 in `game_init`), so a seat's feed begins with Hyperion's sections and the room's copy and the
 watchers play the match by its rules.
 

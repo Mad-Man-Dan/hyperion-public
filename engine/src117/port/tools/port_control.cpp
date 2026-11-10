@@ -111,6 +111,7 @@ extern HANDLE ghScenArchive;
 #include "sai_TownBuilder.h" // GetAreaIndex
 #include "../gameplay/port_trainer.h"    // the trainer's session and keys
 #include "../data/port_moddata_push.h"  // ModDataPush, ModDataSubmissionsJson
+#include "../data/port_modlua.h"  // ModLuaPushTexts
 
 #include <algorithm>
 #include "mask.h"  // mask_disable_fog
@@ -118,6 +119,9 @@ extern HANDLE ghScenArchive;
 #include "scroll.h"  // ScrollAutoTarget, ScrollWindowActive
 #include "count.h"  // count_get_supplies_used, count_get_supplies_available
 #include "../platform/port_globals117.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 // Game globals (re/globals117.json), bound to their storage by the build.
 struct point16_t;
@@ -148,6 +152,13 @@ const unsigned long long kMessageMost = 16ull << 20;
 
 // A WebSocket's text is UTF-8, and a client closes on any other (PortJsonUtf8).
 void Send(int nClient, const std::string &text) {
+#ifdef HX_DESIGN
+  // the design engine's panels' own requests are answered in the process (design_bridge.cpp)
+  if (nClient == DESIGN_CLIENT) {
+    DesignChannelAnswer(text);
+    return;
+  }
+#endif
   std::string utf8 = PortJsonUtf8(text);
   std::lock_guard<std::mutex> hold(g_lock);
   g_outbox.push_back({nClient, std::move(utf8), false});
@@ -1126,8 +1137,12 @@ void ModPush(int nClient, const std::string &id, const PortJson &j) {
   if (j["iscript"].kind == PortJson::STRING)
     script = j["iscript"].s;
   std::string answer;
-  if (!ModDataPush(folder.c_str(), name.empty() ? "pushed" : name.c_str(), types.empty() ? nullptr : &types,
-                   j["iscript"].kind == PortJson::STRING ? &script : nullptr, &answer)) {
+  // the scripts' texts, when given, in place of the folder's
+  ModLuaPushTexts(j["scripts"].kind == PortJson::OBJECT ? &j["scripts"] : nullptr);
+  const bool bPushed = ModDataPush(folder.c_str(), name.empty() ? "pushed" : name.c_str(), types.empty() ? nullptr : &types,
+                                   j["iscript"].kind == PortJson::STRING ? &script : nullptr, &answer);
+  ModLuaPushTexts(nullptr);
+  if (!bPushed) {
     Send(nClient, Error(id, answer));
     return;
   }
@@ -2526,6 +2541,9 @@ void PortControlPoll(void) {
   if (gwGameMode != 3)
     g_bChanged = false;
   SwapStep();
+#ifdef HX_DESIGN
+  DesignPoll();  // the design engine's panels' answers and a scenario's progress
+#endif
   // a step ends at its frame, or where the game stopped itself (a trainer session at the replay's end)
   if (g_bStepping && (gwGameMode != 3 || oc_dwReplayFrame >= g_nStepTo || IsGamePaused())) {
     g_bStepping = false;
@@ -2621,3 +2639,24 @@ bool PortControlFrontCanvas(std::string *pTileset) {
   *pTileset = g_canvasTileset;
   return true;
 }
+
+#ifdef HX_DESIGN
+// A request of the design engine's panels, run with the channel's others (PortControlPoll).
+void DesignChannelPost(const std::string &text) {
+  std::lock_guard<std::mutex> hold(g_lock);
+  g_inbox.push_back({DESIGN_CLIENT, text, false});
+}
+
+// The game's state as the channel's commands see it.
+bool DesignInGame(void) {
+  return InGame();
+}
+
+unsigned DesignGameFrame(void) {
+  return gwGameMode == 3 ? oc_dwReplayFrame : 0;
+}
+
+bool DesignGamePaused(void) {
+  return gwGameMode == 3 && gbPauseGame != 0;
+}
+#endif

@@ -37,6 +37,7 @@
 #include "../port/render/port_scene.h"  // Hyperion
 #include "../port/render/port_view.h"  // Hyperion
 #include "../port/data/port_formats.h"  // Hyperion: PortMegatilesLoad
+#include "../port/data/port_modtileset.h"  // Hyperion: ModTilesetForGame
 
 // Globals this TU reaches, dual-spelled, one #ifdef per name. gwScreenTileY_g
 // @0x5264B2 is the screen's top-left Y in tiles, spelled as maphdr.cpp,
@@ -418,6 +419,13 @@ void gamemap_init()
               gpszTilesetNames_g[g_MapTileset], ".vr4");
     gfpCellBuf = reinterpret_cast<BYTE *>(
         load_game_data(szPath, NULL, NULL, "Gamemap.cpp", 0x2A1));
+    // Hyperion: a mod's changes to the tileset, in a game that has the mod
+    // (port_modtileset.cpp); the megatiles' flags made again from the minitiles' changed
+    if (ModTilesetForGame(g_MapTileset, sgGamePalette_g, gpMtxInfo, gdwMIEntries, sg_vf4_map_g,
+                          gwCellFlagsEntries, &gfpMtxSet, &gfpCellBuf)) {
+        SMemFree(gpMtxFlagsBuf, "Gamemap.cpp", __LINE__, 0);
+        gamemap_gen_default();
+    }
     PortSceneMapLoaded();  // Hyperion: the GPU scene's tileset (port_scene.cpp)
 
     if (sgbIsMinimapPreview_g == 0) {

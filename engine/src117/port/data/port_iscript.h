@@ -33,4 +33,24 @@ bool IscriptCompile(const std::string &text, unsigned nBase, const IscriptNames 
 // The animations a header of type nType has (1.17's types 0 to 30), or -1.
 int IscriptAnimCount(int nType);
 
+// Which animation of the script whose header sits at nHeader damages: the first whose paths
+// reach domissiledmg or dogrddamage, following its jumps and calls, and -1 for none. Those two
+// opcodes damage with the bullet whose script is running, so a picture that reaches one is a
+// weapon's own, and a mod that hangs it on a unit or shows it on its own asks it to damage with
+// no weapon behind it (CImage::RunScript does nothing then). Which animation is worth saying:
+// a picture that damages in its first is unsafe as soon as it is drawn, where one that damages
+// only in its death animation waits to be killed. pb and cb are the scripts' bytes; a path
+// through an opcode this build does not read stops there, so a script is called clean only when
+// every path walked to its end. For the original's scripts, whose offsets are words.
+int IscriptDamagesFrom(const unsigned char *pb, unsigned cb, unsigned nHeader);
+// An animation's name in header order ("Init", "Death", ...), "" for a number past the names.
+const char *IscriptAnimName(int nAnim);
+
+// The same for one of the original's pictures, by its image number, read through its own script
+// (CImage.cpp, where the scripts and the tables are). A mod's own picture gives -1: its script
+// is the mod author's to write. For a sprite, take its image from the mod loader's copy of
+// sprites.dat first (ModDataSpriteImage), since the game's own is not written until a game
+// starts.
+int ImageScriptDamages117(int nImage);
+
 #endif

@@ -9,4 +9,9 @@
 // is named where it has one (units 228, orders 189).
 int TypeNameFind(const char *pszTable, const char *pszName);
 
+// The other way: the name of row n of a table, the first a row of two names has; null when
+// the table has no such row. A mode's generate reads a row by name and names its base by name,
+// so the row it is given carries the names of the types it points at.
+const char *TypeNameOf(const char *pszTable, int n);
+
 #endif

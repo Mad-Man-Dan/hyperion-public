@@ -22,9 +22,9 @@ struct UiPrim
   float4 uv;      // a glyph's or picture's place in its atlas: u0, v0, u1, v1; for a rectangle, a turn:
                   // the angle in radians and the point it turns about
   float4 clip;    // x0, y0, x1, y1; nothing outside it is drawn
-  float4 shape;   // corner radius, border width (a picture: 1 for its pixels as squares), kind,
-                  // gradient (0 none, 1 down, 2 across, 3 across from color2 to color at the
-                  // middle and back)
+  float4 shape;   // corner radius, border width (a picture: 1 for its pixels as squares; a fill:
+                  // 1 where it adds its light), kind, gradient (0 none, 1 down, 2 across, 3
+                  // across from color2 to color at the middle and back)
 };
 
 // The kinds of primitive (port_ui.h, UiPrimKind).
@@ -166,6 +166,11 @@ float4 PSUi(UiOut i) : SV_Target
     a = a * c.a;
     return float4(rgb, a);
   }
+  // a fill that adds its light is drawn by the adding pipeline, whose blend adds the colour to
+  // what is under it: so the colour comes out multiplied by its own opacity, and the alpha it
+  // gives is nothing, the target's own standing
+  if (kind == KIND_FILL && p.shape.y != 0)
+    return float4(rgb * (a * c.a), 0.0);
   return float4(rgb, a * c.a);
 }
 

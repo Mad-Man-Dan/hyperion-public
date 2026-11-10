@@ -61,33 +61,33 @@ def build() -> None:
         sys.exit("build_engine_x64.py failed")
 
 
-def setup() -> None:
-    rt.fill_game_folder(PLAY, x64=True)
-    rt._link(rt.oracle_exe(), PLAY / "StarCraft.exe")
-    print(f"game folder ready: {PLAY}")
+def setup(folder: Path = PLAY) -> None:
+    rt.fill_game_folder(folder, x64=True)
+    rt._link(rt.oracle_exe(), folder / "StarCraft.exe")
+    print(f"game folder ready: {folder}")
 
 
-def refresh() -> None:
-    """Copy in the builds that differ from the folder's."""
-    for src, name in BUILT + SYMBOLS:
+def refresh(folder: Path = PLAY, built: list = BUILT, symbols: list = SYMBOLS) -> None:
+    """Copy in the builds that differ from the folder's (tools/design.py names its own)."""
+    for src, name in built + symbols:
         if not src.exists():
-            if (src, name) in SYMBOLS:
+            if (src, name) in symbols:
                 continue
             sys.exit(f"no {src}: build it, or run with --build")
-        dst = PLAY / name
+        dst = folder / name
         if dst.exists() and filecmp.cmp(src, dst, shallow=False):
             continue
         try:
             shutil.copy2(src, dst)
         except PermissionError:
-            sys.exit(f"{dst} is in use: close the Hyperion running from {PLAY} first")
+            sys.exit(f"{dst} is in use: close the Hyperion running from {folder} first")
         print(f"  {name} <- {src}")
     # Hyperion's own mods, each a folder of text: its mod.json and what it brings.
     # What a mod writes into its folder as it runs (the canvas's map) stays.
     # A mod's data is in folders of its own: data/, and the art built into it.
     for src in sorted((ROOT / "mods").glob("*/**/*")):
         rel = src.relative_to(ROOT / "mods")
-        dst = PLAY / "mods" / rel
+        dst = folder / "mods" / rel
         if src.is_file() and not (dst.exists() and filecmp.cmp(src, dst, shallow=False)):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -95,7 +95,7 @@ def refresh() -> None:
     # the page a LAN room serves to browsers (web/lan), beside the program as the builds put it
     for src in sorted((ROOT / "web").glob("**/*")):
         rel = src.relative_to(ROOT)
-        dst = PLAY / rel
+        dst = folder / rel
         if src.is_file() and not (dst.exists() and filecmp.cmp(src, dst, shallow=False)):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -103,7 +103,7 @@ def refresh() -> None:
     # the built-in HUD designs (huds/), beside the program as the builds put them
     for src in sorted((ROOT / "huds").glob("**/*")):
         rel = src.relative_to(ROOT)
-        dst = PLAY / rel
+        dst = folder / rel
         if src.is_file() and not (dst.exists() and filecmp.cmp(src, dst, shallow=False)):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -111,7 +111,7 @@ def refresh() -> None:
     # and Hyperion for the browser beside its page in web/play, once tools/build_engine_web.py has built it
     for name in ("hyperion.js", "hyperion.wasm"):
         src = ROOT / "src117" / "build" / "web" / "play" / name
-        dst = PLAY / "web" / "play" / name
+        dst = folder / "web" / "play" / name
         if src.is_file() and not (dst.exists() and filecmp.cmp(src, dst, shallow=False)):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -119,7 +119,7 @@ def refresh() -> None:
     # the release notes' pictures (notes/media, docs/versioning.md); the notes are in the exe
     for src in sorted((ROOT / "notes" / "media").glob("**/*")):
         rel = src.relative_to(ROOT / "notes")
-        dst = PLAY / "notes" / rel
+        dst = folder / "notes" / rel
         if src.is_file() and not (dst.exists() and filecmp.cmp(src, dst, shallow=False)):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)

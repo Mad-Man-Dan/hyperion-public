@@ -49,4 +49,10 @@ void PortTrigText(const char *pszText, unsigned nMs);
 // A sound, as Play WAV plays it.
 void PortTrigSound(const char *pszPath);
 
+// Victory and defeat as the actions of their names give them, for one player: a game mode's
+// win and lose (hx.win, hx.lose). A defeat leaves a victory or a win already won standing, as
+// the action does.
+void PortTrigVictory(int nPlayer);
+void PortTrigDefeat(int nPlayer);
+
 #endif

@@ -39,7 +39,9 @@ enum {
 // 1.17's table and every captain (the heap's) were only "set".
 // 9 (2026-10-18): the same words, mixed over four chains in turn and folded at the end, which
 // one thread runs side by side: the map's chain was the check's longest wait.
-#define SYNC_HASH_VERSION 9
+// 10 (2026-11-09): an image's palette type 0 and 2 to 7 hashed as 0, since how a cloaking
+// unit is drawn depends on whether the viewer detects it (port_synchash.cpp, Image).
+#define SYNC_HASH_VERSION 10
 
 struct SyncHash {
   uint32_t dwFrame;

@@ -14,7 +14,9 @@ struct UiPrim {
   float color2[4];  // the gradient's far colour
   float uv[4];      // a glyph's place in the atlas, 0 to 1
   float clip[4];    // x0, y0, x1, y1
-  float shape[4];   // corner radius, border width, kind (UiPrimKind), gradient (0, 1 down, 2 across)
+  // corner radius, border width (a fill: 1 where it adds its light, UiFillAdd), kind
+  // (UiPrimKind), gradient (0, 1 down, 2 across)
+  float shape[4];
 };
 
 enum UiPrimKind { UI_FILL, UI_RING, UI_GLYPH, UI_PLANET, UI_BLUR, UI_PICTURE };
@@ -44,6 +46,12 @@ float UiPx(float fUnits);
 int UiWidth(void);
 int UiHeight(void);
 void UiFill(float x, float y, float w, float h, UiColor c, float fRadius = 0.0f);
+// A fill that adds its light to what is under it rather than covering it, for light drawn over
+// a picture: two of them overlapping are brighter than one, and neither hides the picture. The
+// renderer draws these in a run of their own (GpuUiRuns, port_gpu_ui.cpp).
+void UiFillAdd(float x, float y, float w, float h, UiColor c, float fRadius = 0.0f);
+// Whether a primitive is one of those, which is how the renderer tells the runs apart.
+bool UiPrimAdds(const UiPrim &p);
 void UiGradient(float x, float y, float w, float h, UiColor c, UiColor c2, bool bAcross, float fRadius = 0.0f);
 // Across a rect from c2 at its sides to c at its middle, in one piece (two gradients meeting at the
 // middle leave a column there that neither covers whole).
@@ -54,6 +62,8 @@ void UiPlanet(float x, float y, float w, float h);
 void UiBlur(float x, float y, float w, float h, float fRadius, float fBlur);
 // A line, at any angle; it keeps the turn UiSetTurn set for what follows.
 void UiLine(float x0, float y0, float x1, float y1, UiColor c, float fWidth);
+// The same line adding its light, as UiFillAdd does: for light at an angle drawn over a picture.
+void UiLineAdd(float x0, float y0, float x1, float y1, UiColor c, float fWidth);
 // Rectangles and rings drawn after this turn by fAngle radians about (x, y); 0 stops it.
 void UiSetTurn(float fAngle, float x, float y);
 void UiPushClip(float x0, float y0, float x1, float y1);

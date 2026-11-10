@@ -83,12 +83,16 @@ LIBVPX_CONFIG = os.path.join(ENGINE, "tools", "libvpx")
 LIBWEBM = os.path.join(LIBVPX, "third_party", "libwebm")
 FONTS = os.path.join(ENGINE, "third_party", "fonts-8b0a1d0")
 # the MP3, FLAC and WAV decoders for a mod's sounds and music (tools/fetch_drlibs.py)
-DRLIBS = os.path.join(ENGINE, "third_party", "dr_libs-dfe8377")
+DRLIBS = os.path.join(ENGINE, "third_party", "dr_libs-b6a9189")
 # a mod's art in PNG, TGA (stb_image) and WebP (libwebp's decoder; tools/fetch_libwebp.py)
 LIBWEBP = os.path.join(ENGINE, "third_party", "libwebp-1.5.0")
 # a mod's AV1 videos: dav1d in plain C (tools/fetch_dav1d.py, its configuration in tools/dav1d/)
 DAV1D = os.path.join(ENGINE, "third_party", "dav1d-1.5.4")
 DAV1D_CONFIG = os.path.join(ENGINE, "tools", "dav1d")
+# a mod's scripts: Luau's parser, compiler and VM (tools/fetch_luau.py; port_modlua.cpp)
+LUAU = os.path.join(ENGINE, "third_party", "luau-0.742")
+LUAU_PARTS = ["Common", "Ast", "Bytecode", "Compiler", "VM"]
+LUAU_INCLUDES = [os.path.join(LUAU, part, "include") for part in LUAU_PARTS]
 SHADERS = os.path.join(SRC, "build", "x64", "shaders")
 IMAGE = "hyperion-linux"
 
@@ -113,7 +117,8 @@ FONT_RESOURCES = [("HYPERION_FONT_TEXT", "Saira-Regular.ttf"), ("HYPERION_FONT_W
 
 # The objects the binder leaves to the link, as in the Windows build.
 NOT_GAME = ["code_map.o", "data117.o", "port_pklib.o", "pk_implode.o", "pk_explode.o", "pk_crc32.o", "port_stormlib.o",
-            "port_clay.o", "port_lanstream.o", "abs_globals.o", "resources_posix.o", "hyperion.o"]
+            "port_clay.o", "port_lanstream.o", "port_modlua_lint.o", "abs_globals.o", "resources_posix.o",
+            "hyperion.o"]
 WEBRTC_SRC = os.path.join(ENGINE, "third_party", "webrtc")
 # what the streamed seats link (tools/build_webrtc.py builds the same for Windows)
 WEBRTC_LIBS = ["libdatachannel.a", "libjuice.a", "libsrtp2.a", "libusrsctp.a", "libmbedtls.a", "libmbedx509.a",
@@ -133,6 +138,8 @@ PORT = ["-std=c++20"] + COMMON + ["-DOC_WITH_HELD", "-I" + OUT, "-I" + os.path.j
                                   "-DCASCLIB_NO_AUTO_LINK_LIBRARY", "-I" + LIBVPX, "-I" + LIBVPX_CONFIG,
                                   "-I" + LIBWEBM, "-I" + DRLIBS, "-I" + os.path.join(LIBWEBP, "src"),
                                   "-I" + os.path.join(DAV1D, "include"),
+                                  # Luau's C API, for a mod's scripts (port_modlua.cpp)
+                                  "-I" + os.path.join(LUAU, "VM", "include"),
                                   # libopus's headers, for the Opus decoder (port_audiodecode.cpp)
                                   "-I" + os.path.join(OUT, "webrtc", "include")]
 # third-party code, compiled as its own makers do
@@ -334,6 +341,28 @@ def build_dav1d_lib(libs, cc, ar, third, again, workers):
     if os.path.exists(lib):
         os.remove(lib)
     run([ar, "rcs", lib] + [j[1] for j in jobs], "ar libdav1d")
+    return lib
+
+
+def build_luau_lib(libs, cxx, ar, third, again, workers):
+    """Luau's parser, compiler and VM into libs/libluau.a (MIT; a mod's scripts,
+    port_modlua.cpp), once for its version."""
+    lib = os.path.join(libs, "libluau.a")
+    if os.path.exists(lib) and not again:
+        return lib
+    if not os.path.exists(os.path.join(LUAU, "VM", "include", "lua.h")):
+        sys.exit("no Luau in %s: run python tools/fetch_luau.py" % LUAU)
+    os.makedirs(libs, exist_ok=True)
+    jobs = []
+    for part in LUAU_PARTS:
+        for src in sorted(glob.glob(os.path.join(LUAU, part, "src", "*.cpp"))):
+            obj = os.path.join(libs, "luau_%s_%s.o" % (part, os.path.basename(src)[:-4]))
+            jobs.append(([cxx] + third + ["-std=c++17"] + ["-I" + i for i in LUAU_INCLUDES]
+                         + ["-I" + os.path.join(LUAU, part, "src"), "-o", obj, src], obj))
+    compile_many(jobs, "Luau", workers)
+    if os.path.exists(lib):
+        os.remove(lib)
+    run([ar, "rcs", lib] + [j[1] for j in jobs], "ar libluau")
     return lib
 
 
@@ -593,6 +622,7 @@ def build(a):
     webm = build_webm_lib(os.path.join(OUT, "libs"), "clang", "clang++", AR, THIRD, a.libs, workers)
     image = build_image_lib(os.path.join(OUT, "libs"), "clang", AR, THIRD, a.libs, workers)
     dav1d = build_dav1d_lib(os.path.join(OUT, "libs"), "clang", AR, THIRD, a.libs, workers)
+    luau = build_luau_lib(os.path.join(OUT, "libs"), "clang++", AR, THIRD, a.libs, workers)
     webrtc = build_webrtc(a.webrtc, workers)
 
     jobs = []
@@ -625,6 +655,10 @@ def build(a):
     # the streamed seats: libdatachannel's C++, which it alone uses
     src = port_path("port_lanstream.cpp")
     jobs.append((["clang++"] + PORT + ["-I" + os.path.join(webrtc, "include"), "-o", obj_of(src), src], obj_of(src)))
+    # a mod's scripts read by Luau's parser, which wants C++17; it names no game global
+    src = port_path("port_modlua_lint.cpp")
+    jobs.append((["clang++"] + PORT + ["-std=c++17"] + ["-I" + i for i in LUAU_INCLUDES] + ["-o", obj_of(src), src],
+                 obj_of(src)))
     src = os.path.join(ENGINE, "hyperion", "hyperion.cpp")
     jobs.append((["clang++", "-std=c++17"] + COMMON + ["-o", obj_of(src), src], obj_of(src)))
     # the replay harness's observer, in a folder of its own: it is not part of the program
@@ -657,7 +691,7 @@ def build(a):
     _, obs_undef = symbols([obs_obj])
     for_observer = sorted(c_name(n) for n in obs_undef if n in defined and not c_name(n).startswith("_Z"))
     exports += for_observer
-    libs = [storm, casc, webm, image, dav1d] + [os.path.join(webrtc, "lib", l) for l in WEBRTC_LIBS]
+    libs = [storm, casc, webm, image, dav1d, luau] +[os.path.join(webrtc, "lib", l) for l in WEBRTC_LIBS]
     if MAC:
         link_mac(objs, libs, exports, obs_obj, len(for_observer))
         return

@@ -69,6 +69,12 @@ struct PortSession {
   int nRules = -1;  // 1 Hyperion's, 0 classic, -1 as --rules or the "rules" setting says
   bool bMutators = false;  // whether the mutators were chosen
   MutatorSet mut;
+  // the game mode (port_mode.h): its id, "" for none, every setting's value as JSON object
+  // text, and the run's seed, 0 for one drawn as the game starts. Text, not std::string,
+  // because main.cpp includes this.
+  char szMode[64] = {0};
+  char szModeSettings[512] = {0};
+  unsigned nModeSeed = 0;
 
   PortSession();
 };

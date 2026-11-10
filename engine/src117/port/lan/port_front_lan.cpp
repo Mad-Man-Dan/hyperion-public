@@ -34,6 +34,7 @@
 #include "../data/port_mods.h"
 #include "../data/port_hxm.h"  // PortHxmIsMap, PortHxmCompiled
 #include "../front/port_frontlobby.h"  // MapPictureRead, MapMinimapRgba
+#include "../front/port_front_modes.h"  // ModesChosenName, the mode in the room's word
 #include "../front/port_ui.h"
 #include "grid.h"  // IsBroodwar
 #include "glues.h"   // mem_free
@@ -926,7 +927,12 @@ void HostSync(void)
                             PortJsonQuote(kSpeedIds[r.nSpeed >= 0 && r.nSpeed <= 6 ? r.nSpeed : 6]) +
                             ",\"speedN\":" + std::to_string(r.nSpeed) + ",\"name\":" + PortJsonQuote(r.title) +
                             ",\"rules\":" + PortJsonQuote(r.bHyperion ? "hyperion" : "classic") +
-                            ",\"mutators\":" + MutatorsJson(r.mut) + "}";
+                            ",\"mutators\":" + MutatorsJson(r.mut) +
+                            // the game mode the match is played in, every seat's alike (port_mode.h)
+                            ",\"mode\":" + PortJsonQuote(r.mode) +
+                            ",\"modeName\":" + PortJsonQuote(ModesChosenName(PortModeChoice{r.mode, r.modeSettings, r.modeSeed})) +
+                            ",\"modeSettings\":" + PortJsonQuote(r.modeSettings) +
+                            ",\"modeSeed\":" + std::to_string(r.modeSeed) + "}";
     if (msg != g_sent.match) {
       LanClientSay(msg);
       g_sent.match = msg;
@@ -1003,6 +1009,9 @@ void GuestSync(void)
   r.type = (r.nKey & 0xFF) == 3 ? "Free For All" : "Melee";
   r.bHyperion = (*m)["rules"].Str() == "hyperion";
   r.mut = MutatorsFromJson((*m)["mutators"]);
+  r.mode = (*m)["mode"].Str();
+  r.modeSettings = (*m)["modeSettings"].Str();
+  r.modeSeed = static_cast<uint32_t>((*m)["modeSeed"].Num());
   r.seats = RoomSeats(*m);
   SkirmishGuestSetUp(r);
   // the guest's race and handicap, when they change them

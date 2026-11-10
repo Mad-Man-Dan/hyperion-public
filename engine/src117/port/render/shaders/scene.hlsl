@@ -48,6 +48,8 @@ cbuffer SceneParams : register(b0, space2)
   uint gViewW;       // the render view's width in the game's pixels, a row of the screen buffer
   uint gLooksAt;     // CSSceneFull: where the looks' data starts in gFrame, 0 for none
   uint gTimeMs;      // and the time, in milliseconds within the hour
+  uint gMarksAt;     // CSSceneFull: where the marks' numbers start in gFrame, 0 for none
+  uint gMarksUnused;
 };
 
 // The full colour's (stage G; CSSceneFull, CSDistortFull, CSShowFull): the palette as shown
@@ -139,6 +141,7 @@ static const uint PRIM_FOG = 10u;
 static const uint PRIM_GLYPH = 11u;
 static const uint PRIM_BLIT = 12u;
 static const uint PRIM_LOOK = 13u;
+static const uint PRIM_MARK = 14u;
 static const uint PRIM_MIRROR = 0x100u;
 
 uint LoadByte(ByteAddressBuffer b, uint nAt)
@@ -254,8 +257,8 @@ uint Fog(Prim p, uint x, uint y, uint v)
 uint Apply(Prim p, int x, int y, uint nAt, uint v)
 {
   uint kind = p.kind & 0xFFu;
-  if (kind == PRIM_LOOK)
-    return v;
+  if (kind == PRIM_LOOK || kind == PRIM_MARK)
+    return v;  // drawn in the full colour alone, so the index map is as the game drew it
   if (kind == PRIM_FOG)
     return Fog(p, uint(x), uint(y), v);
   if (kind == PRIM_SPAN) {
@@ -571,13 +574,17 @@ float3 FogColour(Prim p, uint x, uint y, float3 c, uint sprite)
 
 // ---------------------------------------------------------------------------
 // Looks (port_looks.h): in full colour, a looked image's pixels drawn as the design
-// draws a rich resource (local-design-center, 41-rich-bases/richfx.js), and a look's light on
+// draws a rich resource (design/41-rich-bases/richfx.js), and a look's light on
 // the ground and its plume. Each look's data is LOOK_BYTES at gLooksAt in gFrame: the tone of
 // each palette entry its rule takes (0 none, else 1 + the tone * 254), the ramp as six float4s
 // at 256, the clarity, shine, glow and sparkle at 352, the plume's height, density and rise at
 // 368, the light's colour and strength at 384, and whether it is gas and in steps at 400.
 
-static const uint LOOK_BYTES = 416u;
+// the aura's at 416, each entry's zone at 544, the ramps of zones 1 to 3 at
+// 800 and each zone's material and mix at 1088 (port_looks.h)
+static const uint LOOK_BYTES = 1152u;
+// how far past the first zone's ramp LookRampAt reads: the ramp of the zone being drawn
+static uint g_lookRamp = 0u;
 static const float2 LOOK_ART_LIGHT = float2(-0.62, -0.78);  // 1.17's art is lit from the top left
 static const float3 LOOK_SUN = float3(-0.55, -0.62, 0.5596);
 static const float LOOK_BAYER[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
@@ -607,7 +614,7 @@ float4 LookF4(uint at, uint off)
 
 float3 LookRampAt(uint at, uint i)
 {
-  return LookF4(at, 256u + i * 16u).xyz;
+  return LookF4(at, 256u + g_lookRamp + i * 16u).xyz;
 }
 
 float3 LookRamp(uint at, float t)
@@ -697,6 +704,11 @@ float3 LookColour(Prim p, uint look, uint s, int dx, int dy, float3 under, float
   uint at = LookAt(look);
   float4 mat = LookF4(at, 352u);  // clarity, shine, glow, sparkle
   bool gas = gFrame.Load(at + 400u) != 0u;
+  // the zone that takes the entry: its ramp, its material and how much of it shows
+  uint zone = (gFrame.Load(at + 544u + (s & ~3u)) >> ((s & 3u) * 8u)) & 3u;
+  g_lookRamp = zone == 0u ? 0u : 448u + zone * 96u;
+  float4 zm = LookF4(at, 1088u + zone * 16u);  // material, mix
+  gas = zm.x > 0.5 && zm.x < 1.5;
   float t = LookTime();
   float pulse = 0.8 + 0.2 * sin(t * 2.2);
   float3 glowCol = LookRampAt(at, 4u);
@@ -718,6 +730,14 @@ float3 LookColour(Prim p, uint look, uint s, int dx, int dy, float3 under, float
     // the rock and the metal round it, lit by what glows beside them
     float g = nTaken / 24.0 * 1.3;
     return saturate(flat + (flat * glowCol * 1.2 + glowCol * 0.08) * g * mat.z);
+  }
+  // paint: the zone's ramp at the tone, shaded as the art is; glow: the ramp added as light
+  if (zm.x > 1.5) {
+    float3 own = Pal(s);
+    float3 paint = LookRamp(at, tone);
+    if (zm.x > 2.5)
+      return saturate(own * (1.0 - 0.5 * zm.y) + paint * zm.y * 1.2 * pulse);
+    return saturate(lerp(own, paint, zm.y));
   }
   // how it faces: a crystal's faces turned out from its middle and toward the art's light by
   // how bright each band of it was drawn; gas and metal by the slope of their brightness
@@ -771,7 +791,7 @@ float3 LookColour(Prim p, uint look, uint s, int dx, int dy, float3 under, float
   col += glowCol * (0.25 + 0.75 * thick) * mat.z * (gas ? 0.6 : 0.45) * pulse;
   if (!gas)
     col += float3(1.0, 0.97, 0.86) * LookSparkle(p, at, dx, dy, mat.w, t) * mat.w * 1.6;
-  return saturate(col);
+  return saturate(lerp(Pal(s), saturate(col), zm.y));
 }
 
 int LookLow(uint u)
@@ -812,12 +832,160 @@ float3 LookHalo(Prim p, uint at, int dx, int dy, float3 c, bool steps, int2 mp)
   return saturate(col);
 }
 
+// Whether pixel dx + i, dy + j of the frame is drawn, keeping the least squared distance to one.
+void LookNear(Prim p, int dx, int dy, int i, int j, inout float best)
+{
+  float d2 = float(i * i + j * j);
+  if (d2 < best && (PrimPixel(p, dx + i, dy + j) & 0x100u) != 0u)
+    best = d2;
+}
+
+// c turned round the grey axis by a radians: an aura's hue as it cycles.
+float3 LookHueTurn(float3 c, float a)
+{
+  float3 k = float3(0.57735, 0.57735, 0.57735);
+  float ca = cos(a);
+  return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
+}
+
+// The aura round a looked image, at dx, dy of its frame (the primitive carries
+// the image's frame), mp its place on the map: past the frame's edge and a gap, a line of light
+// hugging it and a glow beyond to reach pixels, and the frame's own edge lit. Its colours are the
+// look's or the player's (slot), by distance or turning in hue; bands march round the outline,
+// the line crackles, the whole pulses and flickers, a spark now and then, and embers rise off the
+// edges that face up. In steps with a dither, in blocks of one or two game pixels, timed by
+// classic's frames two at a time. It goes only where no sprite is drawn yet, so a turret's aura
+// stays off its base, unless the look lets it over other sprites.
+float3 LookAura(Prim p, uint at, int dx, int dy, float3 c, bool steps, int2 mp, int reach, uint sprite, uint slot)
+{
+  float4 glow = LookF4(at, 416u);   // the glow's colour, the strength
+  float4 core = LookF4(at, 432u);   // the line's colour, the crackle
+  float4 mid = LookF4(at, 448u);    // the middle colour, the opacity
+  float4 shape = LookF4(at, 464u);  // the line's width, the gap, the falloff, the inner edge
+  float4 move = LookF4(at, 480u);   // the speed, the pulse, its rate, the flicker
+  float4 more = LookF4(at, 496u);   // the sparks, the embers, the bands, their speed
+  float4 style = LookF4(at, 512u);  // the mode, the blend, the steps, the dither
+  float4 last = LookF4(at, 528u);   // the block, the crackle's size, over other sprites
+  float tick = floor(LookTime() * move.x / 0.084);
+  float secs = tick * 0.084;
+  float pulse = 1.0 - move.y * 0.5 + move.y * 0.5 * sin(tick * 0.5 * move.z);
+  pulse *= 1.0 - move.w * 0.7 * LookHash(float2(tick * 0.731, float(p.entry & 0xFFFFu) * 0.013));
+  float strength = glow.w * pulse;
+  bool over = style.y > 0.5;
+  uint mode = uint(style.x + 0.5);
+  bool own = (PrimPixel(p, dx, dy) & 0x100u) != 0u;
+  if (!own && sprite != 0u && last.z < 0.5)
+    return c;
+  // in blocks of two, each block's corner on the map stands for it
+  int2 q = int2(dx, dy);
+  int2 m = mp;
+  if (last.x > 1.5) {
+    int2 snapped = (mp >> 1) << 1;
+    q += snapped - mp;
+    m = snapped;
+  }
+  float flick = LookHash(float2(m) * 0.37 + tick * 1.618);
+  float dith = style.w > 0.5 ? LookBayer(m) : 0.5;
+  float levels = max(style.z, 2.0);
+  float3 lineCol = core.rgb;
+  float3 glowCol = glow.rgb;
+  if (own) {
+    // the frame's own edge, lit by the inner amount
+    if (shape.w <= 0.0)
+      return c;
+    bool edge = false;
+    for (int k = 0; k < 8; k += 2)
+      edge = edge || (PrimPixel(p, dx + LOOK_RING[k].x, dy + LOOK_RING[k].y) & 0x100u) == 0u;
+    if (!edge)
+      return c;
+    if (mode == 2u) {
+      float3 s0 = Shade(slot, 0u), s7 = Shade(slot, 7u);
+      glowCol = dot(s0, float3(0.299, 0.587, 0.114)) >= dot(s7, float3(0.299, 0.587, 0.114)) ? s0 : s7;
+    } else if (mode == 3u) {
+      glowCol = LookHueTurn(glow.rgb, secs * 1.2);
+    }
+    return over ? lerp(c, lineCol, saturate(strength * shape.w)) : saturate(c + glowCol * strength * shape.w);
+  }
+  // the nearest drawn pixel, ring by ring out to the reach
+  float best = (PrimPixel(p, q.x, q.y) & 0x100u) != 0u ? 1.0 : 1e6;
+  for (int r = 1; r <= reach && best > float(r * r); ++r)
+    for (int k = -r; k <= r; ++k) {
+      LookNear(p, q.x, q.y, k, -r, best);
+      LookNear(p, q.x, q.y, k, r, best);
+      if (k != -r && k != r) {
+        LookNear(p, q.x, q.y, -r, k, best);
+        LookNear(p, q.x, q.y, r, k, best);
+      }
+    }
+  float d = max(sqrt(best), 1.0);
+  float w = max(shape.x, 0.5);
+  float e = d - shape.y;
+  float u = saturate((e - w) / max(float(reach) - shape.y - w + 0.5, 0.5));
+  bool near = best < 1e5 && e >= 0.5 && d <= float(reach) + 0.5;
+  if (mode == 1u) {
+    glowCol = u < 0.5 ? lerp(core.rgb, mid.rgb, u * 2.0) : lerp(mid.rgb, glow.rgb, u * 2.0 - 1.0);
+  } else if (mode == 2u) {
+    float3 s0 = Shade(slot, 0u), s7 = Shade(slot, 7u);
+    bool lightFirst = dot(s0, float3(0.299, 0.587, 0.114)) >= dot(s7, float3(0.299, 0.587, 0.114));
+    float3 light = lightFirst ? s0 : s7;
+    lineCol = lerp(light, float3(1, 1, 1), 0.45);
+    glowCol = lerp(light, lightFirst ? s7 : s0, 0.3 + 0.4 * u);
+  } else if (mode == 3u) {
+    lineCol = LookHueTurn(core.rgb, secs * 1.2);
+    glowCol = LookHueTurn(glow.rgb, secs * 1.2 + u * 1.2);
+  }
+  // the bands round the outline, by the angle about the frame's middle
+  float band = 1.0;
+  if (more.z >= 1.0) {
+    Entry entry = gEntries[p.entry];
+    float2 o = float2(LookFramePos(p, q.x, q.y)) + 0.5 - float2(entry.size & 0xFFFFu, entry.size >> 16) * 0.5;
+    band = 0.35 + 1.3 * pow(0.5 + 0.5 * cos(atan2(o.y, o.x) * more.z - secs * more.w * 2.0), 4.0);
+  }
+  float g = 0.0;
+  float a = 0.0;
+  if (near) {
+    g = pow(1.0 - u, 1.5 * shape.z) * strength * band * (0.75 + 0.25 * flick);
+    if (e <= w + 0.5) {
+      float crack = LookNoise(float2(m) * 0.45 / max(last.y, 0.25) + float2(tick * 0.9, -tick * 0.6));
+      a = saturate(strength * band * (crack > core.w * 0.7 ? 1.0 : 0.3) * (0.8 + 0.2 * flick));
+    }
+  }
+  // an ember: one a column now and then, rising from the first drawn pixel below
+  float ember = 0.0;
+  if (more.y > 0.0) {
+    int h = 0;
+    for (int k = 1; k <= reach + 12 && h == 0; ++k)
+      if ((PrimPixel(p, q.x, q.y + k) & 0x100u) != 0u)
+        h = k;
+    if (h > 0) {
+      float column = float(LookFramePos(p, q.x, q.y).x);
+      float run = secs * (0.3 + LookHash(float2(column, 3.1)) * 0.4) + LookHash(float2(column, 7.7));
+      float life = frac(run);
+      if (LookHash(float2(column, floor(run) * 1.37)) < more.y * 0.35 && abs(float(h) - 1.0 - life * float(reach + 10)) < 0.5)
+        ember = 1.0 - life;
+    }
+  }
+  if (steps) {
+    g = floor(g * levels + dith) / levels;
+    a = floor(a * (levels - 1.0) + dith) / (levels - 1.0);
+    ember = floor(ember * 3.0 + dith) / 3.0;
+  }
+  float3 col = over ? lerp(c, glowCol, saturate(g)) : c + glowCol * g;
+  col = lerp(col, lineCol, saturate(a));
+  if (near && a <= 0.0 && flick > 1.0 - more.x * 0.06)
+    col = lerp(col, lineCol, 0.85);
+  if (ember > 0.0)
+    col = over ? lerp(col, lineCol, ember) : col + lerp(lineCol, glowCol, 0.5) * ember;
+  return saturate(lerp(c, col, mid.w));
+}
+
 // A look primitive over pixel x, y of colour c: the light on the ground where nothing but the
 // terrain is drawn yet, a crystal's halo, or a vent's plume over whatever is.
 float3 LookPrim(Prim p, int x, int y, float3 c, uint sprite)
 {
   if (gLooksAt == 0u)
     return c;
+  g_lookRamp = 0u;
   uint at = LookAt(p.param);
   float2 centre = float2(LookLow(p.clip0), LookHigh(p.clip0));
   float t = LookTime();
@@ -829,6 +997,11 @@ float3 LookPrim(Prim p, int x, int y, float3 c, uint sprite)
   if (what == 3u) {
     int reach = int((p.param >> 16) & 0xFFu);
     return LookHalo(p, at, x - p.x - reach, y - p.y - reach, c, steps, mp);
+  }
+  if (what == 4u) {
+    int reach = int((p.param >> 16) & 0xFu);
+    int rise = int((p.param >> 20) & 0xFu) * 2;
+    return LookAura(p, at, x - p.x - reach, y - p.y - reach - rise, c, steps, mp, reach, sprite, p.param >> 24);
   }
   if (what == 1u) {
     if (sprite != 0u)
@@ -870,6 +1043,277 @@ float3 LookPrim(Prim p, int x, int y, float3 c, uint sprite)
 
 // Primitive p, the n-th, over pixel x, y in full colour: c the colour so far, v the index
 // before it and vAfter the one Apply gives. sprite becomes 1 where a sprite or a line draws.
+// ---- a mod's mark painted on the ground (port_mapmark.h) ------------------------------------
+//
+// A mark primitive's entry is a byte offset into the marks' numbers, which port_mapmark.cpp
+// writes in this order, 4 bytes each: the shape, its colour, the opacity of its inside and of
+// its edge, the edge's width, its dash and the glow under it, the shape's places in the view's
+// pixels, then the fade (how near a unit reveals it, the opacity it reaches and the one it
+// rests at, and whether each unit lights only the ground round itself), its curve, the pulse's
+// beat and depth with the mark's age, the crossings being answered, the numbers of the look it
+// wears that the paint has a use for, and the units that reveal it with the corners of a
+// polygon after them. The MARK_AT_ constants below are those offsets, and they move together
+// with that order.
+//
+// It is drawn in the full colour alone and leaves the index map as it is, as a look's light
+// does, and it is recorded before the sprites, so a sprite drawn later covers the paint.
+
+static const uint MARK_CIRCLE = 0u;
+static const uint MARK_RING = 1u;
+static const uint MARK_RECT = 2u;
+static const uint MARK_POLY = 3u;
+static const uint MARK_LINE = 4u;
+static const uint MARK_TINT = 5u;  // not a shape: a light under a unit standing outside a mark
+
+// how a mark's light falls off over the fade's distance (port_mapmark.h's MAP_MARK_CURVE_*)
+static const uint MARK_CURVE_SMOOTH = 0u;
+static const uint MARK_CURVE_EVEN = 1u;
+static const uint MARK_CURVE_SHARP = 2u;
+
+// where each number sits in a mark's own bytes (port_mapmark.cpp's MarkWords, in its order)
+static const uint MARK_AT_SHAPE = 0u;
+static const uint MARK_AT_RGB = 4u;
+static const uint MARK_AT_FILL = 8u;
+static const uint MARK_AT_EDGE = 12u;
+static const uint MARK_AT_WIDTH = 16u;
+static const uint MARK_AT_DASH = 20u;
+static const uint MARK_AT_SOFT = 24u;
+static const uint MARK_AT_X = 28u;
+static const uint MARK_AT_Y = 32u;
+static const uint MARK_AT_W = 36u;      // a rectangle's width, else a circle's and a ring's radius
+static const uint MARK_AT_H = 40u;      // its height, else a line's second x
+static const uint MARK_AT_Y2 = 44u;
+static const uint MARK_AT_NEAR = 48u;
+static const uint MARK_AT_MOST = 52u;
+static const uint MARK_AT_LEAST = 56u;
+static const uint MARK_AT_UNITS = 60u;  // how many revealing units
+static const uint MARK_AT_POINTS = 64u; // and how many corners a polygon has
+static const uint MARK_AT_CURVE = 68u;
+static const uint MARK_AT_PULSE = 72u;  // the beat in seconds, its depth, and the mark's age
+static const uint MARK_AT_DEPTH = 76u;
+static const uint MARK_AT_AGE = 80u;
+static const uint MARK_AT_EVENTS = 84u;  // how many crossings are being answered
+static const uint MARK_AT_LEN = 88u;     // the edge's whole length, which a ripple wraps on
+static const uint MARK_AT_CLOSED = 92u;  // and whether the shape closes, so that it wraps at all
+// the look's own numbers the paint has a use for: the foot's glow, in the edge's widths and with
+// its opacity, 0 widths for a look with no foot; the colour a unit on its way out is answered
+// in; and the ripple a crossing sends along the edge, its wave and then its flash
+static const uint MARK_AT_FOOT = 96u;
+static const uint MARK_AT_FOOT_ALPHA = 100u;
+static const uint MARK_AT_WARN = 104u;
+static const uint MARK_AT_SPEED = 108u;
+static const uint MARK_AT_WIDE = 112u;
+static const uint MARK_AT_LIFE = 116u;
+static const uint MARK_AT_FLASH = 120u;
+static const uint MARK_AT_FLASH_LIFE = 124u;
+static const uint MARK_AT_SIDE = 128u;
+static const uint MARK_UNITS_AT = 132u;  // the revealing units, after the numbers above, then a
+                                         // polygon's corners and then the crossings, four
+                                         // numbers each: where on the edge, how long ago, out,
+                                         // and how much of the step ran along the edge
+
+float MarkReal(uint at)
+{
+  return asfloat(gFrame.Load(at));
+}
+
+float2 MarkPoint(uint at, uint i)
+{
+  return float2(MarkReal(at + i * 8u), MarkReal(at + 4u + i * 8u));
+}
+
+// The distance from px to the segment ab, with how far along it the nearest point lies (which
+// a dash is cut by), and the ray down from px counted where it crosses the segment, so a
+// polygon's inside is where the crossings are odd.
+float MarkSeg(float2 px, float2 a, float2 b, inout float phase, inout bool bIn)
+{
+  float2 ab = b - a, ap = px - a;
+  float t = saturate(dot(ap, ab) / max(dot(ab, ab), 1e-6));
+  if ((a.y > px.y) != (b.y > px.y) && px.x < a.x + (b.x - a.x) * (px.y - a.y) / (b.y - a.y))
+    bIn = !bIn;
+  phase = t * length(ab);
+  return length(ap - ab * t);
+}
+
+// The mark's distance at px, under 0 inside the shape, with the dash's phase along its edge.
+// A dash begins again at each corner, so the dashes of a side are whole.
+float MarkDist(uint at, uint shape, uint nUnits, uint nPoints, float2 px, out float phase)
+{
+  float2 c = float2(MarkReal(at + MARK_AT_X), MarkReal(at + MARK_AT_Y));
+  float a = MarkReal(at + MARK_AT_W), b = MarkReal(at + MARK_AT_H);
+  phase = 0.0;
+  if (shape == MARK_CIRCLE || shape == MARK_RING) {
+    float2 d = px - c;
+    phase = (atan2(d.y, d.x) + 3.14159265) * max(a, 1.0);
+    return length(d) - a;
+  }
+  if (shape == MARK_RECT) {
+    float2 half2 = float2(a, b) * 0.5;
+    float2 q = abs(px - (c + half2)) - half2;
+    phase = px.x + px.y;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  }
+  bool bIn = false;
+  if (shape == MARK_LINE) {
+    float2 q = float2(MarkReal(at + MARK_AT_H), MarkReal(at + MARK_AT_Y2));
+    return MarkSeg(px, c, q, phase, bIn);
+  }
+  // a polygon: its corners after the units, the sides closed
+  uint pts = at + MARK_UNITS_AT + nUnits * 8u;
+  float d = 1e9;
+  for (uint i = 0u; i < nPoints; ++i) {
+    float2 p0 = MarkPoint(pts, i);
+    float2 p1 = MarkPoint(pts, (i + 1u) % nPoints);
+    float f = 0.0;
+    float one = MarkSeg(px, p0, p1, f, bIn);
+    if (one < d) {
+      d = one;
+      phase = f;
+    }
+  }
+  return bIn ? -d : d;
+}
+
+// The light at a part of the fade's distance, as port_mapmark.cpp's Falloff gives it, so the
+// paint and the layer fade a mark the same way.
+float MarkFalloff(float x, uint curve)
+{
+  if (x >= 1.0)
+    return 0.0;
+  if (x <= 0.0)
+    return 1.0;
+  if (curve == MARK_CURVE_EVEN)
+    return 1.0 - x;
+  if (curve == MARK_CURVE_SHARP) {
+    if (x < 0.55)
+      return 1.0;
+    float s = 1.0 - (x - 0.55) / 0.45;
+    return s * s;
+  }
+  float t = 1.0 - x;
+  return t * t * (3.0 - 2.0 * t);
+}
+
+// What the crossings add at this point of the edge, 0 to 1, and in warm the share of that from
+// a unit on its way out, as port_mapmark.cpp's Boost gives them: the ripple block's wave running
+// away from the place, and its flash at the place itself, each over its own life.
+float MarkBoost(uint at, uint nUnits, uint nPoints, float phase, out float warm)
+{
+  warm = 0.0;
+  uint n = gFrame.Load(at + MARK_AT_EVENTS);
+  if (n == 0u)
+    return 0.0;
+  float len = MarkReal(at + MARK_AT_LEN);
+  bool closed = gFrame.Load(at + MARK_AT_CLOSED) != 0u;
+  float speed = MarkReal(at + MARK_AT_SPEED), wide = max(MarkReal(at + MARK_AT_WIDE), 1e-3);
+  float life = max(MarkReal(at + MARK_AT_LIFE), 1e-3);
+  float flash = max(MarkReal(at + MARK_AT_FLASH), 1e-3);
+  float flashLife = max(MarkReal(at + MARK_AT_FLASH_LIFE), 1e-3);
+  float side = MarkReal(at + MARK_AT_SIDE);
+  uint ev = at + MARK_UNITS_AT + nUnits * 8u + nPoints * 8u;
+  float boost = 0.0;
+  for (uint i = 0u; i < n; ++i) {
+    float s = MarkReal(ev + i * 16u);
+    float tau = MarkReal(ev + i * 16u + 4u);
+    float went = MarkReal(ev + i * 16u + 8u);
+    float way = MarkReal(ev + i * 16u + 12u);
+    float d = phase - s;
+    if (closed && len > 0.0)
+      d = d > len * 0.5 ? d - len : (d < len * -0.5 ? d + len : d);
+    float ds = abs(d);
+    float a = (ds - tau * speed) / wide, b = ds / flash;
+    // the wave runs away both ways alike; the flash leans to the side the unit was heading for
+    float lean = max(0.0, 1.0 + side * way * (d >= 0.0 ? 1.0 : -1.0));
+    float f = exp(-a * a) * max(0.0, 1.0 - tau / life) +
+              exp(-b * b) * max(0.0, 1.0 - tau / flashLife) * lean;
+    boost = max(boost, f);
+    if (went > 0.5)
+      warm = max(warm, f);
+  }
+  warm = saturate(warm);
+  return saturate(boost);
+}
+
+float3 MarkPrim(Prim p, int x, int y, float3 c)
+{
+  if (gMarksAt == 0u)
+    return c;
+  uint at = gMarksAt + p.entry;
+  uint shape = gFrame.Load(at + MARK_AT_SHAPE);
+  uint rgb = gFrame.Load(at + MARK_AT_RGB);
+  float3 colOf = float3(float((rgb >> 16) & 0xFFu), float((rgb >> 8) & 0xFFu), float(rgb & 0xFFu)) / 255.0;
+  // a light under a unit standing outside a mark: a round gradient on the ground, and its own
+  // few numbers rather than a shape's (port_mapmark.cpp's OutWords)
+  if (shape == MARK_TINT) {
+    float2 ctr = float2(MarkReal(at + MARK_AT_X), MarkReal(at + MARK_AT_Y));
+    float r = max(MarkReal(at + MARK_AT_W), 1.0);
+    float a = MarkReal(at + MARK_AT_FILL) * saturate(1.0 - length(float2(x, y) - ctr) / r);
+    return a <= 0.004 ? c : lerp(c, colOf, a);
+  }
+  float fill = MarkReal(at + MARK_AT_FILL), edge = MarkReal(at + MARK_AT_EDGE);
+  float width = max(MarkReal(at + MARK_AT_WIDTH), 0.75);
+  float dash = MarkReal(at + MARK_AT_DASH), soft = MarkReal(at + MARK_AT_SOFT);
+  float near = MarkReal(at + MARK_AT_NEAR), most = MarkReal(at + MARK_AT_MOST);
+  float least = MarkReal(at + MARK_AT_LEAST);
+  uint nUnits = gFrame.Load(at + MARK_AT_UNITS);
+  uint nPoints = gFrame.Load(at + MARK_AT_POINTS);
+  uint curve = gFrame.Load(at + MARK_AT_CURVE);
+  float2 px = float2(x, y);
+  float phase = 0.0;
+  float d = MarkDist(at, shape, nUnits, nPoints, px, phase);
+  // the fade: each unit lights the ground round itself. A mark that rises whole instead comes
+  // with the opacity it has reached and no units, and is left alone here.
+  float reveal = 1.0;
+  if (near > 0.0) {
+    reveal = 0.0;
+    for (uint i = 0u; i < nUnits; ++i) {
+      float2 u = MarkPoint(at + MARK_UNITS_AT, i);
+      reveal = max(reveal, MarkFalloff(length(px - u) / near, curve));
+    }
+  }
+  // a crossing lights its own stretch of the edge, over whatever a unit near it lights
+  float warm = 0.0;
+  reveal = max(reveal, MarkBoost(at, nUnits, nPoints, phase, warm));
+  float alpha = least + (most - least) * reveal;
+  // the pulse, at this pixel's own point of the edge, so the swell runs along it as the layer
+  // draws it (a rectangle's phase runs across the shape rather than round it, as its dash does)
+  float pulse = MarkReal(at + MARK_AT_PULSE), depth = MarkReal(at + MARK_AT_DEPTH);
+  if (pulse > 0.0 && depth > 0.0)
+    alpha *= 1.0 - depth * 0.5 * (1.0 + sin(MarkReal(at + MARK_AT_AGE) * 6.2831853 / pulse - phase / 90.0));
+  if (alpha <= 0.004)
+    return c;
+  // a pixel of the layer is this many of the game's with the camera far out, so the edge keeps
+  // its softness at every zoom
+  float step = max(1.0, float(gStep));
+  float paint = 0.0;
+  if (fill > 0.0 && shape != MARK_RING && shape != MARK_LINE)
+    paint = fill * saturate(-d / step);
+  if (edge > 0.0) {
+    float band = abs(d) - width * 0.5;
+    float lit = saturate(1.0 - band / step);
+    if (dash > 0.0 && fmod(abs(phase), dash * 2.0) >= dash)
+      lit = 0.0;
+    paint = max(paint, edge * lit);
+    // the glow under the edge: the foot block's, as many of the edge's widths wide as it asks
+    // for, which is the light standing on the edge spilling onto the ground; else soft's own
+    float foot = MarkReal(at + MARK_AT_FOOT);
+    if (foot > 0.0)
+      paint = max(paint, edge * MarkReal(at + MARK_AT_FOOT_ALPHA) * saturate(1.0 - band / (width * foot)));
+    else if (soft > 0.0)
+      paint = max(paint, edge * 0.3 * saturate(1.0 - band / (width * soft + step)));
+  }
+  paint = saturate(paint * alpha);
+  if (paint <= 0.004)
+    return c;
+  // the way a unit went shows in the colour: out turns the paint toward the look's warning
+  // colour, which the layer draws as a second stroke over its own
+  uint warnRgb = gFrame.Load(at + MARK_AT_WARN);
+  float3 warnOf = float3(float((warnRgb >> 16) & 0xFFu), float((warnRgb >> 8) & 0xFFu),
+                         float(warnRgb & 0xFFu)) / 255.0;
+  float3 col = lerp(colOf, warnOf, warm);
+  return lerp(c, col, paint);
+}
+
 float3 ApplyColour(Prim p, uint n, int x, int y, uint nAt, uint v, uint vAfter, float3 c, inout uint sprite)
 {
   uint kind = p.kind & 0xFFu;
@@ -890,6 +1334,8 @@ float3 ApplyColour(Prim p, uint n, int x, int y, uint nAt, uint v, uint vAfter, 
     return c;
   if (kind == PRIM_LOOK)
     return LookPrim(p, x, y, c, sprite);
+  if (kind == PRIM_MARK)
+    return sprite != 0u ? c : MarkPrim(p, x, y, c);
   if (kind == PRIM_STAR)
     return v == 0u ? Pal(vAfter) : c;
   if (kind == PRIM_BLIT) {

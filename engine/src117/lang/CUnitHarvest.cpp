@@ -28,6 +28,8 @@
 #include "CUnitCombat.h"    // ours: GetVectorComponents
 
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
+BOOL __fastcall IsBuiltRefineryType(WORD wUnitType);  // Hyperion: CUnitMisc.cpp, a mod's too
 
 // gulUnitTypeFlags -- the units.dat per-type flags table, DWORD[228] at 0x521660, indexed
 // unbiased by CUnit::wType. The dual spelling is mandatory and not a style: the shipped
@@ -141,8 +143,7 @@ void CUnit::DispatchInteractWithGasMine() {
   CUnit *pTarget = this->pOrderTarget;
   if (!(this->pSprite->flags.b & 0x20)) {
     if (!(pTarget && (pTarget->dwFlags & 1) &&
-          (pTarget->wType == 0x6E || pTarget->wType == 0x9D ||
-           pTarget->wType == 0x95) &&
+          IsBuiltRefineryType(pTarget->wType) &&  // Hyperion: or a mod's
           pTarget->bPlayer == this->bPlayer &&
           (this->bCarryResource == 0 || (this->bCarryResource & 3)))) {
       this->StopUnitMovement();
@@ -221,8 +222,7 @@ void CUnit::DispatchInteractWithGasMine() {
 void CUnit::DispatchGasMinePrecondition() {
   CUnit *pTarget = this->pOrderTarget;
   if (pTarget && (pTarget->dwFlags & 1) &&
-      (pTarget->wType == 0x6E || pTarget->wType == 0x9D ||
-       pTarget->wType == 0x95) &&
+      IsBuiltRefineryType(pTarget->wType) &&  // Hyperion: or a mod's
       pTarget->bPlayer == this->bPlayer &&
       (this->bCarryResource == 0 || (this->bCarryResource & 3))) {
     if (this->bOrderState == 0)
@@ -658,7 +658,7 @@ CUnit *CUnit::sub_423F90() {
 void CUnit::SetHarvestInventory(CUnit *pHarvester) {
   BYTE bMinerals = 0;
   int nImage;
-  switch (this->wType) {
+  switch (ModRulesGasType(this->wType)) {  // Hyperion: a mod's gas building as its looks'
   case 0x6E: nImage = 0x193; break;
   case 0x9D: nImage = 0x18F; break;
   case 0x95: nImage = 0x191; break;
@@ -850,7 +850,7 @@ BOOL CUnit::sub_4242F0() {
 BOOL CUnit::IsRefinery() {
   if (!(this->dwFlags & 1))
     return 0;
-  return this->wType == 0x6E || this->wType == 0x9D || this->wType == 0x95;
+  return IsBuiltRefineryType(this->wType);  // Hyperion: or a mod's
 }
 
 
@@ -871,7 +871,7 @@ BOOL CUnit::IsRefinery() {
 // order survives into the cmp.
 BOOL CUnit::IsTargetRefinery(CUnit *pHarvester) {
   return (this->dwFlags & 1) &&
-         (this->wType == 0x6E || this->wType == 0x9D || this->wType == 0x95) &&
+         IsBuiltRefineryType(this->wType) &&  // Hyperion: or a mod's
          this->bPlayer == pHarvester->bPlayer;
 }
 

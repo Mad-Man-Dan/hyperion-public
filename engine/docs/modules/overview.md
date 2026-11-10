@@ -31,6 +31,7 @@ It stays separate from 1.17's rules and is recorded in Hyperion's own replays
 | `src117/port/` | Hyperion's own code, about 130 modules named `port_<name>`, each opening with a comment that says what it holds. A folder an area, as the module docs below divide them: `loop/`, `render/` (with the GPU presenter's `shaders/`), `data/`, `front/`, `gameplay/`, `replays/`, `lan/`, `tools/`, `platform/`, `lab/` and `hud/`. The builds and the tools find a file by its name (`tools/port_files.py`), so a module can change area without them changing |
 | `src117/gen/` | generated: the globals, their 64-bit layouts, saved layouts, the code map (`build.md`) |
 | `src117/compat/` | Win32 declarations for the Linux and browser builds |
+| `src117/design/` | the design engine's own code, compiled only into `HyperionDesign.exe` (`design.md`) |
 | `hyperion/` | the program's start (`hyperion.cpp`), version, icon, resources |
 | `tools/` | builds, the replay harness (`tools/replaytest/`), the benchmark (`hxbench.py`), the live channel's clients, generators |
 | `web/` | the pages a LAN room serves (`web/lan/`) and the browser build's page (`web/play/`) |
@@ -92,8 +93,8 @@ the game stands still between frames.
 | Doc | Covers | Main files |
 |---|---|---|
 | `loop.md` | the game loop, the clock and rest, frame pacing, the worker pool, the game's cores, the state hash, the per-frame measuring hooks, the large-game caches | `lang/gameloop.cpp`, `port_clock`, `port_workers`, `port_synchash`, `port_vision`, `port_perf`, `port_pools` |
-| `render.md` | from the game's screen to the display: SDL renderer and the GPU presenter (Vulkan by default), scenes, HD art, lights, effects, the console, the camera and view | `port_present`, `port_hwcursor`, `port_gpu*`, `port_draw`, `port_hd`, `port_lights`, `port_looks`, `port_mask`, `port_maptext`, `port_overlay`, `port_scene`, `port_teamcolor`, `port_view`, `port_camera`, `port_console`, `port_window`, `port_motion`, `port_storm` (blits) |
-| `data.md` | Storm's replacement, MPQ and CASC, formats, video, sound, maps (`.hxm`), worlds, mods and mod data, intros and cutscenes | `port_storm*` (not net, lan or the blits), `port_casc`, `port_remastered`, `port_install`, `port_install_window`, `port_smacker`, `port_video`, `port_webm`, `port_mp4`, `port_sysvideo*`, `port_subtitles`, `port_chatfilter`, `port_pklib`, `port_formats`, `port_dsound`, `port_hxm`, `port_map`, `port_mods`, `port_moddata`, `port_modcheck`, `port_typenames`, `port_iscript` |
+| `render.md` | from the game's screen to the display: SDL renderer and the GPU presenter (Vulkan by default), scenes, HD art, lights, effects, the console, the camera and view | `port_present`, `port_hwcursor`, `port_gpu*`, `port_draw`, `port_hd`, `port_lights`, `port_looks`, `port_mask`, `port_maptext`, `port_mapmark`, `port_overlay`, `port_scene`, `port_teamcolor`, `port_view`, `port_camera`, `port_console`, `port_window`, `port_motion`, `port_storm` (blits) |
+| `data.md` | Storm's replacement, MPQ and CASC, formats, video, sound, maps (`.hxm`), worlds, mods, mod data and game modes, intros and cutscenes | `port_storm*` (not net, lan or the blits), `port_casc`, `port_remastered`, `port_install`, `port_install_window`, `port_smacker`, `port_video`, `port_webm`, `port_mp4`, `port_sysvideo*`, `port_subtitles`, `port_chatfilter`, `port_pklib`, `port_formats`, `port_dsound`, `port_hxm`, `port_map`, `port_mods`, `port_moddata`, `port_mode`, `port_modedecl`, `port_modemap`, `port_modcheck`, `port_typenames`, `port_iscript` |
 | `front-end.md` | Hyperion's menus: home, Settings, skirmish, campaign, replays, profiles, notes, the kit and themes | `port_front*` (not LAN), `port_frontkit`, `port_frontlobby`, `port_ui`, `port_clay`, `port_world`, `port_intro` |
 | `gameplay.md` | launching games, players and teams past 8, the AI boundary, handicaps, mutators, triggers, cutscenes, the trainer, hotkeys, raised limits; the game bodies the port provides | `port_launch`, `port_session`, `port_players`, `port_teams`, `port_score`, `port_ai`, `port_handicap`, `port_mutators`, `port_richbases`, `port_trigrun`, `port_eud`, `port_cutscene`, `port_trainer*`, `port_hotkeys`, `port_keys`, `port_veclen`, `port_pathstats`, `port_names` |
 | `replays.md` | 1.17 and Hyperion replays, saves, snapshots, Replay TV, the rules revision, the replay harness in brief | `port_hxreplay`, `port_hxsave`, `port_record`, `port_replay`, `port_observe`, `port_snap*`, `port_tv`, `port_rules`, the save half of `port_formats` |
@@ -104,6 +105,7 @@ the game stands still between frames.
 | `lab.md` | the AI lab: its screen, the farm of worker processes, the wall, watching a farm's game | `port_front_lab`, `port_lab*`, `mods/lab/` |
 | `hud.md` | the HUD designs: their files and format, drawing them, input over them, their tooltips, Settings' HUD tab; Hyperion's selection of 255 units with its subgroups | `port_hud*`, `port_gpu_hud`, `port_front_hud`, `port_zip`, `port_selwide`, `h/selectlimits.h`, `engine/huds/` |
 | `addons.md` | the add-ons a player calls up over a game: none at present, and what the engine keeps for them | |
+| `design.md` | the design engine, `HyperionDesign.exe`: the engine as a developer's build for trying ideas live, the game in a window of any size with Dear ImGui panels round it, and Claude's control through the live channel; `Hyperion.exe` carries none of it | `src117/design/`, `tools/build_design_x64.py`, `tools/design.py` |
 
 ## Conventions
 
@@ -127,6 +129,15 @@ the game stands still between frames.
   declare their own `fopen`, so the headers they include bring in no standard library; a
   module's C++-only calls go in a header of their own (`port_moddata_push.h`). Headers with
   SDL's types (`port_gpu.h`, `port_gpu_internal.h`) are for the presenter's files.
+  This is the rule most easily broken by accident, and it breaks the whole build rather than
+  one file: a `std::string` in a signature of a header that `lang/*.cpp` includes fails every
+  one of those TUs at once with `error C2039: 'string': is not a member of 'std'`, over two
+  hundred of them, each naming the header's line and not the change that caused it. Adding
+  `#include <string>` to the header makes it compile and puts the C++ library into all of them,
+  so the fix is the signature: take `char *` with a length, or an `int`, or a plain struct. A
+  header that only the port includes may use what it likes. Before adding a signature to such a
+  header, compile one game file that includes it (`cl /Zs` with the build's `LANG` flags) rather
+  than finding out at the next full build.
 - No function is declared by hand in a .cpp. Storm's functions come from `h/Storm.h` in the
   game's files, which also declare them locally as 1.17's did, and from `port_stormapi.h` in
   the port's; StormLib only through `port_stormlib.h`. 1.17's globals come from
@@ -151,6 +162,7 @@ and what it gets wrong is named in `hyperion_mods.log` and left as 1.17 has it.
 |---|---|---|---|
 | a layer over the game: what it draws, the area it leaves the game, its keys and clicks | a `PortOverlayLayer` with `PORT_OVERLAY_LAYER` (`port_overlay.h`) | | `render.md`, the layers over the game |
 | the console's image for a race or for replays, whether its regions move to a wide view's edges, the map's height at 640 | | `hud.json`'s `"console"` | `port_console.h`, `docs/mod-data.md` |
+| a mark on the map: an area a mod's scripts draw on the ground, which a unit coming near can reveal | | a script's `hx.area` (`port_mapmark.h`) | `render.md`, the marks on the map; `docs/mod-data.md` |
 | the minimap's dot colours | a `PortMinimapLook` with `PORT_MINIMAP_LOOK` (`port_minimap.h`) | `hud.json`'s `"minimap"` | `render.md`, `docs/mod-data.md` |
 | the selection's circles and health bars | a `PortSelectionLook` with `PORT_SELECTION_LOOK` (`port_selection.h`) | `hud.json`'s `"selection"` | `render.md`, `docs/mod-data.md` |
 | units, weapons, flingy, sprites, images, orders, techs, upgrades and their art | | `types.json`, `iscript.txt`, GRPs | `data.md`, `docs/mod-data.md` |

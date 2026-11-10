@@ -15,6 +15,8 @@
 #include "../platform/port_paths.h"
 #include "../platform/port_posix.h"  // PortNativePath
 #include "../platform/port_util.h"  // PortNowMs
+#include "../platform/port_settings.h"  // PortSettingString, a child's mods
+#include "../data/port_mods.h"  // PortModsFolder
 
 namespace LanRoom {
 
@@ -215,6 +217,32 @@ void ForChild(void)
     SetEnvironmentVariableA(psz, NULL);
 }
 
+// A room's own Hyperion (a copy of a match, a streamed seat) plays what the host plays. Its data
+// folder is new and empty, so the mods the host reads are named in its settings before it
+// starts: without them a match with a mod, or with a game mode, is one the child cannot play.
+// Written once; from then on the child keeps its own settings.
+void ChildMods(const std::string &data)
+{
+  const std::string path = data + "\\settings.json";
+  if (FILE *pWas = fopen(path.c_str(), "rb")) {
+    fclose(pWas);
+    return;
+  }
+  char szMod[0x104] = "";
+  PortSettingString("hyperion", "mod", szMod, sizeof szMod);
+  std::string json = "{\"hyperion\":{\"modsFolder\":" + PortJsonQuote(PortModsFolder());
+  if (szMod[0] != '\0')
+    json += ",\"mod\":" + PortJsonQuote(szMod);
+  json += "}}\n";
+  FILE *pF = fopen(path.c_str(), "wb");
+  if (pF == NULL) {
+    Log("a child's mods could not be written to %s", path.c_str());
+    return;
+  }
+  fwrite(json.c_str(), 1, json.size(), pF);
+  fclose(pF);
+}
+
 // A child Hyperion whose command line names its token as "env": the token in its environment for
 // this start alone, which only this user's programs can read (port_paths.cpp, PathsSecrets).
 bool StartWithToken(std::string &cmd, const std::string &token, STARTUPINFOA *pSi, PROCESS_INFORMATION *pPi)
@@ -238,6 +266,7 @@ void StartCopy(Match &m)
   CreateDirectoryA(data.c_str(), NULL);
   data += "\\copy" + std::to_string(m.nId);
   CreateDirectoryA(data.c_str(), NULL);
+  ChildMods(data);
   m.copyToken = Token();
   std::string cmd = "\"" + std::string(szExe) + "\" --data \"" + data + "\" --join 127.0.0.1:" +
                     std::to_string(LanNet::GamePort()) + " --lan-name \"Host copy\" --lan-copy " + std::to_string(m.nId) +
@@ -288,6 +317,7 @@ void StartStream(Device &w, int nWatch)
   CreateDirectoryA(data.c_str(), NULL);
   data += "\\seat" + std::to_string(w.nId);
   CreateDirectoryA(data.c_str(), NULL);
+  ChildMods(data);
   StreamSeat t;
   t.token = Token();
   t.name = w.name;

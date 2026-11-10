@@ -129,6 +129,8 @@ static unsigned int g_nArtGrp;
 static std::vector<unsigned char> g_primColor;  // beside g_prims: the colour slot it drew with
 static std::vector<unsigned short> g_primLook;  // and the look of the image it drew
 static bool g_bPassLooked;                      // a look's light or plume is in the pass
+static const unsigned char *g_marks;            // the marks' bytes of the pass (PortSceneMarks)
+static unsigned int g_nMarksBytes;
 static std::vector<unsigned int> g_binStart;
 static std::vector<unsigned int> g_binList;
 static std::vector<unsigned int> g_binCount;
@@ -591,6 +593,25 @@ int PortSceneRle(unsigned int nKind, int nX, int nY, const void *pFrame, const v
     g_prims.push_back(halo);
     g_bPassLooked = true;
   }
+  // each aura, a look primitive round the image as the halo is, reaching past it and higher where
+  // its embers rise; it carries the colour slot for an aura in the player's colour
+  for (int k = 0; (nKind & 0xFF) == SCENE_PRIM_NORMAL && k < PORT_LOOK_AURAS; k++) {
+    const unsigned int nAura = PortLookAuraAt(k);
+    if (nAura == 0)
+      continue;
+    const int nAuraReach = static_cast<int>(nAura >> 8 & 0xFF), nRise = static_cast<int>(nAura >> 16 & 0xFF);
+    ScenePrim aura = prim;
+    aura.nKind = SCENE_PRIM_LOOK | (nKind & SCENE_PRIM_MIRROR);
+    aura.nX -= nAuraReach;
+    aura.nY -= nAuraReach + nRise;
+    aura.nClip1 = (static_cast<unsigned int>(pnClip[2] + 2 * nAuraReach) & 0xFFFF) |
+                  (static_cast<unsigned int>(pnClip[3] + 2 * nAuraReach + nRise) << 16);
+    aura.nTable = SCENE_NONE;
+    aura.nParam = (nAura & 0xFF) | (PORT_LOOK_AURA << 8) | (static_cast<unsigned int>(nAuraReach) << 16) |
+                  (static_cast<unsigned int>(nRise / 2) << 20) | ((sgdwCurrentDrawColor & 0xFF) << 24);
+    g_prims.push_back(aura);
+    g_bPassLooked = true;
+  }
   return SceneGpuOnly();
 }
 
@@ -664,6 +685,29 @@ void PortSceneLook(int nX, int nY, int nW, int nH, unsigned int nCentre, unsigne
   prim.nParam = nParam;
   g_prims.push_back(prim);
   g_bPassLooked = true;
+}
+
+void PortSceneMark(int nX, int nY, int nW, int nH, unsigned int nNumbers)
+{
+  if (!SceneRecording() || nW <= 0 || nH <= 0)
+    return;
+  ScenePrim prim;
+  prim.nKind = SCENE_PRIM_MARK;
+  prim.nX = nX;
+  prim.nY = nY;
+  prim.nEntry = nNumbers;
+  prim.nClip0 = 0;
+  prim.nClip1 = (static_cast<unsigned int>(nW) & 0xFFFF) | (static_cast<unsigned int>(nH) << 16);
+  prim.nTable = SCENE_NONE;
+  prim.nParam = 0;
+  g_prims.push_back(prim);
+}
+
+// The marks' bytes the pass's mark primitives read, kept by the caller until the pass ends.
+void PortSceneMarks(const unsigned char *pBytes, unsigned int nBytes)
+{
+  g_marks = pBytes;
+  g_nMarksBytes = pBytes != NULL ? nBytes : 0;
 }
 
 // The GPU makes the fog's light map: CSFogLight there, and the pass's fog
@@ -878,6 +922,8 @@ int PortSceneMapBegin(void)
   g_primColor.clear();
   g_primLook.clear();
   g_bPassLooked = false;
+  g_marks = NULL;
+  g_nMarksBytes = 0;
   g_bytes.clear();
   return 1;
 }
@@ -1086,6 +1132,8 @@ static void SceneCapture(const unsigned char *pCopied)
   g_frame.pLooks = g_primLook.empty() && !g_bPassLooked ? NULL : PortLooksGpu(&g_frame.nLooksBytes);
   if (g_frame.pLooks == NULL)
     g_frame.nLooksBytes = 0;
+  g_frame.pMarks = g_marks;
+  g_frame.nMarksBytes = g_nMarksBytes;
   // the GPU's layer, coarser with the camera far out; never under the check, which
   // compares it with the software's
   const int nStep = bZoom && SceneGpuOnly() ? PortGpuSceneStep(nWidth, nRows, g_portRender.fZoom) : 1;

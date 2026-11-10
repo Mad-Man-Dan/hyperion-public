@@ -133,6 +133,74 @@ int IscriptAnimCount(int nType) {
   return nType >= 0 && nType <= 30 ? kCounts[nType] : -1;
 }
 
+namespace {
+
+// An opcode's bytes in the original's scripts, and where one of its arguments begins: a byte
+// for B and a word for every other kind. playsndrand and attackmelee are measured from their
+// count instead (bList).
+int OpcodeBytes(const Opcode &op, int nArgs) {
+  int n = 1;
+  for (int i = 0; i < nArgs; ++i)
+    n += op.args[i] == B ? 1 : 2;
+  return n;
+}
+
+const Opcode *OpcodeOf(int n) {
+  for (const Opcode &op : kOpcodes)
+    if (op.n == n)
+      return &op;
+  return nullptr;
+}
+
+}  // namespace
+
+const char *IscriptAnimName(int nAnim) {
+  return nAnim >= 0 && nAnim < kAnimCount ? kAnims[nAnim] : "";
+}
+
+int IscriptDamagesFrom(const unsigned char *pb, unsigned cb, unsigned nHeader) {
+  if (pb == nullptr || nHeader + 8 > cb)
+    return -1;
+  const int nAnims = IscriptAnimCount(pb[nHeader + 4]);
+  if (nAnims <= 0)
+    return -1;
+  auto word = [&](unsigned at) {
+    return at + 2 <= cb ? static_cast<unsigned>(pb[at]) | (static_cast<unsigned>(pb[at + 1]) << 8) : 0u;
+  };
+  // each animation walked on its own, so the one named is the one that damages. An animation
+  // with no ender runs on into the bytes of the next, which is how two of the original's
+  // pictures damage from their first animation, and the walk follows it as the game would.
+  for (int a = 0; a < nAnims; ++a) {
+    const unsigned nStart = word(nHeader + 8 + static_cast<unsigned>(a) * 2);
+    if (nStart == 0)
+      continue;
+    std::vector<bool> seen(cb, false);
+    std::vector<unsigned> todo(1, nStart);
+    while (!todo.empty()) {
+      unsigned p = todo.back();
+      todo.pop_back();
+      while (p < cb && !seen[p]) {
+        seen[p] = true;
+        const Opcode *pOp = OpcodeOf(pb[p]);
+        if (pOp == nullptr)
+          break;  // not an opcode this build reads: the path stops rather than walking bytes
+        if (pOp->n == 0x1B || pOp->n == 0x44)  // domissiledmg, dogrddamage
+          return a;
+        // a jump's target is walked as well, which covers goto, call and every condjmp, since
+        // each carries exactly one label
+        for (int i = 0; i < pOp->nArgs; ++i)
+          if (pOp->args[i] == L)
+            todo.push_back(word(p + static_cast<unsigned>(OpcodeBytes(*pOp, i))));
+        if (pOp->n == 0x07 || pOp->n == 0x16 || pOp->n == 0x36)
+          break;  // goto, end and return: nothing follows them on this path
+        p += static_cast<unsigned>(pOp->bList ? (p + 1 < cb ? 2 + pb[p + 1] * 2 : 2)
+                                              : OpcodeBytes(*pOp, pOp->nArgs));
+      }
+    }
+  }
+  return -1;
+}
+
 bool IscriptCompile(const std::string &text, unsigned nBase, const IscriptNames &names,
                     std::vector<unsigned char> *pBlock, std::vector<IscriptHeader> *pHeaders,
                     std::string *pError) {

@@ -20,6 +20,7 @@
 #include "../port/render/port_scene.h"  // Hyperion: PortSceneCreep
 #include "../h/hxrules.h"              // Hyperion: HxRules
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The globals this TU reaches, dual-spelled, one #ifdef per name. creep_init's
 // allocations make the creep map's cells WORDs and the edge map's BYTEs.
@@ -388,6 +389,7 @@ BOOL __stdcall update_creep_edges_cb(int nIndex, WORD *pTile, int nX, int nY,
 // its store. Any other order moves the type out of ECX.
 BOOL get_max_creep_bounding_box(short sType, int nX, int nY, void *pArg3, int bUseFixed)
 {
+  sType = static_cast<short>(ModRulesCreepType(static_cast<WORD>(sType)));  // Hyperion: a mod's as its classic source
   rect32_t *pBox = static_cast<rect32_t *>(pArg3);
   switch ((WORD)sType)
   {
@@ -444,6 +446,7 @@ BOOL get_max_creep_bounding_box(short sType, int nX, int nY, void *pArg3, int bU
 // A two-level jump table over the sixteen unit types 0x83 to 0x92, as in 1.17.
 BOOL unit_type_spreads_creep(int nUnitType, int nOther)
 {
+  nUnitType = ModRulesCreepType(static_cast<WORD>(nUnitType));  // Hyperion: a mod's as its classic source
   // 1.17's index array at 0x4C07C4 is 0 1 1 2 2 2 2 2 2 2 2 2 0 1 2 1, and its
   // three arms return the second argument, TRUE, and FALSE, the default.
   switch ((WORD)nUnitType)
@@ -479,7 +482,7 @@ int tile_is_creep_ptr(const WORD *pTile)
 BOOL sub_4C0830(int nX, int nY, int nType, int nPosX, int nPosY, int nArg5)
 {
   // Separate early returns, one per term, place the shared zero exit first.
-  WORD wType = (WORD)nType;
+  WORD wType = (WORD)ModRulesCreepType(static_cast<WORD>(nType));  // Hyperion: a mod's as its classic source
   if (!(gulUnitTypeFlags[wType] & 1))
     return FALSE;
   if (!(gubUnitCountInfo[wType] & 1))

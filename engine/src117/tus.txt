@@ -291,6 +291,7 @@ port port_gpu_scene
 port port_gpu_ui
 port port_gpu_video
 port port_overlay
+port port_mapmark
 port port_intro
 port port_motion
 port port_minimap
@@ -366,7 +367,11 @@ port port_audiodecode
 port port_session
 port port_score
 port port_moddata
+port port_modstatus
+port port_modlua
+port port_modrules
 port port_modsheet
+port port_modtileset
 port port_imagefile
 port port_modart
 port port_typenames
@@ -384,6 +389,12 @@ port port_aitables
 port port_aipools
 port port_mods
 port port_modcheck
+port port_modlang
+port port_modvoice
+port port_mode
+port port_modedecl
+port port_modemap
+port port_modeview
 port port_control
 port port_pathstats
 port port_lights
@@ -419,6 +430,7 @@ port port_frontkit
 port port_frontlobby
 port port_front_skirmish
 port port_front_mutators
+port port_front_modes
 port port_front_colours
 port port_front_profile
 port port_front_campaign
@@ -446,4 +458,6 @@ port port_hudcheck
 port port_hud
 port port_hudinput
 port port_hudstats
+port port_readout
+port port_readoutdraw
 port port_gpu_hud

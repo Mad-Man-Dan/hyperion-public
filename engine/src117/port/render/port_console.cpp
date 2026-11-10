@@ -37,6 +37,7 @@
 #include "group.h"         // grh_get_header
 #include "statdata.h"      // grhsize_t
 #include "statres.h"       // statres_resource_ctrl_draw
+#include "game.h"          // CPalette::find_closest_palette_entry
 #include "selectlimits.h"  // SelectionWide, SelectionSubgroups
 #include "port_console.h"
 #include "port_present.h"   // PortPresentPaletteRGB
@@ -44,6 +45,8 @@
 #include "port_gpu_hd.h"  // PortGpuConsoleArt, PortGpuConsolePieces, PortGpuHdConsoleShown
 #include "port_mask.h"  // PortMaskDelete, PortMaskCreate
 #include "port_minimap.h"  // PortMinimapHud
+#include "../hud/port_readout.h"  // the readout in force and the hook's answer for a unit
+#include "../front/port_text.h"   // PortText, PortTextF
 #include "port_overlay.h"  // PortOverlayHas
 #include "port_selection.h"  // PortSelectionHud
 #include "../hud/port_hud.h"  // PortHudPlays
@@ -53,6 +56,9 @@
 #include "../data/port_stormapi.h"  // PortBmpDecodePcx
 #include "../platform/port_json.h"
 #include "../platform/port_log.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 #include "../platform/port_settings.h"  // PortSettingNumber
 #include "../platform/port_util.h"  // PortReadFile
 #include "port_view.h"  // g_portView, PortViewFullRows
@@ -412,7 +418,7 @@ void PortConsoleSkinTake(void)
 
 int PortConsoleRace(void)
 {
-  return g_nSkinRace >= 0 ? g_nSkinRace : byte_5264C2;
+  return g_nSkinRace >= 0 ? g_nSkinRace : ModRaceLook(0, byte_5264C2);  // a mod's race may show another's console
 }
 
 void PortConsoleEdgesSet(bool bOn)
@@ -554,13 +560,31 @@ void ConsoleHide(void)
   PanelsHide();
 }
 
+#ifdef HX_DESIGN
+// A dialog shown again. ctrl_show's event hit-tests the cursor against the node's parent, which
+// a dialog does not have, so a dialog is marked shown and redrawn as the event would.
+void ConsoleShowDlg(ctrl_t *pDlg)
+{
+  if (pDlg->wType != 0) {
+    ctrl_show(pDlg);
+  } else if ((pDlg->dwFlags & 8) == 0) {
+    pDlg->dwFlags |= 8;
+    ctrl_set_update(pDlg);
+  }
+}
+#endif
+
 // No console any more: in a game the dialogs it hid shown again; as the console is freed,
 // only the record cleared, the dialogs going with it.
 void ConsoleBack(bool bInGame)
 {
   if (bInGame)
     for (ctrl_t *pDlg : g_hiddenDlgs)
+#ifdef HX_DESIGN
+      ConsoleShowDlg(pDlg);
+#else
       ctrl_show(pDlg);
+#endif
   g_hiddenDlgs.clear();
   g_bConsoleHidden = false;
   PortViewFullRows(false, bInGame);
@@ -964,6 +988,11 @@ void PortConsoleUpdate(void)
     }
   } else if (g_bConsoleHidden) {
     ConsoleBack(gwGameMode == 3);
+#ifdef HX_DESIGN
+    // back during a game, after a clip (design_record.cpp): built again, as for a HUD design
+    if (gwGameMode == 3)
+      Rebuild();
+#endif
     gamemap_force_redraw();
     minimap_force_redraw();
   }
@@ -1072,6 +1101,241 @@ const BYTE *PortConsoleLightRemap(void)
     s_ab[i] = static_cast<BYTE>(nBest);
   }
   return s_ab;
+}
+
+namespace {
+
+// A string into a caller's buffer, cut to it and always ended. A cut falls on a letter's
+// boundary, since the text is UTF-8.
+void RollCopy(char *psz, int cch, const std::string &s)
+{
+  int n = static_cast<int>(s.size()) < cch - 1 ? static_cast<int>(s.size()) : cch - 1;
+  while (n > 0 && n < static_cast<int>(s.size()) && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80)
+    --n;
+  memcpy(psz, s.c_str(), static_cast<size_t>(n));
+  psz[n] = '\0';
+}
+
+// A colour as the palette's nearest entry. The finder leaves out the entries the tileset
+// cycles and entry 0, so a mark keeps its colour as the water moves.
+BYTE RollPen(unsigned int nRgb)
+{
+  palentry_t want;
+  want.bRed = static_cast<BYTE>((nRgb >> 16) & 0xFF);
+  want.bGreen = static_cast<BYTE>((nRgb >> 8) & 0xFF);
+  want.bBlue = static_cast<BYTE>(nRgb & 0xFF);
+  want.bFlags = 0;
+  return static_cast<BYTE>(CPalette::find_closest_palette_entry(sgGamePalette_g, want));
+}
+
+// A filled square, left out when it does not sit whole inside the box.
+void RollFill(int x, int y, int z, int nLeft, int nTop, int nRight, int nBottom)
+{
+  if (z <= 0 || x < nLeft || y < nTop || x + z > nRight || y + z > nBottom)
+    return;
+  bmp_rect_fill(static_cast<unsigned short>(x), static_cast<unsigned short>(y),
+                static_cast<unsigned short>(z), static_cast<unsigned short>(z));
+}
+
+// One pixel, through the line primitive so that whatever reads the spans sees it.
+void RollDot(int x, int y, int nLeft, int nTop, int nRight, int nBottom)
+{
+  if (x >= nLeft && y >= nTop && x < nRight && y < nBottom)
+    bmp_hline(static_cast<unsigned short>(x), static_cast<unsigned short>(y), 1);
+}
+
+// A filled disc or diamond of z across at (x, y): the frame a status's glyph sits in, round for
+// one working for the unit and cornered for one against it, as the design has them.
+void RollFrame(int x, int y, int z, bool bRound, int nLeft, int nTop, int nRight, int nBottom)
+{
+  const double r = z / 2.0, cx = x + r;
+  for (int j = 0; j < z; ++j) {
+    const double dy = j + 0.5 - r, ady = dy < 0 ? -dy : dy;
+    // a disc's row is as wide as the circle there; a diamond's falls off a row at a time
+    const double half = bRound ? sqrt(r * r - dy * dy > 0 ? r * r - dy * dy : 0) : r - ady;
+    const int x0 = static_cast<int>(cx - half + 0.5), x1 = static_cast<int>(cx + half + 0.5);
+    for (int i = x0; i < x1; ++i)
+      RollDot(i, y + j, nLeft, nTop, nRight, nBottom);
+  }
+}
+
+// A kind's glyph (PortReadoutGlyph) in a box of z pixels at (x, y): its strokes a pixel wide,
+// each run of points walked as straight lines, which is what the drawing's curves come to here.
+void RollGlyph(int nKind, double x, double y, double z, int nLeft, int nTop, int nRight, int nBottom)
+{
+  const signed char *p = PortReadoutGlyph(nKind);
+  if (p == NULL)
+    return;
+  const double k = z / 16.0;
+  for (; *p != 0;) {
+    const int nPoints = *p++;
+    double px = 0, py = 0;
+    for (int i = 0; i < nPoints; ++i, p += 2) {
+      const double qx = x + p[0] * k, qy = y + p[1] * k;
+      if (i > 0) {
+        // the stroke a pixel at a time, as many steps as its longer side
+        const double dx = qx - px, dy = qy - py;
+        const double len = (dx < 0 ? -dx : dx) > (dy < 0 ? -dy : dy) ? (dx < 0 ? -dx : dx) : (dy < 0 ? -dy : dy);
+        const int nSteps = static_cast<int>(len) + 1;
+        for (int s = 0; s <= nSteps; ++s)
+          RollDot(static_cast<int>(px + dx * s / nSteps + 0.5), static_cast<int>(py + dy * s / nSteps + 0.5),
+                  nLeft, nTop, nRight, nBottom);
+      }
+      px = qx, py = qy;
+    }
+  }
+}
+
+}  // namespace
+
+bool PortConsoleRollMarkOf(const CUnit *pUnit, PortRollMark *pOut)
+{
+  const PortReadoutFile *pFile = PortReadoutOf();
+  const PortReadoutView *pView = pUnit != NULL ? PortReadoutUnit(pUnit) : NULL;
+  if (pOut == NULL || pFile == NULL || pView == NULL || !pView->bOn)
+    return false;
+  *pOut = PortRollMark();
+  pOut->nStyle = pFile->statusLook.nGroupMark;
+  if (pFile->parts.bRankPips && pView->nRankAt >= 0) {
+    // every ranked unit is marked, the first rank the file names included: the pip's place is the
+    // rank's, plus one, so that nothing is a tile with no rank at all
+    pOut->nRank = pView->nRankAt + 1;
+    pOut->nRgb = pView->nRankRgb;
+  }
+  // the things on it, the ones that ask loudest first, as the wireframe's one mark is chosen
+  const PortReadoutLine *apLines[PORT_ROLL_DOTS] = {NULL, NULL, NULL};
+  for (const PortReadoutLine &line : pView->lines) {
+    if (line.status.empty() || !line.bShowGroup)
+      continue;
+    ++pOut->nThings;
+    int at = 0;
+    while (at < PORT_ROLL_DOTS && apLines[at] != NULL &&
+           (apLines[at]->nPriority > line.nPriority ||
+            (apLines[at]->nPriority == line.nPriority && apLines[at]->fLeft <= line.fLeft)))
+      ++at;
+    for (int i = PORT_ROLL_DOTS - 1; i > at; --i)
+      apLines[i] = apLines[i - 1];
+    if (at < PORT_ROLL_DOTS)
+      apLines[at] = &line;
+  }
+  for (int i = 0; i < PORT_ROLL_DOTS && apLines[i] != NULL; ++i) {
+    pOut->anKind[i] = apLines[i]->nKind;
+    pOut->anHue[i] = apLines[i]->nHue;
+    pOut->abHue[i] = apLines[i]->bHue ? 1 : 0;
+    pOut->abFor[i] = apLines[i]->bGood ? 1 : 0;
+    pOut->nMarks = i + 1;
+  }
+  if (pOut->nStyle == PORT_READOUT_GROUP_MARK_NONE)
+    pOut->nMarks = 0;
+  return pOut->nRank > 0 || pOut->nMarks > 0;
+}
+
+bool PortConsoleRollTip(const CUnit *pUnit, char *pszName, int cchName, char *pszThings, int cchThings)
+{
+  const PortReadoutView *pView = pUnit != NULL ? PortReadoutUnit(pUnit) : NULL;
+  if (pszName == NULL || pszThings == NULL || cchName <= 0 || cchThings <= 0 || pView == NULL || !pView->bOn)
+    return false;
+  std::string things;
+  for (const PortReadoutLine &line : pView->lines) {
+    if (line.status.empty() || line.label.empty())
+      continue;
+    if (!things.empty())
+      things += ", ";
+    // the time left rounded up, as the readout's own lines count it down
+    const int nLeft = line.fLeft > 0 ? static_cast<int>(line.fLeft) + (line.fLeft > static_cast<int>(line.fLeft)) : 0;
+    things += line.fOf > 0 ? PortTextF("{0} {1}s", {line.label, std::to_string(nLeft)}) : line.label;
+  }
+  if (things.empty())
+    things = PortText("Nothing on it now");
+  // the rank above them, where the readout gives it a word a player can read
+  if (!pView->rankName.empty())
+    things = pView->rankName + "\n" + things;
+  RollCopy(pszName, cchName, pView->name);
+  RollCopy(pszThings, cchThings, things);
+  return true;
+}
+
+bool PortConsoleRollIconTip(int nIndex, const char *pszClassic, char *pszOut, int cchOut)
+{
+  // the panel's four stat icons are its controls 9 to 12, in the order statdraw draws them
+  const int nSlot = nIndex - 9;
+  std::string add;
+  bool bWhole = false;
+  if (pszOut == NULL || cchOut <= 0 || nSlot < 0 || nSlot >= PORT_READOUT_SLOTS_MOST || gpStatUnit == NULL)
+    return false;
+  if (!PortReadoutSlotTip(gpStatUnit, nSlot, &add, &bWhole) || add.empty())
+    return false;
+  std::string out;
+  if (!bWhole && pszClassic != NULL && *pszClassic != '\0')
+    out = std::string(pszClassic) + "\n" + add;
+  else
+    out = add;
+  RollCopy(pszOut, cchOut, out);
+  return true;
+}
+
+bool PortConsoleRollPartTipAt(int x, int y, int *pnIndex, char *pszOut, int cchOut)
+{
+  const int anParts[2] = {PORT_READOUT_WIRE, PORT_READOUT_NAME};
+  if (pszOut == NULL || cchOut <= 0 || pnIndex == NULL || gpStatUnit == NULL)
+    return false;
+  for (int i = 0; i < 2; ++i) {
+    const PortReadoutRect rc = PortReadoutPartRect(anParts[i]);
+    if (x < rc.x || y < rc.y || x >= rc.x + rc.w || y >= rc.y + rc.h)
+      continue;
+    std::string tip;
+    if (!PortReadoutPartTip(gpStatUnit, anParts[i], &tip, NULL) || tip.empty())
+      return false;
+    *pnIndex = PortReadoutPartControl(anParts[i]);
+    RollCopy(pszOut, cchOut, tip);
+    return true;
+  }
+  return false;
+}
+
+void PortConsoleRollMarks(int x, int y, int w, int h, const PortRollMark &mark)
+{
+  const int nRight = x + w, nBottom = y + h;
+  if (w < 12 || h < 12)
+    return;  // a box too small for a mark to read
+  if (mark.nRank > 0) {
+    // the pip: a dark square a pixel wider than the colour it holds, in the top right corner,
+    // three pixels for the first rank the file names and one more for each above it
+    const int nAt = mark.nRank - 1;
+    const int z = 3 + (nAt < 4 ? nAt : 4);
+    _bmp_pen = 0;
+    RollFill(nRight - z - 3, y + 1, z + 2, x, y, nRight, nBottom);
+    _bmp_pen = RollPen(mark.nRgb);
+    RollFill(nRight - z - 2, y + 2, z, x, y, nRight, nBottom);
+  }
+  // the tile's edge in the loudest thing's hue, where that is how the readout marks them
+  if (mark.nStyle == PORT_READOUT_GROUP_EDGE && mark.nMarks > 0) {
+    _bmp_pen = RollPen(mark.anHue[0]);
+    bmp_rect(static_cast<unsigned short>(x), static_cast<unsigned short>(y), static_cast<unsigned short>(w),
+             static_cast<unsigned short>(h));
+  }
+  const int nMarks = mark.nStyle == PORT_READOUT_GROUP_EDGE ? (mark.nMarks > 0 ? 1 : 0) : mark.nMarks;
+  const bool bGlyphs = mark.nStyle != PORT_READOUT_GROUP_DOTS && w >= 24 && h >= 24;
+  for (int i = 0; i < nMarks; ++i) {
+    const int my = y + PORT_ROLL_EDGE + i * (bGlyphs ? PORT_ROLL_PITCH : 4);
+    const int mx = x + PORT_ROLL_EDGE;
+    if (!bGlyphs) {
+      // the dots: a dark square with its side's colour inside, where a glyph has no room
+      _bmp_pen = 0;
+      RollFill(mx, my + 1, 4, x, y, nRight, nBottom);
+      _bmp_pen = RollPen(mark.abFor[i] ? 0x5fe07a : 0xff6a5a);
+      RollFill(mx + 1, my + 2, 2, x, y, nRight, nBottom);
+      continue;
+    }
+    // a near-black frame, and the kind's glyph inside it in the colour the status named for
+    // itself, or in its side's green or red where it named none, as the readout's own icons are
+    // drawn. The edge style's one mark takes the hue either way, which is what that style shows.
+    const bool bEdge = mark.nStyle == PORT_READOUT_GROUP_EDGE;
+    _bmp_pen = RollPen(0x060a0e);
+    RollFrame(mx, my, PORT_ROLL_MARK, mark.abFor[i] != 0, x, y, nRight, nBottom);
+    _bmp_pen = RollPen(bEdge || mark.abHue[i] ? mark.anHue[i] : (mark.abFor[i] ? 0x6fe08a : 0xff7a6a));
+    RollGlyph(mark.anKind[i], mx + 0.5, my + 0.5, PORT_ROLL_MARK - 1.0, x, y, nRight, nBottom);
+  }
 }
 
 namespace {
@@ -1612,3 +1876,17 @@ int PortConsoleHdItems(PortHdUiItem *pItems, int nMax, bool bConsole)
   }
   return n;
 }
+
+#ifdef HX_DESIGN
+// The classic console's mask for the design engine's drawing (free_draw.cpp), which names no game
+// global, and where it lies on the screen; NULL while no classic console is drawn.
+const struct _HSTRANS *DesignConsoleMask(int *pnLeft, int *pnTop)
+{
+  if (sgConsoleArtMask_g == 0 || g_bConsoleHidden || g_bHudConsole)
+    return NULL;
+  const BLTMASK *pNode = reinterpret_cast<const BLTMASK *>(sgConsoleArtMask_g);
+  *pnLeft = pNode->nLeft;
+  *pnTop = pNode->nTop;
+  return pNode->hMask;
+}
+#endif

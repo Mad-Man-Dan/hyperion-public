@@ -1,0 +1,38 @@
+{
+  "readout": {
+    "from": "classic",
+    "in_huds": true,
+    "parts": {
+      "name": {"text": "{name}", "colour": "rank"},
+      "status": {"lines": "classic then mod", "rotate": 2.5, "rank_pips": true},
+      "slots": {"delta": "on the icon"}
+    },
+    "add": {
+      "lines": {"each": "{name} {left}s {effects}", "each_short": "{name} {left}s",
+                "bar": true, "in_huds": "a line each"}
+    },
+    "status_look": {"icon": "framed", "line3": "in turn", "wire_mark": "corner", "group_mark": "glyphs"},
+    "ranks": {
+      "unique": {"colour": "#4fd2c2", "name": "Unique"},
+      "elite": {"colour": "#f2c94c", "name": "Elite"},
+      "midboss": {"colour": "#ff9a3c", "name": "Mid-boss"},
+      "boss": {"colour": "#ff5a4a", "name": "Boss"}
+    },
+    "fx": [
+      {"on": "damaged", "part": "wire", "do": "flash", "colour": "#ffffff", "time": 0.18},
+      {"on": ["damaged", "healed"], "part": "life", "do": "roll", "time": 0.45},
+      {"on": "damaged", "part": "life", "do": "float", "text": "-{value}", "colour": "#ff7a6a", "time": 0.9},
+      {"on": "healed", "part": "life", "do": "light", "colour": "#6fe08a", "time": 0.35},
+      {"on": "healed", "part": "life", "do": "float", "text": "+{value}", "colour": "#6fe08a", "time": 0.9},
+      {"on": "status_added", "part": "lines", "do": "slide", "from": "right", "glow": true, "time": 0.4},
+      {"on": "stat_changed", "part": "slots.{stat}", "do": "light", "glint": true, "time": 0.55},
+      {"on": "kill", "part": "kills", "do": "light", "colour": "#f2d36b", "hold": 1.4},
+      {"on": "selected", "if": "rank", "part": "wire", "do": "scan", "colour": "rank", "time": 0.6},
+      {"on": "selected", "if": "rank", "part": "name", "do": "type", "time": 0.55},
+      {"while": "status.left < 2", "part": "lines", "do": "blink", "rate": 2.5},
+      {"while": "life < 0.33", "part": "wire", "do": "beat", "colour": "#ff5a3a", "light": 0.75, "rate": 1.2},
+      {"while": "rank >= elite", "part": "wire", "do": "glow", "colour": "rank", "size": 6, "rate": 0.4},
+      {"while": "rank >= midboss", "part": "name", "do": "shimmer", "every": 3.2}
+    ]
+  }
+}

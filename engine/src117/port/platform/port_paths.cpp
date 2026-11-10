@@ -25,6 +25,9 @@
 #include "../data/port_remastered.h"  // PortGameSource
 #include "../front/port_ui.h"  // PortCascFolder
 #include "../tools/port_canvas.h"  // PORT_CANVAS_TILESET
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 static char g_szDataFolder[MAX_PATH];
 static PortOptions g_options;
@@ -124,6 +127,27 @@ void PortPathsSplitCommandLine(const char *pszLine, char *pszGame, size_t cchGam
       }
       lstrcpynA(pOptions->szMod, pOptions->szModCheck, MAX_PATH);
       pszLine = pEnd;
+    } else if (PathsOption(szWord, "--mode-roll", &pEnd, pOptions->szModeRoll)) {
+      // and the file the roll is written to, when a word that is no option follows; the mode's
+      // data is the data that loads, and its settings are read as a game's are
+      char szNext[MAX_PATH];
+      const char *pNextStart;
+      const char *pAfter = PathsNextWord(pEnd, &pNextStart, szNext, sizeof szNext);
+      if (pNextStart != pAfter && szNext[0] != '-') {
+        lstrcpynA(pOptions->szModeRollOut, szNext, MAX_PATH);
+        pEnd = pAfter;
+      }
+      lstrcpynA(pOptions->szMod, pOptions->szModeRoll, MAX_PATH);
+      lstrcpynA(pOptions->szMode, pOptions->szModeRoll, MAX_PATH);
+      pszLine = pEnd;
+    } else if (PathsHasPrefix(szWord, "--mode-settings") &&
+               (szWord[15] == '=' || szWord[15] == '\0')) {
+      // its own branch: a JSON object is longer than an option's MAX_PATH
+      if (szWord[15] == '=')
+        lstrcpynA(pOptions->szModeSettings, szWord + 16, sizeof pOptions->szModeSettings);
+      else
+        pEnd = PathsNextWord(pEnd, &pStart, pOptions->szModeSettings, sizeof pOptions->szModeSettings);
+      pszLine = pEnd;
     } else if (PathsOption(szWord, "--data", &pEnd, pOptions->szData) ||
         PathsOption(szWord, "--install", &pEnd, pOptions->szInstall) ||
         PathsOption(szWord, "--install-folder", &pEnd, pOptions->szInstallFolder) ||
@@ -142,6 +166,8 @@ void PortPathsSplitCommandLine(const char *pszLine, char *pszGame, size_t cchGam
         PathsOption(szWord, "--ai-levels", &pEnd, pOptions->szAiLevels) ||
         PathsOption(szWord, "--handicaps", &pEnd, pOptions->szHandicaps) ||
         PathsOption(szWord, "--mutators", &pEnd, pOptions->szMutators) ||
+        PathsOption(szWord, "--mode", &pEnd, pOptions->szMode) ||
+        PathsOption(szWord, "--mode-seed", &pEnd, pOptions->szModeSeed) ||
         PathsOption(szWord, "--rules", &pEnd, pOptions->szRules) ||
         PathsOption(szWord, "--mod", &pEnd, pOptions->szMod) ||
         PathsOption(szWord, "--computer-race", &pEnd, pOptions->szComputerRace) ||
@@ -201,6 +227,9 @@ void PortPathsSplitCommandLine(const char *pszLine, char *pszGame, size_t cchGam
       pszLine = pEnd;
     } else if (lstrcmpiA(szWord, "--lan-watch") == 0) {
       pOptions->bLanWatch = true;
+      pszLine = pEnd;
+    } else if (lstrcmpiA(szWord, "--mode-trace") == 0) {
+      pOptions->bModeTrace = true;
       pszLine = pEnd;
     } else if (lstrcmpiA(szWord, "--ums") == 0) {
       pOptions->bUms = true;
@@ -363,6 +392,9 @@ static bool PathsInitOnce(void)
 
   PortPathsSplitCommandLine(GetCommandLineA(), g_szGameCommandLine, sizeof g_szGameCommandLine,
                             &g_options);
+#ifdef HX_DESIGN
+  DesignDefaultOptions(&g_options);
+#endif
   PathsSecrets(&g_options);
   // a benchmark run played again without --replay plays the run's own replay
   PathsFull(g_options.szBenchReplay);
@@ -526,8 +558,11 @@ const char *PortLogFile(const char *pszName)
   thread_local char s_szPath[MAX_PATH];
 
   PathsInit();
-  // --mod-check's in a folder of their own, so a Hyperion that is running keeps its own
-  const char *pszSub = g_options.szModCheck[0] != '\0' ? "mod-check\\" : "";
+  // --mod-check's and --mode-roll's in folders of their own, so a Hyperion that is running
+  // keeps its own
+  const char *pszSub = g_options.szModCheck[0] != '\0'   ? "mod-check\\"
+                       : g_options.szModeRoll[0] != '\0' ? "mode-roll\\"
+                                                         : "";
   if (lstrlenA(g_szDataFolder) + lstrlenA(pszSub) + lstrlenA(pszName) + 1 > MAX_PATH)
     return pszName;
   lstrcpyA(s_szPath, g_szDataFolder);
@@ -542,6 +577,12 @@ const PortOptions *PortCommandOptions(void)
 {
   PathsInit();
   return &g_options;
+}
+
+bool PortCommandReportOnly(void)
+{
+  PathsInit();
+  return g_options.szModCheck[0] != '\0' || g_options.szModeRoll[0] != '\0';
 }
 
 char *PortGameCommandLine(void)

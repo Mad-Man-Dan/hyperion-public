@@ -23,6 +23,9 @@
 #include "../../h/playertables.h"  // gPlayerMinerals, gPlayerGas
 #include "../../gen/globals117.h"
 #include "../platform/port_globals117.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 // The game's globals by the registry's names (re/globals117.json), bound by
 // abs_globals.py --bind-only.
@@ -156,6 +159,11 @@ static void __cdecl ObservePresenter(char *pszName, uint32_t nCap, uint32_t *pnC
 int __cdecl PortObserveSeed(int nClock) {
   if (s_bSeedPinned)
     return s_nPinnedSeed;
+#ifdef HX_DESIGN
+  int nDesign;
+  if (DesignSeed(&nDesign))
+    return nDesign;  // a scenario's game
+#endif
   int nTrainer;
   if (PortTrainerSeed(&nTrainer))
     return nTrainer;  // a saved session's game, made again

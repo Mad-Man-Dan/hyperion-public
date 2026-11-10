@@ -218,7 +218,7 @@ void GpuLights(SDL_GPUCommandBuffer *pCmd, int nWidth, int nHeight);
 SDL_GPUGraphicsPipeline *GpuPipeline(SDL_GPUShader *pVertex, SDL_GPUShader *pFragment,
                                      SDL_GPUTextureFormat format, bool bOver = false);
 void GpuPostParams(const SDL_FRect &box, int nWidth, int nHeight, bool bCover, PostParams *p);
-bool GpuSavePixels(const void *pPixels, int nWidth, int nHeight, const char *pszPath);
+bool GpuSavePixels(const void *pPixels, int nWidth, int nHeight, const char *pszPath, bool bBgra = false);
 bool GpuSceneInit(void);
 void GpuSceneRelease(void);
 void GpuSceneWriteLog(FILE *f);
@@ -256,7 +256,8 @@ bool GpuUiDrawInto(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pTarget, int nWid
                    int nPrims);
 // The UI kit's primitives drawn in parts inside a pass the caller began (the HUD's slots), on the
 // swapchain, or with bSwap false on a texture of RGBA8 (the menus' frame): GpuUiStage uploads the
-// list before the pass, GpuUiDrawPart draws nCount of them from nFirst.
+// list before the pass, GpuUiDrawPart draws nCount of them from nFirst. The list is not copied,
+// so it has to outlive every part drawn from it.
 bool GpuUiStage(SDL_GPUCommandBuffer *pCmd, const UiPrim *pPrims, int nPrims, bool bSwap = true);
 void GpuUiDrawPart(SDL_GPUCommandBuffer *pCmd, SDL_GPURenderPass *pPass, Uint32 nWidth, Uint32 nHeight, int nFirst,
                    int nCount, bool bSwap = true);

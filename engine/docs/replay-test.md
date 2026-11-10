@@ -300,7 +300,11 @@ hash's walk of a sprite's images stopped at an image outside the pool, so a spri
 local player had selected was read without its images. A game loaded from a save selects
 again what the local player had selected (`RestoreSelection`), where the live game, whose
 orders go out as commands alone, shows no selection; since hash version 4 the walk skips
-those images and an image's links are read past them.
+those images and an image's links are read past them. A seventh came with a 64-player game of
+cloaking units: a cloaking unit's image is drawn in palette types 2 to 4 for a viewer who has
+not detected it and 5 to 7 for one who has, and `CSprite::Show` and `Hide` move it between
+those and 0 by the viewer's mask (`gdwLocalMask`), which in a replay is every player's.
+Since hash version 10 types 0 and 2 to 7 are hashed alike; the cloak itself is the unit's.
 
 The observer covers every slot of a Hyperion game: its `P` and `Q` lines run to the last
 slot (past neutral's), `h_stat` folds in the slots past 11, and the engine hands it the

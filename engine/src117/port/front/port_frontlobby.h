@@ -79,6 +79,18 @@ const std::vector<std::string> &LevelNames(void);
 enum { PD_ON, PD_OFF, PD_LOCKED };
 int Pulldown(const char *pszId, int nIndex, float fWidth, const std::vector<std::string> &items, int nCur,
              int nState = PD_ON, const unsigned *pChips = NULL, const char *pszFace = NULL, float fListWidth = 0);
+// A row of a pulldown that says more than its name: a note at its right (where a row comes from),
+// a tip, and the word that greys it where it cannot be chosen.
+struct PulldownRow {
+  std::string text;   // what the row says
+  std::string note;   // a word at its right, dim: "" for none
+  std::string why;    // why it cannot be chosen: the row is greyed and says this; "" when it can
+  std::string tip;    // what the row is, for its tip; "" for none
+  std::string title;  // the tip's title, or its text when ""
+};
+// The same pulldown with such rows: the choice made, or -1. A greyed row cannot be chosen.
+int PulldownRows(const char *pszId, int nIndex, float fWidth, const std::vector<PulldownRow> &rows, int nCur,
+                 int nState = PD_ON, float fListWidth = 0);
 // A greyed pulldown showing pszShown, with a tip on what it waits for.
 void PulldownLater(const char *pszId, int nIndex, float fWidth, const char *pszShown, const char *pszTitle,
                    const char *pszWhy);
@@ -147,8 +159,24 @@ struct MapMark {
   unsigned rgb = 0;
   int nNum = 0;
 };
+// A shape drawn over the picture, in the map's own pixels, which the picture's scale brings down
+// with it: what a game mode says it makes of the map it is given, in the shapes a mark on the
+// map takes (PortModeShape, port_mode.h). The edge is drawn at least a pixel wide however far
+// the picture shrinks it, so a shape is never lost; a dash of 0 draws the edge whole.
+struct MapShape {
+  enum { CIRCLE, RING, RECT, POLYGON, LINE, SHAPES };
+  int nShape = CIRCLE;
+  float x = 0, y = 0;          // a circle's and a ring's centre, a rectangle's top left, a line's first point
+  float w = 0, h = 0;          // a rectangle's size
+  float r = 0;                 // a circle's and a ring's radius
+  float x2 = 0, y2 = 0;        // a line's second point
+  std::vector<float> points;   // a polygon's corners, x then y
+  unsigned rgb = 0xffffff;
+  float fFill = 0, fEdge = 1, fWidth = 1, fDash = 0;
+};
 void MapPreview(const char *pszId, const MapPicture *pPic, int nTileset, const char *pszTitle, int nMapW, int nMapH,
-                float fW, float fH, int nZ, bool bBig, bool bAllUnits, const std::vector<MapMark> *pMarks = NULL);
+                float fW, float fH, int nZ, bool bBig, bool bAllUnits, const std::vector<MapMark> *pMarks = NULL,
+                const std::vector<MapShape> *pShapes = NULL);
 // Each frame, before the pictures are laid out.
 void MapPreviewFrame(void);
 // A part of a map's terrain as the game draws it, from its scenario.chk, pChk, cb bytes: the map

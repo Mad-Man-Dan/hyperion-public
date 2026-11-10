@@ -26,6 +26,8 @@
 #ifndef PORT_LOOKS_H
 #define PORT_LOOKS_H
 
+#include <string>
+
 class CSprite;
 class CUnit;
 
@@ -40,6 +42,12 @@ enum { PORT_LOOK_NONE = 0xFF };
 void PortLookUnitSet(int nUnit, int nLook);
 // As a game begins (game.cpp): the hand-given looks cleared and looks.json read again.
 void PortLooksGameBegin(void);
+// The looks a game's mode brings, set before the game begins and taken away with it
+// (port_moddata.cpp): its own looks.json by path, and the entries its generate returned as the
+// text of a {"looks": [...]} tree. Both are read after the file's, so a mode's look of a name
+// stands over it. "" for none.
+void PortLooksModeFile(const std::string &path);
+void PortLooksModeLooks(const std::string &text);
 // A provider's look for a unit without one given by hand, asked each pass; 0 for none.
 typedef int (*PFN_PORT_LOOK_OF_UNIT)(int nUnit, const CUnit *pUnit);
 void PortLooksProvider(PFN_PORT_LOOK_OF_UNIT pfn);
@@ -61,7 +69,7 @@ unsigned char PortLookPlacePen(int x, int y, int nType, unsigned char bColour);
 // The GPU's part. A primitive the scene records (port_scene.h, PortSceneRle) takes the look of
 // the image drawn now, PORT_LOOK_REPLACED or'ed in where the plume replaces the image; 0 for
 // none, and always with the live value looks off.
-enum { PORT_LOOK_REPLACED = 0x100, PORT_LOOK_LIGHT = 1, PORT_LOOK_PLUME = 2, PORT_LOOK_HALO = 3, PORT_LOOK_GPU_BYTES = 416 };
+enum { PORT_LOOK_REPLACED = 0x100, PORT_LOOK_LIGHT = 1, PORT_LOOK_PLUME = 2, PORT_LOOK_HALO = 3, PORT_LOOK_GPU_BYTES = 1152 };
 unsigned int PortLookNow(void);
 // How many pixels past a looked image's edge its halo reaches, for PortLookNow's nNow: a
 // crystal's glow on what is behind it, which the scene draws as a look primitive over the image
@@ -76,5 +84,22 @@ void PortLookSpriteDrawn(const CSprite *pSprite, int nLook);
 // light's colour and strength, and whether it is gas and drawn in steps. NULL when there are
 // none or looks is off.
 const unsigned char *PortLooksGpu(unsigned int *pnBytes);
+
+// Looks in full (docs/modules/design.md, "Looks in depth"). A look has up to four zones of the
+// colours it takes, each with its ramp, its material and how much of it shows over the image's own
+// colours, and it may have an aura: a line of light round the unit's outline and a glow past
+// it. A unit has two looks at once, its paint and its aura, so PortLookOfSprite
+// gives paint | aura << 8 and CSprite::Draw hands the pair back. A player's units may share a
+// look (look_player), after the hand's and the provider's and before the type's. A selection's
+// mark takes neither unless the look's circle is on. The GPU's data is 1152 bytes a look: the
+// 416 above, the aura's at 416, each entry's zone at 544, the ramps of zones 1 to 3 at 800 and
+// each zone's material and mix at 1088.
+enum { PORT_LOOK_AURA = 4 };
+// The auras of the image drawn now, for the scene: each is its look | its reach in pixels << 8 |
+// how far its embers rise past the image's top, in pixels, << 16; 0 for none. A unit shows up to
+// PORT_LOOK_AURAS of them, the looks that name its type each bringing one.
+enum { PORT_LOOK_AURAS = 3 };
+unsigned int PortLookAuraAt(int i);
+unsigned int PortLookAuraNow(void);
 
 #endif

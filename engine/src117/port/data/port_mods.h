@@ -26,6 +26,8 @@ struct PortMod {
   std::string world;              // the planet behind the home screen (port_world.h)
   std::string folder;             // its folder, ending in a backslash; empty when built in
   std::string data;               // its data's folder in it, ending in a backslash; empty for none (port_moddata.h)
+  std::string kind;               // "content", or "mode": a game mode the set-up lists (port_mode.h)
+  std::string modeBlock;          // a mode mod's "mode" block as JSON text, "" for none
   std::vector<PortModDependency> depends;  // the mods whose data loads before its own
   bool bBuiltIn = false;
   bool bExpansion = false;        // a built-in game: Brood War rather than StarCraft

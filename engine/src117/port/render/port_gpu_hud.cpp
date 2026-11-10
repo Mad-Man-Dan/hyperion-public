@@ -44,6 +44,7 @@
 #endif
 #include "port_gpu_internal.h"
 #include "port_console.h"  // PortConsoleHudSource, PortConsoleHudLabel, PortWireframeCell
+#include "../hud/port_readout.h"  // the readout's room, its glyphs and whether it draws
 #include "port_present.h"  // PortPresentPaletteRGB
 #include "../data/port_video.h"  // an image layer's video
 #include "../front/port_text.h"
@@ -1555,6 +1556,165 @@ void GridSheet(int nFirst, int nCount) {
   }
 }
 
+UiColor Rgb(unsigned int nRgb) {
+  return UiColor{((nRgb >> 16) & 0xFF) / 255.0f, ((nRgb >> 8) & 0xFF) / 255.0f, (nRgb & 0xFF) / 255.0f, 1.0f};
+}
+
+// A status kind's glyph (port_readout.h, PortReadoutGlyph) in a box of z slot units at x, y: the
+// same table the panel's own eight bits walk, here as lines of the kit's.
+void GlyphPrims(const SlotAt &at, int nKind, double x, double y, double z, UiColor c) {
+  const signed char *p = PortReadoutGlyph(nKind);
+  if (p == NULL || z <= 0)
+    return;
+  const double k = z / 16.0;
+  const float fWidth = static_cast<float>(1.6 * k * at.k) > 1.0f ? static_cast<float>(1.6 * k * at.k) : 1.0f;
+  for (; *p != 0;) {
+    const int nPoints = *p++;
+    double px = 0, py = 0;
+    for (int i = 0; i < nPoints; ++i, p += 2) {
+      const double qx = x + p[0] * k, qy = y + p[1] * k;
+      if (i > 0) {
+        const SDL_FRect a = Rect(at, px, py, 0, 0), b = Rect(at, qx, qy, 0, 0);
+        UiLine(a.x, a.y, b.x, b.y, c, fWidth);
+      }
+      px = qx, py = qy;
+    }
+  }
+}
+
+// A mod readout's marks over one cell of the grid, the same marks the classic panel draws over
+// a box of its group view (PortConsoleRollMarks): the rank's pip in the cell's top right
+// corner, a pixel wider for each rank above the first, and a dot for each of the first three
+// things on the unit down its left, in its side's colour. box is the cell's box as fitted and s
+// a box pixel in the slot's units, so the marks keep the box's scale; here they are the
+// readout's own colours, where the classic panel has the palette's nearest.
+void GridMarks(const SlotAt &at, const double box[4], double s, const PortRollMark &mark) {
+  const double bw = box[2] / s, bh = box[3] / s;
+  if (bw < 12 || bh < 12)
+    return;  // a cell too small for a mark to read
+  auto fill = [&](double x, double y, double z, UiColor c) {
+    if (x < 0 || y < 0 || x + z > bw || y + z > bh)
+      return;
+    const SDL_FRect r = Rect(at, box[0] + x * s, box[1] + y * s, z * s, z * s);
+    UiFill(r.x, r.y, r.w, r.h, Alpha(c, at.fAlpha));
+  };
+  const UiColor dark = UiColor{0, 0, 0, 0.85f};
+  if (mark.nRank > 0) {
+    // three pixels for the first rank the file names and one more for each above it
+    const double z = 3 + (mark.nRank - 1 < 4 ? mark.nRank - 1 : 4);
+    fill(bw - z - 3, 1, z + 2, dark);
+    fill(bw - z - 2, 2, z, Rgb(mark.nRgb));
+  }
+  if (mark.nStyle == PORT_READOUT_GROUP_EDGE && mark.nMarks > 0) {
+    const SDL_FRect r = Rect(at, box[0], box[1], box[2], box[3]);
+    UiRing(r.x, r.y, r.w, r.h, Alpha(Rgb(mark.anHue[0]), at.fAlpha), 0.0f, static_cast<float>(1.4 * s));
+  }
+  const int nMarks = mark.nStyle == PORT_READOUT_GROUP_EDGE ? (mark.nMarks > 0 ? 1 : 0) : mark.nMarks;
+  // the glyphs want a cell with room for them; below that the dots say the same in less
+  const bool bGlyphs = mark.nStyle != PORT_READOUT_GROUP_DOTS && PORT_ROLL_MARK * s >= 7.0;
+  for (int i = 0; i < nMarks; ++i) {
+    const double my = PORT_ROLL_EDGE + i * (bGlyphs ? PORT_ROLL_PITCH : 4), mx = PORT_ROLL_EDGE;
+    if (!bGlyphs) {
+      fill(mx, my + 1, 4, dark);
+      fill(mx + 1, my + 2, 2, Rgb(mark.abFor[i] ? 0x5fe07a : 0xff6a5a));
+      continue;
+    }
+    // a near-black frame, round for a thing working for the unit and cornered for one against
+    // it, then the kind's glyph inside it in the colour the status named for itself, or in its
+    // side's green or red where it named none, as the readout's own icons are drawn. The edge
+    // style's one mark takes the hue either way, which is what that style shows.
+    const double z = PORT_ROLL_MARK;
+    if (mx >= 0 && my >= 0 && mx + z <= bw && my + z <= bh) {
+      const SDL_FRect r = Rect(at, box[0] + mx * s, box[1] + my * s, z * s, z * s);
+      const UiColor fill = UiColor{0.024f, 0.039f, 0.055f, 0.92f};
+      const bool bEdge = mark.nStyle == PORT_READOUT_GROUP_EDGE;
+      const UiColor ink =
+          Rgb(bEdge || mark.abHue[i] ? mark.anHue[i] : (mark.abFor[i] ? 0x6fe08a : 0xff7a6a));
+      if (mark.abFor[i]) {
+        UiFill(r.x, r.y, r.w, r.h, Alpha(fill, at.fAlpha), r.w / 2);
+      } else {
+        UiSetTurn(0.78539816f, r.x + r.w / 2, r.y + r.h / 2);  // a quarter turn's half: a diamond
+        UiFill(r.x + r.w * 0.09f, r.y + r.h * 0.09f, r.w * 0.82f, r.h * 0.82f, Alpha(fill, at.fAlpha));
+        UiSetTurn(0.0f, 0.0f, 0.0f);
+      }
+      GlyphPrims(at, mark.anKind[i], box[0] + (mx + 0.5) * s, box[1] + (my + 0.5) * s, (z - 1) * s,
+                 Alpha(ink, at.fAlpha));
+    }
+  }
+}
+
+// A mod readout's surface over the selection slot's layer (port_hud.h, PortReadoutSurface): the
+// readout draws in its own pixels with (0, 0) at classic's panel's top left, and each call is
+// put through the panel's box in the slot and then the slot's own placing, so the readout follows
+// whatever the design does to the panel and takes the layer's effects with it.
+struct SurfaceAt {
+  const SlotAt *pAt;
+  double x, y, k;  // the panel's top left in the slot's units, and a slot unit a readout pixel
+};
+
+void SurfaceFill(void *pCtx, double x, double y, double w, double h, unsigned int nRgb, double fAlpha, double fRadius) {
+  const SurfaceAt &c = *static_cast<const SurfaceAt *>(pCtx);
+  if (w <= 0 || h <= 0)
+    return;
+  const SDL_FRect r = Rect(*c.pAt, c.x + x * c.k, c.y + y * c.k, w * c.k, h * c.k);
+  UiFill(r.x, r.y, r.w, r.h, Alpha(Rgb(nRgb), static_cast<float>(fAlpha) * c.pAt->fAlpha),
+         static_cast<float>(fRadius * c.k * c.pAt->k));
+}
+
+void SurfaceLine(void *pCtx, double x0, double y0, double x1, double y1, unsigned int nRgb, double fWidth,
+             double fAlpha) {
+  const SurfaceAt &c = *static_cast<const SurfaceAt *>(pCtx);
+  const SDL_FRect a = Rect(*c.pAt, c.x + x0 * c.k, c.y + y0 * c.k, 0, 0);
+  const SDL_FRect b = Rect(*c.pAt, c.x + x1 * c.k, c.y + y1 * c.k, 0, 0);
+  const float w = static_cast<float>(fWidth * c.k * c.pAt->k);
+  UiLine(a.x, a.y, b.x, b.y, Alpha(Rgb(nRgb), static_cast<float>(fAlpha) * c.pAt->fAlpha), w > 1.0f ? w : 1.0f);
+}
+
+void SurfaceGlyph(void *pCtx, int nKind, double x, double y, double z, unsigned int nRgb, double fAlpha) {
+  const SurfaceAt &c = *static_cast<const SurfaceAt *>(pCtx);
+  GlyphPrims(*c.pAt, nKind, c.x + x * c.k, c.y + y * c.k, z * c.k,
+             Alpha(Rgb(nRgb), static_cast<float>(fAlpha) * c.pAt->fAlpha));
+}
+
+void SurfaceText(void *pCtx, const char *pszUtf8, double x, double y, double fSize, unsigned int nRgb, double fAlpha,
+             int nAlign, int nFace) {
+  const SurfaceAt &c = *static_cast<const SurfaceAt *>(pCtx);
+  if (pszUtf8 == NULL)
+    return;
+  Text(*c.pAt, nFace == 1 ? UI_FACE_BOLD : UI_FACE_TEXT, fSize * c.k, 0, Alpha(Rgb(nRgb), static_cast<float>(fAlpha)),
+       pszUtf8, c.x + x * c.k, c.y + y * c.k, nAlign);
+}
+
+double SurfaceTextWidth(void *pCtx, const char *pszUtf8, double fSize, int nFace) {
+  const SurfaceAt &c = *static_cast<const SurfaceAt *>(pCtx);
+  if (pszUtf8 == NULL || c.k <= 0)
+    return 0.0;
+  return TextWidth(*c.pAt, nFace == 1 ? UI_FACE_BOLD : UI_FACE_TEXT, fSize * c.k, 0, pszUtf8) / c.k;
+}
+
+// The readout drawn over the panel just shown in the slot, box being the panel's place in the
+// slot's units. Nothing happens while the readout has registered no drawing.
+void ReadoutSurface(const SlotAt &at, const double box[4]) {
+  const PortReadoutSurfaceFn pfn = PortHudReadoutSurface();
+  if (pfn == NULL || box[2] <= 0)
+    return;
+  SurfaceAt c;
+  c.pAt = &at;
+  c.x = box[0];
+  c.y = box[1];
+  c.k = box[2] / PORT_READOUT_W;
+  PortReadoutSurface s;
+  s.pCtx = &c;
+  s.bFull = true;
+  s.fPx = c.k * at.k;
+  s.pfnFill = SurfaceFill;
+  s.pfnLine = SurfaceLine;
+  s.pfnGlyph = SurfaceGlyph;
+  s.pfnText = SurfaceText;
+  s.pfnTextWidth = SurfaceTextWidth;
+  pfn(&s);
+}
+
 // The grid in the slot, false when the layer has none or the console shows one unit or none:
 // then 1.17's panel is shown, with a unit's figures, its queue or its cargo.
 bool GridPrims(const HudDesign *pDesign, const HudLayerDef &ld, const SlotAt &at, const PortHudState &st) {
@@ -1597,6 +1757,9 @@ bool GridPrims(const HudDesign *pDesign, const HudLayerDef &ld, const SlotAt &at
       const float u0 = static_cast<float>((i % nAcross) * kWireCell), v0 = static_cast<float>(kWireTop + (i / nAcross) * kWireCell);
       UiPicturePart(r.x, r.y, r.w, r.h, kGridSlot, u0, v0, u0 + wire.w, v0 + wire.h, UiColor{1, 1, 1, at.fAlpha}, true);
     }
+    PortRollMark mark;
+    if (PortConsoleRollMarkOf(pUnit, &mark))
+      GridMarks(at, fit, s, mark);
   }
   // the page tabs, the page shown lit, in the style's cells' colours
   if (g.bTabs) {
@@ -1633,8 +1796,19 @@ void SlotPrims(const HudDesign *pDesign, const HudLayerDef &ld, const SlotAt &at
     Picture(at, g_shPortrait, 0, 0, w, h, 1.0f);
     break;
   case HUD_SLOT_SELECTION:
-    if (!GridPrims(pDesign, ld, at, st))
+    if (GridPrims(pDesign, ld, at, st))
+      break;
+    if (PortReadoutDraws()) {
+      // a mod's readout: the panel at the slot's edge, so that what the readout adds has one
+      // unbroken room beside or under it rather than a margin at each end, then the readout's
+      // own drawing over it, inside this layer
+      double box[4];
+      HudReadoutBox(g_shSelection.w, g_shSelection.h, 0, 0, w, h, box);
+      Picture(at, g_shSelection, box[0], box[1], box[2], box[3], 1.0f);
+      ReadoutSurface(at, box);
+    } else {
       Picture(at, g_shSelection, 0, 0, w, h, 1.0f);
+    }
     break;
   case HUD_SLOT_CARD: {
     // each of 1.17's nine places in the design's well for it
@@ -1852,6 +2026,11 @@ void Draw(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pTarget, bool bSwap, Uint3
       }
     }
     PortHudHitsSet(std::move(hits), lw);
+    // the room a mod's unit readout has in the selection slot, from the slot just laid out and
+    // before anything is drawn from it (port_readout.h)
+    int nRoomW = PORT_READOUT_W, nRoomH = PORT_READOUT_H;
+    PortHudReadoutRoom(&nRoomW, &nRoomH);
+    PortReadoutRoomSet(nRoomW, nRoomH);
   }
   SDL_GPUTexture *pBack = g_white.p;
   if (pDesign->bGlass && drawFrame) {
@@ -2046,8 +2225,12 @@ void GpuHudDraw(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pSwap, Uint32 nWidth
     return;
   const HudEnv *pEnv = NULL;
   HudPlayer *pPlayer = PortHudFrameBegin(static_cast<int>(box.w), static_cast<int>(box.h), &pEnv);
-  if (pPlayer == NULL || !Init())
+  if (pPlayer == NULL || !Init()) {
+    // no design over the console: a mod's readout has the panel's own room, not the room a
+    // design was giving it before the player went back to the classic console
+    PortReadoutRoomSet(PORT_READOUT_W, PORT_READOUT_H);
     return;
+  }
   PortHudState st;
   PortHudGet(&st);
   Draw(pCmd, pSwap, true, nWidth, nHeight, box, pPlayer, *pEnv, st, PortHudLoads(), true, drawFrame);

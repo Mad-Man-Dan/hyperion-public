@@ -39,5 +39,13 @@ void *PortSoundRemastered(const char *pszPath, DWORD *pcbSize);
 // format, OGG, MP3, FLAC, Opus or another WAV, is decoded to one. NULL
 // when there is none or it does not decode.
 void *PortSoundLoad(const char *pszPath, DWORD *pcbSize);
+// The least milliseconds between two plays of a sound (snd.cpp's sub_49E620): the classic 80, or
+// the mod's min_interval for it (port_modvoice.cpp).
+unsigned PortSoundGap(int nSoundId);
+// The eight playing slots (snd.cpp), for the live channel's sounds: each slot's sound id and
+// priority while its buffer plays, -1 for a free one; the count playing. And a sound played as
+// the interface plays one, through the same slots, priority and gap: whether it started.
+int PortSoundSlots(int *pnIds, int *pnPriorities);
+int PortSoundPlay(int nSoundId);
 
 #endif

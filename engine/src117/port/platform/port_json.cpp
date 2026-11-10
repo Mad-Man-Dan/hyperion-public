@@ -52,6 +52,7 @@ private:
   bool Value(PortJson *pOut, int nDepth) {
     if (nDepth > 64)
       return Fail("too deep");
+    pOut->nAt = static_cast<int>(m_p - m_start);
     switch (*m_p) {
       case '{': return Object(pOut, nDepth);
       case '[': return Array(pOut, nDepth);
@@ -239,6 +240,23 @@ bool PortJsonParse(const char *pszText, PortJson *pOut, std::string *pszError) {
       static_cast<unsigned char>(pszText[2]) == 0xBF)
     pszText += 3;
   return Reader(pszText).Document(pOut, pszError);
+}
+
+int PortJsonLineAt(const char *pszText, int nAt) {
+  if (pszText == nullptr || nAt < 0)
+    return 0;
+  // the places are counted from after a byte order mark, the reader having stepped over one
+  if (static_cast<unsigned char>(pszText[0]) == 0xEF && static_cast<unsigned char>(pszText[1]) == 0xBB &&
+      static_cast<unsigned char>(pszText[2]) == 0xBF)
+    pszText += 3;
+  int nLine = 1;
+  for (int i = 0; i < nAt; ++i) {
+    if (pszText[i] == '\0')
+      return 0;
+    if (pszText[i] == '\n')
+      ++nLine;
+  }
+  return nLine;
 }
 
 // The length of the valid UTF-8 character at p, 0 when its bytes are not one.

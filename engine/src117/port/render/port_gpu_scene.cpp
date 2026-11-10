@@ -44,6 +44,7 @@ struct SceneParams {
   Uint32 nOverFrom, nUnderAt, nExtraAt, nOrigin;  // nOrigin: scene.hlsl's gOrigin
   Uint32 nStep, nViewW;  // the layer's step, and the render view's width
   Uint32 nLooksAt, nTimeMs;  // the looks' data in the frame's store, 0 for none, and the time
+  Uint32 nMarksAt, nMarksUnused;  // and the marks' numbers in it (port_mapmark.h), 0 for none
 };
 // CSHud's uniforms (scene.hlsl, HudParams).
 struct HudParams {
@@ -118,6 +119,11 @@ void PortGpuFullColourSet(bool bOn)
   g_fFull = bOn ? 1.0f : 0.0f;
 }
 bool g_bFullShown;
+
+bool PortGpuFullColourShown(void)
+{
+  return g_bFullShown;
+}
 bool g_bHdMixed;
 
 // The scene (R4b).
@@ -578,6 +584,7 @@ struct GpuSceneLayout {
   Uint32 nCopiedAt;    // the pixels the screen takes, bytes into the frame's own
   Uint32 nExtraAt;     // the full colour's extras, bytes into the frame's store
   Uint32 nLooksAt;     // the looks' data after them (port_looks.h), with the full colour
+  Uint32 nMarksAt;     // and the ground's marks after those (port_mapmark.h)
   Uint32 nMapPrims;    // the primitives of the map layer; with the camera, those after are over it
 };
 
@@ -603,6 +610,7 @@ static void GpuSceneLayoutOf(const SceneFrame *pFrame, bool bShow, bool bZoom, G
     lay.nCopiedAt = (pFrame->nFogLightAt + pFrame->nFogLightBytes + 15) & ~15u;
   lay.nExtraAt = (lay.nBytesAt + lay.nCopiedAt + (bShow ? lay.nCopied : 0) + 15) & ~15u;
   lay.nLooksAt = lay.nExtraAt + pFrame->nPrims * 32;
+  lay.nMarksAt = lay.nLooksAt + pFrame->nLooksBytes;
   lay.nMapPrims = bZoom ? pFrame->nMapPrims : pFrame->nPrims;
 }
 
@@ -655,7 +663,7 @@ static bool GpuSceneStoresFit(const SceneFrame *pFrame, const GpuSceneLayout &la
   return GpuStoreFit(&g_sceneStore[SCENE_STORE_PRIMS], pFrame->nPrims * sizeof(ScenePrim), ro, &bFresh) &&
          // the HD frames read the fog's light map in it too
          GpuStoreFit(&g_sceneStore[SCENE_STORE_FRAME],
-                     lay.nExtraAt + (bFull ? pFrame->nPrims * 32 + pFrame->nLooksBytes : 0),
+                     lay.nExtraAt + (bFull ? pFrame->nPrims * 32 + pFrame->nLooksBytes + pFrame->nMarksBytes : 0),
                      rw | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, &bFresh) &&  // CSFogLight writes it
          GpuStoreFit(&g_sceneStore[SCENE_STORE_MAP_RGB], nRgb, rw | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, &bFresh) &&
          GpuStoreFit(&g_sceneStore[SCENE_STORE_SHOWN_RGB], nRgbShown, rw | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
@@ -737,6 +745,9 @@ static int GpuScenePieces(const SceneFrame *pFrame, const SDL_Color *pColors, co
       pieces[nPieces++] = {SCENE_STORE_FRAME, lay.nExtraAt, g_fullExtras.data(), pFrame->nPrims * 32};
     if (pFrame->nLooksBytes != 0)
       pieces[nPieces++] = {SCENE_STORE_FRAME, lay.nLooksAt, pFrame->pLooks, pFrame->nLooksBytes};
+    // the ground's marks after them, which only the full colour paints (port_mapmark.cpp)
+    if (pFrame->nMarksBytes != 0)
+      pieces[nPieces++] = {SCENE_STORE_FRAME, lay.nMarksAt, pFrame->pMarks, pFrame->nMarksBytes};
   }
   return nPieces;
 }
@@ -1229,6 +1240,7 @@ bool PortGpuScene(const SceneFrame *pFrame, const SDL_Color *pColors, bool bChec
   params.nOverFrom = g_nHdOverFrom;
   params.nExtraAt = lay.nExtraAt;
   params.nLooksAt = bFull && pFrame->nLooksBytes != 0 ? lay.nLooksAt : 0;
+  params.nMarksAt = bFull && pFrame->nMarksBytes != 0 ? lay.nMarksAt : 0;
   params.nTimeMs = static_cast<Uint32>(SDL_GetTicks() % 3600000);
   params.nUnderAt = g_bHdScene ? lay.nBuffer : 0;
   g_nHdUnderAt = params.nUnderAt;

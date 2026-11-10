@@ -34,6 +34,9 @@
 #include "../platform/port_paths.h"  // PortCommandOptions
 #include "../../gen/globals117.h"
 #include "../platform/port_globals117.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // DesignGamePane
+#endif
 
 namespace {
 
@@ -481,6 +484,10 @@ void Act(Action act)
 
 bool PortDebugViewAvailable(void)
 {
+#ifdef HX_DESIGN
+  if (DesignGamePane())
+    return false;  // the studio's game is one of its panes: its own panels are the tools
+#endif
   // a developer's run; else while the channel runs (a tool mod, the canvas), but not over a
   // campaign's mission, which no mod reaches (PRD 2026-10-27)
   if (PortCommandOptions()->szControl[0] != '\0' || SDL_getenv("HYPERION_DEBUG_VIEW") != NULL)

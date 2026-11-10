@@ -1,9 +1,11 @@
 """Build Hyperion for x64 with VS 2026.
 
-    python tools/build_engine_x64.py [--no-stormlib] [--casclib] [--no-install]
+    python tools/build_engine_x64.py [--no-stormlib] [--casclib] [--no-install] [--no-studio]
 
 Writes src117/build/x64/: Hyperion.exe, the engine and its start-up in one exe, and
-the replay observer, rt_observer.dll. A build that succeeds is then installed, as the Windows
+the replay observer, rt_observer.dll. A build that succeeds then builds Hyperion Studio on
+the design engine's base (tools/build_design_x64.py, tools/build_studio_x64.py), unless
+--no-studio is given, and is installed, as the Windows
 package's files, into each folder engine/install_to.txt names (tools/package.py --install),
 unless --no-install is given. The game's C++ (src117/lang) and the port's
 (src117/port) are the TUs src117/tus.txt lists, which the tools that probe the build
@@ -48,13 +50,17 @@ LIBVPX_CONFIG = os.path.join(ENGINE, "tools", "libvpx")
 LIBWEBM = os.path.join(LIBVPX, "third_party", "libwebm")
 FONTS = os.path.join(ENGINE, "third_party", "fonts-8b0a1d0")
 # the MP3, FLAC and WAV decoders for a mod's sounds and music (port_audiodecode.cpp; tools/fetch_drlibs.py)
-DRLIBS = os.path.join(ENGINE, "third_party", "dr_libs-dfe8377")
+DRLIBS = os.path.join(ENGINE, "third_party", "dr_libs-b6a9189")
 # a mod's art in PNG, TGA (stb_image) and WebP (libwebp's decoder; port_imagefile.cpp,
 # tools/fetch_libwebp.py)
 LIBWEBP = os.path.join(ENGINE, "third_party", "libwebp-1.5.0")
 # a mod's AV1 videos: dav1d in plain C (tools/fetch_dav1d.py, its configuration in tools/dav1d/)
 DAV1D = os.path.join(ENGINE, "third_party", "dav1d-1.5.4")
 DAV1D_CONFIG = os.path.join(ENGINE, "tools", "dav1d")
+# a mod's scripts: Luau's parser, compiler and VM (tools/fetch_luau.py; port_modlua.cpp)
+LUAU = os.path.join(ENGINE, "third_party", "luau-0.742")
+LUAU_PARTS = ["Common", "Ast", "Bytecode", "Compiler", "VM"]
+LUAU_INCLUDES = [os.path.join(LUAU, part, "include") for part in LUAU_PARTS]
 # The front end's typefaces (tools/fetch_fonts.py, OFL), carried in Hyperion.exe as resources
 # under these names (port_ui.cpp).
 FONT_RESOURCES = [("HYPERION_FONT_TEXT", "Saira-Regular.ttf"), ("HYPERION_FONT_WIDE", "Michroma-Regular.ttf"),
@@ -109,13 +115,15 @@ PORT = COMMON + ["/TP", "/EHsc", "/DOC_WITH_HELD", "/I" + os.path.join(SRC, "h")
                  "/I" + CLAY, "/I" + STB, "/I" + os.path.join(CASCLIB, "src"),
                  "/DCASCLIB_NO_AUTO_LINK_LIBRARY", "/I" + LIBVPX, "/I" + LIBVPX_CONFIG, "/I" + LIBWEBM,
                  "/I" + DRLIBS, "/I" + os.path.join(LIBWEBP, "src"), "/I" + os.path.join(DAV1D, "include"),
+                 # Luau's C API, for a mod's scripts (port_modlua.cpp)
+                 "/I" + os.path.join(LUAU, "VM", "include"),
                  # libopus's headers, the streamed seats' build of it, for the Opus decoder
                  # (port_audiodecode.cpp)
                  "/I" + os.path.join(OUT, "webrtc", "include")]
 
 # The objects abs_globals.py leaves to the link.
 NOT_GAME = ["code_map.obj", "data117.obj", "port_pklib.obj", "pk_implode.obj", "pk_explode.obj", "pk_crc32.obj",
-            "port_stormlib.obj", "port_clay.obj", "port_lanstream.obj"]
+            "port_stormlib.obj", "port_clay.obj", "port_lanstream.obj", "port_modlua_lint.obj"]
 # A LAN room's streamed seats (port_lanstream.cpp): WebRTC, H.264 and Opus, built by
 # tools/build_webrtc.py into WEBRTC, and the Windows libraries they call.
 WEBRTC = os.path.join(OUT, "webrtc")
@@ -333,6 +341,27 @@ def build_image(env):
     return lib
 
 
+def build_luau(env):
+    """Luau's parser, compiler and VM into build/x64/luau/luau.lib (MIT; a mod's scripts,
+    port_modlua.cpp), once for its version."""
+    lib = os.path.join(OUT, "luau", "luau.lib")
+    if os.path.isfile(lib):
+        return lib
+    if not os.path.isfile(os.path.join(LUAU, "VM", "include", "lua.h")):
+        sys.exit("[build_engine_x64] no Luau in %s: run python tools/fetch_luau.py" % LUAU)
+    objs = []
+    for part in LUAU_PARTS:
+        dest = os.path.join(OUT, "luau", part)
+        os.makedirs(dest, exist_ok=True)
+        srcs = sorted(glob.glob(os.path.join(LUAU, part, "src", "*.cpp")))
+        run(["cl", "/nologo", "/c", "/MP", "/O2", "/DNDEBUG", "/MT", "/EHsc", "/std:c++17", "/bigobj", "/W0",
+             "/Fo" + dest + "\\"] + ["/I" + i for i in LUAU_INCLUDES] + ["/I" + os.path.join(LUAU, part, "src")]
+            + srcs, env, "cl /c Luau %s (%d)" % (part, len(srcs)))
+        objs += sorted(glob.glob(os.path.join(dest, "*.obj")))
+    run(["lib", "/nologo", "/OUT:" + lib] + objs, env, "lib luau.lib")
+    return lib
+
+
 # The page a LAN room serves (engine/web/lan), beside the program in web/lan, where the
 # room reads it (port_lanweb.cpp); and Hyperion for the browser in web/play, the page with the
 # program tools/build_engine_web.py built, once it has (W3).
@@ -374,6 +403,8 @@ def main():
                     help="build libvpx, libwebm's parser and stb_vorbis again, and libwebp's decoder and stb_image")
     ap.add_argument("--dav1d", action="store_true", help="build dav1d again")
     ap.add_argument("--no-install", action="store_true", help="leave the folders install_to.txt names as they are")
+    ap.add_argument("--no-studio", action="store_true",
+                    help="build Hyperion alone, and leave HyperionStudio.exe as it is")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     for f in glob.glob(os.path.join(OUT, "*.obj")):
@@ -405,6 +436,7 @@ def main():
     dav1d_config = max(os.path.getmtime(f) for f in glob.glob(os.path.join(DAV1D_CONFIG, "*")))
     if a.dav1d or not os.path.exists(dav1d) or os.path.getmtime(dav1d) < dav1d_config:
         dav1d = build_dav1d(env)
+    luau = build_luau(env)
 
     langs = tus("lang")
     rsp = os.path.join(OUT, "langtus.rsp")
@@ -464,6 +496,9 @@ def main():
     # libdatachannel's C++ throws, and wants C++17
     run(["cl"] + PORT + ["/EHsc", "/std:c++17", "/DRTC_STATIC", "/I" + os.path.join(WEBRTC, "include"),
                          port_path("port_lanstream.cpp")], env, "cl /c port_lanstream.cpp")
+    # a mod's scripts read by Luau's parser, which wants C++17; it names no game global
+    run(["cl"] + PORT + ["/std:c++17"] + ["/I" + i for i in LUAU_INCLUDES] + [port_path("port_modlua_lint.cpp")],
+        env, "cl /c port_modlua_lint.cpp")
 
     abs_obj = os.path.join(OUT, "abs_globals.obj")
     run([sys.executable, os.path.join(ENGINE, "tools", "wave117", "abs_globals.py"), "--x64",
@@ -497,7 +532,7 @@ def main():
          "/OPT:REF", "/OPT:ICF", "/DEF:" + os.path.join(hyp, "hyperion.def"),
          "/OUT:" + os.path.join(OUT, "Hyperion.exe"), "/MAP:" + os.path.join(OUT, "Hyperion.map"),
          "@" + lrsp, os.path.join(OUT, "hyperion.res"), os.path.join(OUT, "fonts.res"),
-         os.path.join(OUT, "stormlib", "stormlib.lib"), casclib, webm, image, dav1d,
+         os.path.join(OUT, "stormlib", "stormlib.lib"), casclib, webm, image, dav1d, luau,
          os.path.join(SDL3, "lib", "x64", "SDL3.lib"), "/DELAYLOAD:SDL3.dll", "delayimp.lib",
          "bcrypt.lib"] + [os.path.join(WEBRTC, "lib", l) for l in WEBRTC_LIBS] + ["iphlpapi.lib"] + LIBS,
         env, "link Hyperion.exe")
@@ -518,10 +553,22 @@ def main():
     if not os.path.isfile(beside) or open(beside, "rb").read() != open(dll, "rb").read():
         shutil.copyfile(dll, beside)
     print("[build_engine_x64] OK -> src117\\build\\x64\\Hyperion.exe, SDL3.dll, rt_observer.dll", flush=True)
+    # Hyperion Studio, which the install and the package carry beside Hyperion: it is built on
+    # the design engine's objects, so the design base is built first. Hyperion.exe stands
+    # whatever these say; a failure here is said and leaves the studio as it was.
+    if not a.no_studio:
+        for tool in ("build_design_x64.py", "build_studio_x64.py"):
+            if subprocess.call([sys.executable, os.path.join(ENGINE, "tools", tool)]) != 0:
+                print("[build_engine_x64] %s failed: the studio beside this build is the one built before" % tool,
+                      flush=True)
+                break
     # the build into the player's own Hyperion folders; the build stands whatever the install says
     if not a.no_install and os.path.isfile(os.path.join(ENGINE, "install_to.txt")):
         subprocess.call([sys.executable, os.path.join(ENGINE, "tools", "package.py"), "--install"])
 
 
 if __name__ == "__main__":
-    main()
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from buildlock import BuildLock
+    with BuildLock("build_engine_x64"):
+        main()

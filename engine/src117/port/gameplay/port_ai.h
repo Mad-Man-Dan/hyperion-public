@@ -78,8 +78,13 @@ void AiFrame();
 // whole map has it taken off again.
 void AiVisionRefresh();
 // The script a melee computer in slot nSlot starts (gametype_run_aiscript), given the one
-// 1.17 picks for its race; 0 to start none.
+// 1.17 picks for its race; 0 to start none. A player the game's mode plays itself starts none.
 DWORD AiMeleeScript(int nSlot, DWORD dwClassic);
+// A unit classic's AI leaves entirely alone: one the game's mode has taken (hx.own), and every
+// unit of the player a mode plays itself. Such a unit is in no town, no captain, no guard post
+// and no sweep, and the mode's scripts are all that order it. False in every game without a
+// mode, which is how classic's AI is unchanged for every other game.
+bool AiModeKeeps(const CUnit *pUnit);
 // The frames a computer's unit waits before it thinks again (CUnit::DispatchComputerAI),
 // given 1.17's for what it just did.
 BYTE AiThinkFrames(const CUnit *pUnit, BYTE bClassic);

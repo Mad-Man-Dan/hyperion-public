@@ -1484,6 +1484,27 @@ void Tag(const char *psz, bool bOn)
   Close();
 }
 
+// A label's key letter, preferring one that begins a word, so "GAME MODE" underlines MODE's M
+// and not GAME's, and a translation whose key letter also sits inside an earlier word still
+// marks the word the key stands for. The first occurrence anywhere is the fallback.
+int KeyWord(const char *psz, char cKey)
+{
+  int nChar = 0, nFirst = -1;
+  bool bStart = true;
+  for (const char *p = psz; *p; ++p) {
+    if ((static_cast<unsigned char>(*p) & 0xC0) == 0x80)
+      continue;
+    const bool bHit = *p == cKey || *p == cKey - 'A' + 'a';
+    if (bHit && nFirst < 0)
+      nFirst = nChar;
+    if (bHit && bStart)
+      return nChar;
+    bStart = *p == ' ';
+    ++nChar;
+  }
+  return nFirst;
+}
+
 int OnCount(const MutatorSet &m)
 {
   int n = 0;
@@ -1495,30 +1516,58 @@ int OnCount(const MutatorSet &m)
 }  // namespace
 
 int MutatorsViewTabs(float x, float y, float w, int nView, const MutatorSet &m, const char *pszFirst,
-                     const char *pszFirstTip)
+                     const char *pszFirstTip, const char *pszMode, const char *pszModeTag, int nModeChanged)
 {
   const int nOn = OnCount(m), nPreset = MutatorPresetOf(m);
+  // the middle tab is the game mode's, there only while a mod's mode is the game type: it is
+  // named for the mode, with the mark of a mod's own and a count of the settings the player has
+  // changed
+  const bool bMode = pszMode != NULL && pszMode[0] != '\0';
+  // three tabs are tighter than two, and a narrow column tighter again, so their sides give way
+  // before their names wrap
+  const float fTabPad = !bMode ? 22.0f : w < 800.0f ? 11.0f : 18.0f;
   Decl strip = At("skvtabs", x, y, w, 46);
   strip.d.layout.childGap = Gap(Fs(4));
   strip.d.layout.childAlignment.y = CLAY_ALIGN_Y_BOTTOM;
   Open(strip);
   int nClicked = -1;
-  // pszFirst and pszFirstTip come translated from the caller
-  const char *const kLabels[2] = {pszFirst != NULL ? pszFirst : PortText("GAME OPTIONS"), PortText("MUTATORS")};
-  static const char kKeys[2] = {'O', 'U'};
-  for (int t = 0; t < 2; ++t) {
+  // the tabs left to right, each with the view it opens; pszFirst and pszFirstTip come
+  // translated from the caller, as does the mode's own name
+  const std::string mode = bMode ? Upper(pszMode) : std::string();
+  const char *const kLabels[3] = {pszFirst != NULL ? pszFirst : PortText("GAME OPTIONS"), mode.c_str(),
+                                  PortText("MUTATORS")};
+  static const char kKeys[3] = {'O', 'M', 'U'};
+  static const int kViews[3] = {0, 2, 1};
+  for (int t = 0; t < 3; ++t) {
+    if (t == 1 && !bMode)
+      continue;
+    const int nTo = kViews[t];
     Decl b = Box("skvtab", t);
-    const bool bOn = t == nView, bHot = !bOn && Over(b.d.id);
+    const bool bOn = nTo == nView, bHot = !bOn && Over(b.d.id);
     if (!bOn && Clicked(b.d.id))
-      nClicked = t;
+      nClicked = nTo;
     b.d.layout.sizing.height = Fixed(Sc(bOn ? 44 : 40));
-    b.d.layout.padding = Pad(Fs(22), Fs(22), 0, 0);
+    b.d.layout.padding = Pad(Fs(fTabPad), Fs(fTabPad), 0, 0);
     b.d.layout.childGap = Gap(Fs(10));
     b.d.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
     b.d.custom.customData = Custom(DrawViewTab, kScTab, 0.0f, (bOn ? 1 : 0) | (bHot ? 2 : 0));
     Open(b);
-    Text(kLabels[t], UI_FACE_WIDE, Fs(15), 0.04f, bOn || bHot ? kScInkHi : kScInkButton, KeyAt(kLabels[t], kKeys[t]));
-    if (t == 1 && nOn > 0) {
+    // the mode's own mark, which says the tab is a mod's
+    if (t == 1) {
+      Decl mark;
+      mark.d.layout.sizing.width = Fixed(Sc(9));
+      mark.d.layout.sizing.height = Fixed(Sc(9));
+      mark.d.custom.customData = Custom(DrawBadge, kScTab);
+      Open(mark);
+      Close();
+    }
+    // the mode's name is its own, so its key is in its tip rather than underlined in it: a name
+    // need not hold an M
+    Text(t == 1 ? Keep(mode) : kLabels[t], UI_FACE_WIDE, Fs(15), 0.04f, bOn || bHot ? kScInkHi : kScInkButton,
+         t == 1 ? -1 : KeyWord(kLabels[t], kKeys[t]));
+    // the mutators' tab counts them, the mode's the settings off its own
+    const int nBadge = t == 1 ? nModeChanged : t == 2 ? nOn : 0;
+    if (nBadge > 0) {
       Decl badge;
       badge.d.layout.sizing.width = Fixed(Sc(22));
       badge.d.layout.sizing.height = Fixed(Sc(22));
@@ -1526,27 +1575,58 @@ int MutatorsViewTabs(float x, float y, float w, int nView, const MutatorSet &m, 
       badge.d.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
       badge.d.custom.customData = Custom(DrawBadge, kScTab);
       Open(badge);
-      Text(Keep(std::to_string(nOn)), UI_FACE_BOLD, Fs(13), 0.0f, kBlack);
+      Text(Keep(std::to_string(nBadge)), UI_FACE_BOLD, Fs(13), 0.0f, kBlack);
       Close();
     }
     Close();
-    TipOn(b.d.id,
-          t ? PortText("Mutators") : pszFirst != NULL ? PortText("Options") : PortText("Game Options"),
-          t ? PortText("One set of mutators for every player: what the map holds, what each player starts with, supply, the "
-                       "fog, build time and tech. Hotkey: U")
-          : pszFirstTip != NULL ? pszFirstTip
+    if (t == 0) {
+      TipOn(b.d.id, pszFirst != NULL ? PortText("Options") : PortText("Game Options"),
+            pszFirstTip != NULL ? pszFirstTip
                                 : PortText("The game type, speed, rules and start positions, and the map. Hotkey: O"));
+    } else if (t == 1) {
+      // {0} the mod the mode comes from
+      TipOn(b.d.id, Keep(pszMode),
+            Keep(pszModeTag != NULL && pszModeTag[0] != '\0'
+                     ? PortTextF("The game type this game is played as, from the {0} mod: its presets and every "
+                                 "setting it offers. Hotkey: M",
+                                 {pszModeTag})
+                     : std::string(PortText("The game type this game is played as, from a mod: its presets and every "
+                                            "setting it offers. Hotkey: M"))));
+    } else {
+      TipOn(b.d.id, PortText("Mutators"),
+            PortText("One set of mutators for every player: what the map holds, what each player starts with, supply, "
+                     "the fog, build time and tech. Hotkey: U"));
+    }
   }
   Spacer();
   Decl set;
   set.d.layout.sizing.height = Fixed(Sc(40));
   set.d.layout.childAlignment.y = CLAY_ALIGN_Y_CENTER;
   Open(set);
-  // {0} the set's name
-  Text(nOn ? Keep(PortTextF("{0} \xc2\xb7 Hyperion rules",
-                            {nPreset >= 0 ? MutatorPresetName(nPreset) : PortText("Custom set")}))
-           : PortText("No mutators \xc2\xb7 as Classic"),
-       UI_FACE_TEXT, Fs(15), 0.0f, nOn ? kScInkAccept : kScInkOff);
+  // the mode and the mutators in a word each: whichever is on, with the rules they bring
+  std::string say;
+  if (bMode)
+    say = pszMode;
+  if (nOn)
+    say += (say.empty() ? std::string() : std::string(kDot)) +
+           (nPreset >= 0 ? std::string(MutatorPresetName(nPreset)) : std::string(PortText("Custom set")));
+  // {0} what is on: the mode, the mutators' set, or both
+  const std::string line = !say.empty() ? PortTextF("{0} \xc2\xb7 Hyperion rules", {say})
+                                        : std::string(PortText("No mutators \xc2\xb7 as Classic"));
+  // it takes what the tabs leave, as the last frame laid them out, and is cut short rather than
+  // wrapped under them
+  float fRoom = 0.0f;
+  const Clay_ElementData was = Clay_GetElementData(strip.d.id);
+  if (was.found) {
+    fRoom = was.boundingBox.width - Sc(10);
+    for (int t = 0; t < 3; ++t) {
+      const Clay_ElementData tab = Clay_GetElementData(Id("skvtab", t));
+      if (tab.found)
+        fRoom -= tab.boundingBox.width + Sc(4);
+    }
+  }
+  Text(Keep(fRoom > 0.0f ? Elide(line, UI_FACE_TEXT, Fs(15), fRoom) : line), UI_FACE_TEXT, Fs(15), 0.0f,
+       say.empty() ? kScInkOff : kScInkAccept);
   Close();
   Close();
   return nClicked;

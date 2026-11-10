@@ -175,6 +175,102 @@ inline void HudFit(double sw, double sh, double x, double y, double w, double h,
   out[3] = sh * f;
 }
 
+// The room a slot of w by h units gives a picture sw by sh, in the picture's own pixels: the
+// picture fitted whole, then the slot measured in its pixels, with the spare counted only when
+// it is wide or tall enough to write a line in. A slot fits by the smaller of its two scales, so
+// one of the two always comes back as the picture's own size: a wide short slot gives columns, a
+// squarer one gives rows.
+inline void HudRoomIn(double sw, double sh, double w, double h, double *pfW, double *pfH) {
+  const double kColumns = 110;  // picture pixels across, for a status's name, what it does and its time
+  const double kRows = 22;      // picture pixels down, for two of those lines and the gap above them
+  *pfW = sw, *pfH = sh;
+  if (sw <= 0 || sh <= 0 || w <= 0 || h <= 0)
+    return;
+  const double fw = w / sw, fh = h / sh, f = fw < fh ? fw : fh;
+  const double rw = w / f, rh = h / f;
+  if (rw - sw >= kColumns)
+    *pfW = rw;
+  else if (rh - sh >= kRows)
+    *pfH = rh;
+}
+
+// Classic's panel in the selection slot: fitted whole as ever, and moved to the slot's start on
+// the axis that has room to spare, so that what a mod adds has one unbroken room beside or under
+// it rather than a margin at each end. With no room to spare this is HudFit, which is what a
+// slot showing no mod readout keeps. out takes x, y, w, h in the slot's units.
+inline void HudReadoutBox(double sw, double sh, double x, double y, double w, double h, double out[4]) {
+  double rw = sw, rh = sh;
+  HudRoomIn(sw, sh, w, h, &rw, &rh);
+  HudFit(sw, sh, x, y, w, h, out);
+  if (rw > sw)
+    out[0] = x;
+  if (rh > sh)
+    out[1] = y;
+}
+
+// The room a mod's unit readout has in the design's selection slot, in the readout's own pixels
+// (port_readout.h), for PortReadoutRoomSet. The classic console, a design with no selection slot
+// and a slot no bigger than the panel all give the panel's own size.
+void PortHudReadoutRoom(int *pnWidth, int *pnHeight);
+// Where the unit readout's panel is on the screen, for the readout's own drawing over it
+// (port_readout.h): classic's panel, the room beside or under it for what a mod adds, and the
+// scale the panel is drawn at. All in the game's own screen pixels, the pixels a dialog's
+// rectangle is in, so a part's place is PortReadoutPartRect scaled by fScale and offset by the
+// panel's box.
+//
+// Both consoles answer. The classic console's panel is the StatData dialog's own rectangle at a
+// scale of 1, with no room, since classic's panel is the whole of it; a design's is its selection
+// slot's placing of the panel (HudReadoutBox), at the slot's scale, with the room the slot leaves
+// (PortHudReadoutRoom). False when no panel is on the screen: no game, the slot left out in
+// Settings, or a design with no selection slot.
+//
+// A design may turn a panel (`rotate`), and a slot's layer is drawn into its own buffer and then
+// composited with that turn, so a rectangle cannot say where a turned panel's parts go: the box is
+// then the turned panel's bounding box, which is a frame to clip to. A readout drawing into a
+// turned panel wants the slot's own layer instead.
+struct PortReadoutPlace {
+  bool bOn = false;
+  double x = 0, y = 0, w = 0, h = 0;                  // classic's panel
+  double roomX = 0, roomY = 0, roomW = 0, roomH = 0;  // the room, 0 wide or tall for none
+  double fScale = 1.0;                                // screen pixels a readout pixel
+};
+bool PortHudReadoutPlace(PortReadoutPlace *pOut);
+
+// A surface a mod's unit readout draws into, in the readout's own pixels (port_readout.h): (0, 0)
+// is classic's panel's top left, the panel is PORT_READOUT_W by PORT_READOUT_H, and what a mod
+// adds goes in the room past one of those two, as PortHudReadoutRoom reports it.
+//
+// A design's selection slot makes one of these over its own layer, so the readout is drawn inside
+// the layer and comes out right under whatever the design does to the panel -- a turn, a scale, a
+// fade -- and takes the layer's effects with it. The classic console has no layer and draws by
+// PortHudReadoutPlace instead.
+//
+// pCtx is the surface's own and goes back to every call. A colour is 0xRRGGBB; alpha is 0 to 1,
+// and a surface that cannot blend takes anything over a half as solid. fPx says how many of the
+// surface's own pixels a readout pixel is, for a caller deciding how much detail will show.
+struct PortReadoutSurface {
+  void *pCtx;
+  bool bFull;   // full colour; false takes each colour to the game palette's nearest
+  double fPx;
+  void (*pfnFill)(void *pCtx, double x, double y, double w, double h, unsigned int nRgb, double fAlpha,
+                  double fRadius);
+  void (*pfnLine)(void *pCtx, double x0, double y0, double x1, double y1, unsigned int nRgb, double fWidth,
+                  double fAlpha);
+  // a status kind's glyph in a box of z (port_readout.h, PortReadoutGlyph)
+  void (*pfnGlyph)(void *pCtx, int nKind, double x, double y, double z, unsigned int nRgb, double fAlpha);
+  // text of fSize readout pixels, its left at x, or centred on x with nAlign 1 and right at x
+  // with 2; y is its middle. nFace is 0 for the kit's text and 1 for its bold.
+  void (*pfnText)(void *pCtx, const char *pszUtf8, double x, double y, double fSize, unsigned int nRgb,
+                  double fAlpha, int nAlign, int nFace);
+  double (*pfnTextWidth)(void *pCtx, const char *pszUtf8, double fSize, int nFace);
+};
+// The readout's own drawing, registered by port_readout.cpp as a game with a readout starts and
+// called wherever a surface for it is made. Nothing is drawn while none is registered, which is
+// what a build without the readout's drawing, and a game without a mod readout, both get.
+typedef void (*PortReadoutSurfaceFn)(const PortReadoutSurface *pSurface);
+void PortHudReadoutSurfaceSet(PortReadoutSurfaceFn pfn);
+PortReadoutSurfaceFn PortHudReadoutSurface(void);
+
 // The selection slot's grid (docs/hud-format.md, "The selection's pages"), as the design
 // center's page lays it out (hud.js's gridAt, hud.html's .sel7) in a slot w x h units holding
 // nUnits: a column of page tabs at its side, the cells beside them, a page's rows from the top

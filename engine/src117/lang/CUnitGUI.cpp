@@ -30,6 +30,7 @@
 #include "../h/saveload.h"       // ours: get_upgrade_level -- sub_423150
 #include "../h/target.h"       // ours: target_off
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../port/render/port_view.h"  // Hyperion: PortViewSeenRect
 #include "../h/playervision.h"  // Hyperion: the slots past 7
 #include "../h/mask.h"          // Hyperion: MaskStampHx
@@ -269,7 +270,7 @@ void CUnit::sub_423000()
   this->pSprite->Deselect();
 
   if (gPlayback == 0 && this->bPlayer == g_LocalNationID
-      && (this->dwFlags & 1) && this->wType == 0x9C)
+      && (this->dwFlags & 1) && ModRulesPowerSource(this->wType))  // Hyperion: and a mod's
   {
     init_juice_matrix();
   }
@@ -576,7 +577,7 @@ void CUnit::sub_423060(BYTE nSelectionIndex)
                              sgbPlayerSelCircleColor_g[this->bPlayer]);
 
     if (gPlayback == 0 && this->bPlayer == g_LocalNationID
-        && (this->dwFlags & 1) && this->wType == 0x9C)
+        && (this->dwFlags & 1) && ModRulesPowerSource(this->wType))  // Hyperion: and a mod's
     {
       ShowPowerTemplates();
     }

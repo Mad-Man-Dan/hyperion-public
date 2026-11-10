@@ -17,6 +17,7 @@
 #include "../h/CUnitTSpells.h"   // ours: gamesnd_play
 #include "../gen/globals117.h"
 #include "../h/handicap.h"  // Hyperion: a player's handicap
+#include "../port/data/port_modrules.h"  // Hyperion: ModRulesNoAnimation
 
 // The globals this TU reaches, dual-spelled: one #ifdef per name, never one over the whole
 // block, since the generated set grows over time and a single guard would go false and
@@ -89,8 +90,8 @@ void CUnit::DispatchBuildProtoss()
       WORD wBuildType = wBuildQueue[bBuildQueueSlot];
       CUnit *pNew;
 
-      if (wBuildType == 0x9D)
-        pNew = ReplaceGeyser(0x9D);
+      if (wBuildType == 0x9D || ModRulesModGas(wBuildType))  // Hyperion: or a mod's gas building
+        pNew = ReplaceGeyser(wBuildType);
       else
         pNew = CreateUnitAt(wBuildType, wOrderTargetX, wOrderTargetY, bPlayer);
 
@@ -150,6 +151,9 @@ void CUnit::DispatchBuildSelfProtoss()
       bOrderFlags &= ~1;
       pSprite->ChangeImage(guwSpriteImage[pSprite->wSpriteID], 0);
       pSprite->SetAnimation(0x15, 1);
+      // Hyperion: a building whose script has no warp-in, one a mod's race warps in, is done
+      if (ModRulesNoAnimation(pSprite->pMainImage, 0x15))
+        bOrderFlags |= 1;
       bOrderState = 3;
     }
     return;

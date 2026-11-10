@@ -40,6 +40,10 @@
 #include "../h/CUnitSpells.h"     // CloakUpdate
 #include "../gen/globals117.h"
 #include "../h/typelimits.h"  // Hyperion: OrderTypeMod
+#include "../h/CUnitInit.h"  // Hyperion: get_order_tech_energy_cost
+#include "../h/count.h"  // Hyperion: count_race
+#include "../port/data/port_moddata.h"  // Hyperion: ModOrderHandler
+#include "../port/data/port_modlua.h"  // Hyperion: a mod's orders' charges
 #include "../h/selectlimits.h"  // Hyperion: SELECTION_MAX
 #include "../h/handicap.h"  // Hyperion: a player's handicap
 
@@ -625,9 +629,50 @@ void CUnit::RunOrders() {
     DispatchJunkYardDog();
     return;
   default:
-    // Hyperion: a mod's order is a spell, its weapon and tech its row's
-    if (OrderTypeMod(bOrderId))
+    // Hyperion: a mod's order is a spell, its weapon and tech its row's; one made from a
+    // classic spell order that does its own work runs that order's handler
+    if (OrderTypeMod(bOrderId)) {
+      switch (ModOrderHandler(bOrderId, order_techType[bOrderId])) {
+      case 0x89:
+        DispatchTeleport();
+        return;
+      case 0x8B:
+        DispatchPlaceScanner();
+        return;
+      case 0x8D:
+        DispatchDefMatrix();
+        return;
+      case 0x94:
+        DispatchHallucinate();
+        return;
+      case 0xB6:
+        DispatchMindControl();
+        return;
+      case 0xB8:
+        DispatchPsyFeedback();
+        return;
+      case MOD_ORDER_STIM: {
+        // Stim Packs has no order: the caster pays the tech's energy and stims, as the button does
+        const WORD wCost = get_order_tech_energy_cost(bOrderId);
+        if (NeedsMoreEnergy(wCost))
+          map_msg_target_self(status_get_str(count_race(wType) + 0x360), bPlayer);
+        else if (CanUseStim()) {
+          SubtractEnergy(wCost);
+          UnitApplyStim();
+        }
+        EndDispatchOrder();
+        return;
+      }
+      }
+      // a cast with no charge left is refused; one that begins takes a charge
+      if (g_hxModGame && ModLuaOrderRefused(this))
+        return;
+      const int nWasOrder = bOrderId;
+      const BYTE bWasState = bOrderState;
       DispatchClickAbility();
+      if (g_hxModGame && bWasState != 2 && bOrderState == 2 && bOrderId == nWasOrder)
+        ModLuaOrderBegan(this);
+    }
     return;
   }
 }

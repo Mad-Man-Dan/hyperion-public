@@ -9,6 +9,7 @@ static int sgnHelpSndTimer;
 #include "oc_data.h"  // Hyperion: OC_VA
 #include "../h/gamesnd.h"
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 
 // The globals this TU reaches, dual-spelled, one #ifdef per name.
 #ifndef gxUnitLife
@@ -377,6 +378,7 @@ void __fastcall gamesnd_update(void) {
 int __fastcall gamesnd_play(int nSoundId, CUnit *pUnit, int a3, int nVolume) {
   if (nSoundId == 0)
     return 0;
+  nSoundId = ModRulesAdvisorSound(nSoundId);  // Hyperion: a mod's race's advisor
   if (gOptions_sound_on == 0)
     return 0;
   if (a3 == 0)
@@ -731,6 +733,7 @@ void __fastcall gamesnd_build_complete(CUnit *pUnit) {
 // inlines gamesnd_play here, with no unit.
 void __fastcall gamesnd_show_player_error(int nPlayer, WORD wSoundId, int nStringId) {
   PortHudError(nPlayer, nStringId);  // Hyperion: alert.minerals, gas, supply (port_hudstate.cpp)
+  nStringId = ModRulesAdvisorString(nStringId);  // Hyperion: a mod's race's advisor
   if (nPlayer != (int)g_LocalNationID)
     return;
   if (gPlayback)

@@ -71,8 +71,11 @@
 #include "../h/sai_PathCreate.h"  // ep_glob_t, the region block epGlob points at
 #include <string.h>               // memset
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../h/handicap.h"  // Hyperion: a player's handicap
 #include "../h/mutators.h"  // Hyperion: the supply boost
+#include "../port/data/port_moddata.h"  // Hyperion: ModRaceAiUnit, ModRaceAiClassic
+#include "../h/typelimits.h"  // Hyperion: UnitTypeValid
 
 // The globals this TU reaches, dual-spelled with one guard per name: the
 // literal arm is what the payload ships. The guard is per name and never one
@@ -759,6 +762,10 @@ int __fastcall town_queue_idle_building(int nPlayer, CUnit *pUnit, int nArg2)
 // tag is two byte stores the compiler merges into one immediate word store.
 void town_add_unit(TTown *pTown, CUnit *pUnit)
 {
+    // Hyperion: a unit the game's mode has taken is the mode's to play (hx.own), so no town
+    // takes it on as a worker or a building of its own
+    if (AiModeKeeps(pUnit))
+        return;
     DWORD dwFlags = gulUnitTypeFlags[pUnit->wType];
     if ((dwFlags & 8) != 0)
     {
@@ -848,7 +855,7 @@ void town_add_unit(TTown *pTown, CUnit *pUnit)
 // 0x484F10, 33 B.
 void town_clear_repair_worker(CUnit *pUnit)
 {
-    if (pUnit->wType != 7)
+    if (ModRaceAiClassic(pUnit->bPlayer, pUnit->wType) != 7)  // Hyperion: or a mod's race's stand-in
         return;
     TWorker *pRec = (TWorker *)pUnit->dwUnion134;
     if (pRec == 0)
@@ -974,6 +981,7 @@ void town_tick(TTown *pTown)
         nWorkerType = 7;
     else
         nWorkerType = bRace == 0 ? 0x29 : 0x40;
+    nWorkerType = ModRaceAiUnit(pTown->bPlayer, nWorkerType);  // Hyperion: or a mod's race's stand-in
     unsigned int nWorkers = count_get_completion(nWorkerType, pTown->bPlayer);
 
     if (nQuota > nLimit)
@@ -1152,6 +1160,7 @@ int __fastcall worker_build_top_demand(TTown *pTown, CUnit *pUnit)
         goto fail;
     {
         int nType = sai_top_demand_arg(pUnit->bPlayer);
+        nType = ModRulesAiPowerFirst(pUnit->bPlayer, nType);  // Hyperion: a mod's race's power before what needs it
         if (!unit_can_make_type(pUnit, (WORD)nType))
             goto fail;
         if (TTAllowed((WORD)nType, pUnit->bPlayer, pUnit) != 1)
@@ -1212,7 +1221,10 @@ int __fastcall worker_build_top_demand(TTown *pTown, CUnit *pUnit)
             }
         }
         banker_spend_top_demand(pTown->bPlayer);
-        int nOrder = worker_build_order(pUnit->wType);
+        // Hyperion: a mod's race's worker builds as the worker it stands in for
+        int nOrder = worker_build_order((WORD)ModRaceAiClassic(pUnit->bPlayer, pUnit->wType));
+        if (nOrder != 0)
+            nOrder = ModRulesWorkerOrder(pUnit, nOrder);  // Hyperion: and its race's way of building
         if (nOrder == 0)
             goto fail;
         pUnit->SetOrder_xy((BYTE)nOrder, ptTarget.x, ptTarget.y);
@@ -1381,6 +1393,9 @@ void town_queue_supply(TTown *pTown)
     int nSupplyType = bRace1 == 1 ? 0x6D : (bRace1 == 0 ? 0x2A : 0x9C);
     BYTE bRace2 = gPlayerData[bPlayer].nRace;
     int nWorkerType = bRace2 == 1 ? 7 : (bRace2 == 0 ? 0x29 : 0x40);
+    // Hyperion: or a mod's race's stand-ins
+    nSupplyType = ModRaceAiUnit(bPlayer, nSupplyType);
+    nWorkerType = ModRaceAiUnit(bPlayer, nWorkerType);
     int nFood = count_food_available(nWorkerType, bPlayer);
     unsigned nNeed;
 
@@ -1456,6 +1471,7 @@ void town_queue_refinery(TTown *pTown)
         nType = 0x6E;
     else
         nType = bRace == 0 ? 0x95 : 0x9D;
+    nType = ModRaceAiUnit(pTown->bPlayer, nType);  // Hyperion: or a mod's race's stand-in
     banker_demand_structure(pTown->bPlayer, (intptr_t)pTown, nType, nArg);
 }
 
@@ -1652,6 +1668,7 @@ __declspec(noinline) int town_gas_class(int nArg0, CUnit *pUnit)
             nWant = 0x6E;
         else
             nWant = bRace == 0 ? 0x95 : 0x9D;
+        nWant = ModRaceAiUnit(nArg0, nWant);  // Hyperion: or a mod's race's stand-in
 
         int nResult = 0;
         if (nType == nWant)
@@ -1666,14 +1683,15 @@ __declspec(noinline) int town_gas_class(int nArg0, CUnit *pUnit)
 
 // Two plain ifs, not a ternary: inlined into town_player_tick, a `== 0x83` test
 // then folds to the race tests the oracle has.
+// Hyperion: a mod's race's stand-in for its base's town hall.
 int get_player_depot_type(int nPlayer)
 {
     BYTE bRace = gPlayerData[nPlayer].nRace;
     if (bRace == 1)
-        return 0x6A;
+        return ModRaceAiUnit(nPlayer, 0x6A);
     if (bRace == 0)
-        return 0x83;
-    return 0x9A;
+        return ModRaceAiUnit(nPlayer, 0x83);
+    return ModRaceAiUnit(nPlayer, 0x9A);
 }
 
 // 0x485F20  worker_harvest_order
@@ -2439,7 +2457,7 @@ TTown *town_from_area(int nPlayer, rect32_t *pRect, int nPlan)
                 if (pUnit->dwUnion134 == 0)
                 {
                     town_add_unit(pTown, pUnit);
-                    switch (pUnit->wType)
+                    switch (ModRaceAiClassic(nPlayer, pUnit->wType))  // Hyperion: a mod's race's stand-ins as theirs
                     {
                     case 7: case 41: case 64:          // the three workers
                         if (pAnchor == 0)
@@ -2663,7 +2681,7 @@ void town_need(TTown *pTown, int nKind, int nId, int nArg3, int nArg4)
 {
     if ((unsigned int)nKind > 0x1E)
         return;
-    if ((unsigned int)nId >= 0xE4)
+    if (!UnitTypeValid((unsigned int)nId))  // Hyperion: the classic 228, and a mod's units
         return;
     add_request_to_town_queue(pTown, 0, nKind, (WORD)nId, (BYTE)nArg3, nArg4);
 }

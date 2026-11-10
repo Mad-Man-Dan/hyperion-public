@@ -457,8 +457,8 @@
     var side = h('div', 'jn-side');
     // the seats: the match this page is seated in, or the matches being set up to sit in
     var box = h('section', 'jn-box jn-seatbox');
-    var head = h('div', 'jn-lobby-head'), a = h('div'), kicker = h('p', 'jn-kicker'), title = h('h1', 'jn-h2'), meta = h('p', 'jn-meta'), muts = h('p', 'jn-fine');
-    add(a, kicker, title, meta, muts);
+    var head = h('div', 'jn-lobby-head'), a = h('div'), kicker = h('p', 'jn-kicker'), title = h('h1', 'jn-h2'), meta = h('p', 'jn-meta'), mode = h('p', 'jn-fine'), muts = h('p', 'jn-fine');
+    add(a, kicker, title, meta, mode, muts);
     var count = h('span', 'jn-chip');
     add(head, a, count);
     var seatsEl = h('div', 'jn-seats'), closed = h('p', 'jn-closed');
@@ -630,6 +630,9 @@
       kicker.textContent = 'Being set up by the host';
       title.textContent = m.mapName || m.name;
       meta.textContent = [m.type === 'melee' ? 'Melee' : m.type, SPEED[m.speed] || m.speed, (m.rules || J.room.rules || 'classic') + ' rules', m.mapPlayers + ' starts'].filter(Boolean).join(' · ');
+      // the game mode the host chose, where the match is played in one
+      mode.textContent = m.mode ? 'Game mode, the host’s: ' + (m.modeName || m.mode) + '.' : '';
+      mode.hidden = !m.mode;
       var mt = mutText(m.mutators);
       muts.textContent = mt ? 'Mutators, the host\u2019s: ' + mt + '.' : '';
       muts.hidden = !mt;

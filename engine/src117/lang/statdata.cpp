@@ -331,6 +331,12 @@ void __fastcall statdata_show_stats(ctrl_t *pCtrl) {
 void __fastcall statdata_ctx_show(ctrl_t *pCtrl, intptr_t nParam) {
   int nParentTop = 0;
   int nParentLeft = 0;
+  // Hyperion: a mod readout's words for one of the stat icons, under the original's own or in
+  // place of them. Here, where every one of the panel's tooltips is shown, so both consoles get
+  // them: over a design the bubble is the design's tooltip (ctxhelp_show).
+  char szRollTip[0x200];
+  if (PortConsoleRollIconTip(pCtrl->nIndex, reinterpret_cast<const char *>(nParam), szRollTip, sizeof szRollTip))
+    nParam = reinterpret_cast<intptr_t>(szRollTip);
   if (pCtrl->wType != 0) {
     ctrl_t *pParent = pCtrl->pParent;
     nParentLeft = pParent->rc.left;
@@ -411,6 +417,27 @@ int __fastcall statdata_queue_arrow_ctrl_fcn(ctrl_t *pCtrl,
 // 0x4A1FA0, 83 B
 void __fastcall statdata_dlg_mouse_moved(ctrl_t *pCtrl, dlgevt_t *pEvent) {
   ctrl_t *pHit = IsGamePaused() ? NULL : ctrl_find(pCtrl, pEvent);
+  // Hyperion: a mod readout's tooltips for the wireframe and the name (port_console.h,
+  // PortConsoleRollPartTipAt). Both are an image or a text control, which answer no hit test, so
+  // the hit here is the dialog itself and the point is what says which part the cursor is over.
+  // Classic shows nothing for either, so this only ever adds a bubble where there was none.
+  if (pHit == NULL || pHit == pCtrl) {
+    char szPartTip[0x200];
+    int nPart = 0;
+    if (!IsGamePaused() &&
+        PortConsoleRollPartTipAt(pEvent->nX - pCtrl->rc.left, pEvent->nY - pCtrl->rc.top, &nPart,
+                                 szPartTip, sizeof szPartTip)) {
+      ctrl_t *pOver = ctrl_find_ndx(pCtrl, nPart);
+      if (pOver != NULL) {
+        if (pOver != sgpStatDataHoverCtrl_g) {
+          sgpStatDataHoverCtrl_g = pOver;
+          sgpStatDataHoverData_g = ctrl_data26(pOver);
+          statdata_ctx_show(pOver, reinterpret_cast<intptr_t>(szPartTip));
+        }
+        return;
+      }
+    }
+  }
   if (pHit != sgpStatDataHoverCtrl_g ||
       (pHit != NULL && ctrl_data26(pHit) != sgpStatDataHoverData_g)) {
     sgpStatDataHoverCtrl_g = pHit;
@@ -953,6 +980,14 @@ void __fastcall statdata_hover_update(ctrl_t *pDlg, ctrl_t *pCtrl) {
     return;
   }
   if (pCtrl->nIndex >= 0x21 && pCtrl->nIndex <= 0x2C) {
+    // Hyperion: a mod readout names the unit and says what is on it, over 1.17's own words
+    char szName[0x40], szThings[0x100], szText[0x200];
+    const statdata_select_t *pSel = static_cast<statdata_select_t *>(ctrl_data26(pCtrl));
+    if (pSel != NULL && PortConsoleRollTip(pSel->pUnit, szName, sizeof szName, szThings, sizeof szThings)) {
+      psnprintf(szText, sizeof(szText), "%s\n%s\n%s", szName, szThings, status_get_str(0x329));
+      statdata_ctx_show(pCtrl, reinterpret_cast<intptr_t>(szText));
+      return;
+    }
     statdata_ctx_show(pCtrl, reinterpret_cast<intptr_t>(status_get_str(0x329)));
     return;
   }
@@ -1113,6 +1148,12 @@ void __fastcall statdata_select_btn_draw(ctrl_t *pCtrl, int nXOfs, int nYOfs,
                     &frame, &rc, NULL);
   }
   sub_4A7F10();
+  // Hyperion: a mod readout's rank pip and its dots over the box, after the wireframe's remap
+  // is put back, since they are drawn in the palette's own colours
+  PortRollMark mark;
+  if (PortConsoleRollMarkOf(u, &mark))
+    PortConsoleRollMarks(pCtrl->rc.left, pCtrl->rc.top, pCtrl->rc.right - pCtrl->rc.left + 1,
+                         pCtrl->rc.bottom - pCtrl->rc.top + 1, mark);
 }
 
 // Multi-selection button event handler.

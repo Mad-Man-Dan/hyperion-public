@@ -40,6 +40,10 @@ const char *const CHK_NAME = "staredit\\scenario.chk";
 const int NEUTRAL = 11;
 const int PLAYERS_CHK = 12;
 const int HXM_VERSION = 1;  // map.json's "version" this build reads (docs/hxm-format.md)
+// raised whenever the compile writes a map differently; it renames the cached compiles
+// (3: the cache's name takes the mod's data, and a compile made before it did may hold a
+// mod's units under the name a game without the mod reads)
+const DWORD COMPILE_REVISION = 3;
 
 // ---------------------------------------------------------------------------
 // The log, hyperion_hxm.log in the data folder.
@@ -135,6 +139,7 @@ struct Compile {
   static const int kTrigHxCode = 0x100;
   std::vector<unsigned long long> hxte;  // TRIG's triggers' slots past 11 (HXTE)
   bool bModUnits = false;  // the map names a mod's units
+  bool bClassic = false;  // the document's limits are classic: never a Hyperion map
   bool bNoGame = false;  // a check with no game at hand: a new map's VCOD is left out
 
   void Fail(const std::string &why) {
@@ -946,7 +951,14 @@ struct Compile {
     // Hyperion map HXPL has the slots from 8 on
     const PortJson &docPlayers = doc["players"];
     bHx = false;
-    for (size_t i = PLAYER_LOBBY_117; i < docPlayers.size(); ++i) {
+    // limits "classic": slots 8 to 10 are owners no lobby seats, whatever their kind
+    const PortJson &limits = doc["limits"];
+    bClassic = limits.kind == PortJson::STRING && limits.s == "classic";
+    if (limits.kind != PortJson::NONE && limits.kind != PortJson::NULLV && !bClassic) {
+      Fail("unknown limits " + (limits.kind == PortJson::STRING ? limits.s : std::string("value")));
+      return false;
+    }
+    for (size_t i = PLAYER_LOBBY_117; !bClassic && i < docPlayers.size(); ++i) {
       const PortJson &slot = docPlayers.At(i)["slot"];
       const int n = slot.kind == PortJson::NONE ? 0 : Name(kHxmSlots, slot, "slot");
       bHx = bHx || n == 5 || n == 6;
@@ -1138,11 +1150,22 @@ struct Compile {
       version = 64;
     else if (bWide && version == 205)
       version = 206;
+    if (bClassic && (bModUnits || width > MAP_SIDE_117 || height > MAP_SIDE_117)) {
+      Fail(bModUnits ? "the map's limits are classic, and it places a mod's units"
+                     : "the map's limits are classic, and it is more than 256 tiles a side");
+      return false;
+    }
     // a map past what a classic map holds says so in its VER (maplimits.h)
     if (bHx || bHxte || bModUnits || width > MAP_SIDE_117 || height > MAP_SIDE_117)
       version = bExpansion ? MAP_VERSION_HX : MAP_VERSION_HX_ORIGINAL;
     else if (version == MAP_VERSION_HX || version == MAP_VERSION_HX_ORIGINAL)
       version = bExpansion ? (bWide ? 206 : 205) : (bWide ? 64 : 63);
+    // every version after 59 reads MRGN as 255 locations only (maphdr_MRGN_Ext), so a map of
+    // 64 raised past 59 gets the rest as empty ones; the 64th, Anywhere, keeps its place
+    if (version != 59)
+      for (Part &p : later)
+        if (p.tag == "MRGN" && p.body.size() < 255 * 20)
+          p.body.resize(255 * 20, 0);
     parts[verAt].body = word(version);
     add(parts, bWide ? "STRx" : "STR ", table);
     const PortJson &others = doc["sections"];
@@ -1352,8 +1375,17 @@ bool PortHxmCompiled(const char *pszHxm, char *pszOut, size_t cchOut) {
   char szFull[MAX_PATH];
   if (!GetFullPathNameA(pszHxm, MAX_PATH, szFull, NULL))
     return false;
-  // the cache's name: the map's own name and a hash of its full path
+  // the cache's name: the map's own name and a hash of its full path and of the compiler's
+  // revision, so a compile from before a change to what Run writes is never read again
   DWORD dwHash = 2166136261u;
+  dwHash = (dwHash ^ COMPILE_REVISION) * 16777619u;
+  // and of the mod's data, when one loaded: the compile writes a mod's unit as the number
+  // that data gives it, so one made with other data, or with none, is never read in its place
+  if (*ModDataId()) {
+    const unsigned char *pPrint = ModDataFingerprint();
+    for (int i = 0; i < 20; ++i)
+      dwHash = (dwHash ^ pPrint[i]) * 16777619u;
+  }
   for (const char *p = szFull; *p; ++p)
     dwHash = (dwHash ^ static_cast<BYTE>(*p >= 'A' && *p <= 'Z' ? *p + 32 : *p)) * 16777619u;
   const char *pszLeaf = strrchr(szFull, '\\');

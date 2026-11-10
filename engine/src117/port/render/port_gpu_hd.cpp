@@ -9,6 +9,7 @@
 #include "port_teamcolor.h"  // PortTeamColorGet, PortTeamShades
 #include "port_modart.h"      // PortModArtImage, a mod's sheets at their own resolution
 #include "../data/port_moddata.h"  // MOD_ART_ICON
+#include "../data/port_modtileset.h"  // ModTilesetOwnLook
 #include "../../h/typelimits.h"  // IMAGE_TYPES_MAX
 #include "VSHdQuad.dxil.h"
 #include "VSHdQuad.spv.h"
@@ -932,10 +933,12 @@ static void GpuHdModUiUp(GpuHdUploads *pUp)
   g_nHdModUiSerial = g_hdModUiTex != NULL ? g_hdModUi->nSerial : 0;
 }
 
-// The tileset's terrain, once it is in; until then, and for another tileset's, SD.
+// The tileset's terrain, once it is in; until then, for another tileset's, and for one a mod
+// recolours or draws anew, SD.
 static void GpuHdTerrainUp(const SceneFrame *pFrame, GpuHdUploads *pUp)
 {
-  const PortHdTerrain *pTerrain = PortHdTileset(pFrame->nEra);
+  const bool bOwn = ModTilesetOwnLook(pFrame->nEra);
+  const PortHdTerrain *pTerrain = bOwn ? NULL : PortHdTileset(pFrame->nEra);
   if (pTerrain != NULL && pTerrain != g_pHdTerrain) {
     SDL_GPUCopyPass *pCopy = GpuHdCopy(pUp);
     if (pCopy != NULL) {
@@ -957,7 +960,7 @@ static void GpuHdTerrainUp(const SceneFrame *pFrame, GpuHdUploads *pUp)
       g_pHdTerrain = g_hdTerrainTex != NULL ? pTerrain : NULL;
     }
   }
-  if (g_pHdTerrain != NULL && g_pHdTerrain->nEra != pFrame->nEra)
+  if (g_pHdTerrain != NULL && (g_pHdTerrain->nEra != pFrame->nEra || bOwn))
     g_pHdTerrain = NULL;
 }
 

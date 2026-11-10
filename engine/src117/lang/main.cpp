@@ -48,6 +48,8 @@
 #include "../port/gameplay/port_score.h"  // Hyperion: PortScoreGameEnd
 #include "../port/tools/port_startup.h"  // Hyperion: PortStartupStep, PortStartupWait, PortStartupReady
 #include "../port/tools/port_crashnotes.h"  // Hyperion: PortCrashNotesGameEnd
+// Hyperion: h/port_hxreplay.h brings the C library's stdio, which this file declares itself
+void ReplayHxKeepSlots();
 #endif
 #include "../h/TrigAct.h"
 #include "../h/uiSingle.h"
@@ -94,6 +96,7 @@ int    __cdecl fputc(int ch, void *pFile);
 // declarations above
 bool PortFrontCinematicWatched(void);
 void PortModCheckRun(void);
+void PortModeRollRun(void);
 
 // The Storm import RunGame installs the Authenticode check through. The ledger
 // has its decorated name, which this declaration mangles to.
@@ -690,6 +693,7 @@ void main_game_run()
     if (gGameData.wUnk0E == 0)
       gGameData.wUnk0E = gGameHeader.wSubType;
     replay_set_gamedata(&gGameHeader, gPlayerData.a, gdwColorSlotMap_g);
+    ReplayHxKeepSlots();  // Hyperion: the slots past 11, as these twelve
   }
   close_savefile();
   if (gbMultiPlayerMode != 0)
@@ -767,6 +771,10 @@ void RunGame()
   // ends the process (port_modcheck.cpp)
   if (PortCommandOptions()->szModCheck[0] != '\0')
     PortModCheckRun();
+  // Hyperion: --mode-roll rolls a mode's generate once, writes the run as JSON and ends the
+  // process, with no window and no game (port_modcheck.cpp)
+  if (PortCommandOptions()->szModeRoll[0] != '\0')
+    PortModeRollRun();
   SNetSetCodeSignVerifcationFunction(
       reinterpret_cast<bool (__fastcall *)(const char *)>(
           VerifyBlizzardSignature));

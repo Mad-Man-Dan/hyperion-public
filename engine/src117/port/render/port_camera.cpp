@@ -18,6 +18,9 @@
 #include "../gameplay/port_cutscene.h"
 #include "port_motion.h"
 #include "../platform/port_settings.h"
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // DesignGamePane
+#endif
 
 enum { ZOOM_STEPS_A_DOUBLING = 4 };  // wheel notches from a zoom to twice it
 static const float ZOOM_MOST = 32.0f;  // past any map's whole at the smallest view
@@ -63,11 +66,17 @@ static void CameraStart(void)
 }
 
 // In a game the zoomMax setting, 2 unless set; in a replay and while a cutscene plays the whole
-// map, or the setting if that is more.
+// map, or the setting if that is more. The design engine and the studio have a key of their
+// own, since they share the settings file with the game and work with the map zoomed out.
 double PortCameraZoomMax(void)
 {
   double f = 2.0;
+#ifdef HX_DESIGN
+  f = 8.0;
+  PortSettingNumber("hyperion", "designZoomMax", &f);
+#else
   PortSettingNumber("hyperion", "zoomMax", &f);
+#endif
   f = f < 1.0 ? 1.0 : f > 8.0 ? 8.0 : f;
   const double fWhole = PortViewZoomWhole();
   f = fWhole > f ? (fWhole < ZOOM_MOST ? fWhole : ZOOM_MOST) : f;
@@ -104,6 +113,10 @@ int PortCameraSmooth(void)
 // a replay may look closer, and a cutscene in a game
 double PortCameraZoomMin(void)
 {
+#ifdef HX_DESIGN
+  if (DesignGamePane())
+    return 0.5;  // a small pane shows the map closer than the game's own view
+#endif
   return PortViewZoomWhole() > 0.0 || PortCutsceneRunning() ? 0.5 : 1.0;
 }
 

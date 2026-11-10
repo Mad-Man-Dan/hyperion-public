@@ -19,12 +19,19 @@
 #include "port_gpu_internal.h"
 #include "port_overlay.h"  // PortOverlayBuild
 #include "../hud/port_hud.h"  // PortHudPreviewTake
+#ifdef HX_DESIGN
+#include "../../design/design_hooks.h"  // the design engine's hooks
+#endif
 
 // The front end (F1).
 
 static SDL_GPUGraphicsPipeline *g_uiPipeline;
 static SDL_GPUGraphicsPipeline *g_planetPipeline;
 static SDL_GPUGraphicsPipeline *g_overlayPipeline;  // the UI pipeline for the swapchain's format
+// the same two for the fills that add their light (UiFillAdd), whose blend adds the colour to
+// what is under it instead of covering it
+static SDL_GPUGraphicsPipeline *g_uiAddPipeline;
+static SDL_GPUGraphicsPipeline *g_overlayAddPipeline;
 static bool g_uiTried;
 static SDL_GPUTexture *g_uiAtlas;           // the glyph atlas, R8
 static SDL_GPUTransferBuffer *g_uiAtlasUp;
@@ -43,6 +50,8 @@ static SDL_GPUTransferBuffer *g_uiPrimsUp;
 static Uint32 g_nUiPrims;                   // bytes the two hold
 static SDL_GPUCommandBuffer *g_uiCmd;        // the frame begun
 static SDL_GPUTexture *g_uiSwap;
+static const UiPrim *g_pStaged;              // the caller's list GpuUiStage uploaded, its length
+static int g_nStaged;
 static char g_szUiError[256];               // why the front end cannot draw
 
 struct UiTargetParams {
@@ -60,7 +69,11 @@ void GpuUiRelease(void)
     SDL_ReleaseGPUGraphicsPipeline(g_device, g_planetPipeline);
   if (g_overlayPipeline != NULL)
     SDL_ReleaseGPUGraphicsPipeline(g_device, g_overlayPipeline);
-  g_overlayPipeline = NULL;
+  if (g_uiAddPipeline != NULL)
+    SDL_ReleaseGPUGraphicsPipeline(g_device, g_uiAddPipeline);
+  if (g_overlayAddPipeline != NULL)
+    SDL_ReleaseGPUGraphicsPipeline(g_device, g_overlayAddPipeline);
+  g_overlayPipeline = g_uiAddPipeline = g_overlayAddPipeline = NULL;
   if (g_uiAtlas != NULL)
     SDL_ReleaseGPUTexture(g_device, g_uiAtlas);
   if (g_uiAtlasUp != NULL)
@@ -83,14 +96,20 @@ void GpuUiRelease(void)
   g_uiAtlas = g_uiPlanet = g_uiTarget = g_uiPictures = NULL;
   g_uiAtlasUp = g_uiDown = g_uiPrimsUp = g_uiPicturesUp = NULL;
   g_uiPrims = NULL;
+  g_pStaged = NULL;
+  g_nStaged = 0;
   g_nUiPlanetW = g_nUiPlanetH = g_nUiW = g_nUiH = 0;
   g_nUiDown = g_nUiPrims = 0;
   g_uiTried = false;
 }
 
 // The pipelines and the atlas, made on the front end's first frame.
-// The UI's pipeline for a target of a format: straight alpha over what is there.
-static SDL_GPUGraphicsPipeline *GpuUiPipeline(SDL_GPUShader *pVs, SDL_GPUShader *pPs, SDL_GPUTextureFormat format)
+// The UI's pipeline for a target of a format: straight alpha over what is there, or, for the
+// fills that add their light, the colour added to what is there and the alpha left as it is.
+// Those fills come out of the shader multiplied by their own opacity, so the blend takes them
+// whole (UiFillAdd, ui.hlsl).
+static SDL_GPUGraphicsPipeline *GpuUiPipeline(SDL_GPUShader *pVs, SDL_GPUShader *pPs, SDL_GPUTextureFormat format,
+                                              bool bAdd)
 {
   SDL_GPUColorTargetDescription target;
   SDL_GPUGraphicsPipelineCreateInfo info;
@@ -98,11 +117,13 @@ static SDL_GPUGraphicsPipeline *GpuUiPipeline(SDL_GPUShader *pVs, SDL_GPUShader 
   SDL_zero(info);
   target.format = format;
   target.blend_state.enable_blend = true;
-  target.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-  target.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+  target.blend_state.src_color_blendfactor = bAdd ? SDL_GPU_BLENDFACTOR_ONE : SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+  target.blend_state.dst_color_blendfactor =
+      bAdd ? SDL_GPU_BLENDFACTOR_ONE : SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
   target.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
   target.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-  target.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+  target.blend_state.dst_alpha_blendfactor =
+      bAdd ? SDL_GPU_BLENDFACTOR_ONE : SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
   target.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
   info.vertex_shader = pVs;
   info.fragment_shader = pPs;
@@ -123,13 +144,17 @@ static bool GpuUiInit(void)
   SDL_GPUShader *pPsUi = GpuShader(GPU_CODE(PSUi), "PSUi", SDL_GPU_SHADERSTAGE_FRAGMENT, 3, 0, 1);
   SDL_GPUShader *pVsFull = GpuShader(GPU_CODE(VSFull), "VSFull", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 0);
   SDL_GPUShader *pPsPlanet = GpuShader(GPU_CODE(PSPlanet), "PSPlanet", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 1);
-  if (pVsUi != NULL && pPsUi != NULL)
-    g_uiPipeline = GpuUiPipeline(pVsUi, pPsUi, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+  if (pVsUi != NULL && pPsUi != NULL) {
+    g_uiPipeline = GpuUiPipeline(pVsUi, pPsUi, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, false);
+    g_uiAddPipeline = GpuUiPipeline(pVsUi, pPsUi, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, true);
+  }
   if (pVsFull != NULL && pPsPlanet != NULL)
     g_planetPipeline = GpuPipeline(pVsFull, pPsPlanet, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
   // the overlay over a game's frame (GpuUiOverlay) draws straight into the swapchain
-  if (pVsUi != NULL && pPsUi != NULL && g_claimed && g_swapFormat != SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM)
-    g_overlayPipeline = GpuUiPipeline(pVsUi, pPsUi, g_swapFormat);
+  if (pVsUi != NULL && pPsUi != NULL && g_claimed && g_swapFormat != SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM) {
+    g_overlayPipeline = GpuUiPipeline(pVsUi, pPsUi, g_swapFormat, false);
+    g_overlayAddPipeline = GpuUiPipeline(pVsUi, pPsUi, g_swapFormat, true);
+  }
   const char *pszShaderError = pVsUi == NULL || pPsUi == NULL || pVsFull == NULL || pPsPlanet == NULL
                                    ? SDL_GetError() : NULL;
   if (pszShaderError != NULL)
@@ -164,6 +189,55 @@ static bool GpuUiInit(void)
     return false;
   }
   return true;
+}
+
+// The pipeline for a target: the swapchain's format, or RGBA8; and the one whose blend adds,
+// for the fills that add their light.
+static SDL_GPUGraphicsPipeline *GpuUiPipelineFor(bool bSwap, bool bAdd)
+{
+  const bool bOwn = !bSwap || g_swapFormat == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  if (bAdd)
+    return bOwn ? g_uiAddPipeline : g_overlayAddPipeline;
+  return bOwn ? g_uiPipeline : g_overlayPipeline;
+}
+
+// nCount primitives of the list from nFirst, drawn in runs: a run is as many in a row as blend
+// alike, so the fills that add their light go through the adding pipeline and everything else
+// through the plain one, each in the order the list has them. A list with no such fill, which is
+// every frame of the front end, is one run and one draw, as it was before there were two. The
+// list itself is wanted to tell them apart; without it everything is drawn the plain way.
+static void GpuUiRuns(SDL_GPUCommandBuffer *pCmd, SDL_GPURenderPass *pPass, Uint32 nWidth, Uint32 nHeight,
+                      const UiPrim *pPrims, int nFirst, int nCount, bool bSwap)
+{
+  UiTargetParams tp;
+  tp.fWidth = static_cast<float>(nWidth);
+  tp.fHeight = static_cast<float>(nHeight);
+  tp.fUnused[0] = tp.fUnused[1] = 0.0f;
+  SDL_GPUTextureSamplerBinding bindings[3];
+  bindings[0].texture = g_uiAtlas;
+  bindings[0].sampler = g_linear;
+  bindings[1].texture = g_uiPlanet != NULL ? g_uiPlanet : g_uiAtlas;
+  bindings[1].sampler = g_linear;
+  bindings[2].texture = g_uiPictures;
+  bindings[2].sampler = g_linear;
+  for (int i = nFirst; i < nFirst + nCount;) {
+    const bool bAdd = pPrims != NULL && UiPrimAdds(pPrims[i]);
+    int j = i + 1;
+    while (j < nFirst + nCount && (pPrims != NULL && UiPrimAdds(pPrims[j])) == bAdd)
+      ++j;
+    SDL_GPUGraphicsPipeline *pPipeline = GpuUiPipelineFor(bSwap, bAdd);
+    if (pPipeline == NULL)  // a card that would not build the adding one draws the plain way
+      pPipeline = GpuUiPipelineFor(bSwap, false);
+    if (pPipeline == NULL)
+      return;
+    SDL_BindGPUGraphicsPipeline(pPass, pPipeline);
+    SDL_BindGPUVertexStorageBuffers(pPass, 0, &g_uiPrims, 1);
+    SDL_BindGPUFragmentSamplers(pPass, 0, bindings, 3);
+    SDL_PushGPUVertexUniformData(pCmd, 0, &tp, sizeof tp);
+    SDL_PushGPUFragmentUniformData(pCmd, 0, &tp, sizeof tp);
+    SDL_DrawGPUPrimitives(pPass, static_cast<Uint32>(j - i) * 6u, 1, static_cast<Uint32>(i) * 6u, 0);
+    i = j;
+  }
 }
 
 const char *PortGpuUiError(void)
@@ -372,25 +446,8 @@ bool PortGpuUiEnd(int nWidth, int nHeight, const PlanetParams *pPlanet, float fP
   target.store_op = SDL_GPU_STOREOP_STORE;
   target.cycle = true;
   pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
-  if (nFirst > 0) {
-    SDL_BindGPUGraphicsPipeline(pPass, g_uiPipeline);
-    SDL_BindGPUVertexStorageBuffers(pPass, 0, &g_uiPrims, 1);
-    SDL_GPUTextureSamplerBinding bindings[3];
-    bindings[0].texture = g_uiAtlas;
-    bindings[0].sampler = g_linear;
-    bindings[1].texture = g_uiPlanet;
-    bindings[1].sampler = g_linear;
-    bindings[2].texture = g_uiPictures;
-    bindings[2].sampler = g_linear;
-    SDL_BindGPUFragmentSamplers(pPass, 0, bindings, 3);
-    UiTargetParams tp;
-    tp.fWidth = static_cast<float>(nWidth);
-    tp.fHeight = static_cast<float>(nHeight);
-    tp.fUnused[0] = tp.fUnused[1] = 0.0f;
-    SDL_PushGPUVertexUniformData(pCmd, 0, &tp, sizeof tp);
-    SDL_PushGPUFragmentUniformData(pCmd, 0, &tp, sizeof tp);
-    SDL_DrawGPUPrimitives(pPass, static_cast<Uint32>(nFirst) * 6u, 1, 0, 0);
-  }
+  if (nFirst > 0)
+    GpuUiRuns(pCmd, pPass, static_cast<Uint32>(nWidth), static_cast<Uint32>(nHeight), pPrims, 0, nFirst, false);
   SDL_EndGPURenderPass(pPass);
   if (pPreview != NULL) {
     GpuHudPreview(pCmd, g_uiTarget, static_cast<Uint32>(nWidth), static_cast<Uint32>(nHeight), *pPreview);
@@ -418,6 +475,9 @@ bool PortGpuUiEnd(int nWidth, int nHeight, const PlanetParams *pPlanet, float fP
     blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
     blit.filter = SDL_GPU_FILTER_NEAREST;
     SDL_BlitGPUTexture(pCmd, &blit);
+#ifdef HX_DESIGN
+    DesignPanelsDraw(pCmd, g_uiSwap, nWidth, nHeight);  // the design engine's panels over the menus
+#endif
   }
   g_uiSwap = NULL;
 
@@ -476,25 +536,9 @@ bool GpuUiDrawInto(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pTarget, int nWid
   target.store_op = SDL_GPU_STOREOP_STORE;
   SDL_GPURenderPass *pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
   if (nPrims > 0) {
-    SDL_BindGPUGraphicsPipeline(pPass, g_uiPipeline);
     SDL_GPUViewport viewport = {0.0f, 0.0f, static_cast<float>(nWidth), static_cast<float>(nHeight), 0.0f, 1.0f};
     SDL_SetGPUViewport(pPass, &viewport);
-    SDL_BindGPUVertexStorageBuffers(pPass, 0, &g_uiPrims, 1);
-    SDL_GPUTextureSamplerBinding bindings[3];
-    bindings[0].texture = g_uiAtlas;
-    bindings[0].sampler = g_linear;
-    bindings[1].texture = g_uiPlanet != NULL ? g_uiPlanet : g_uiAtlas;
-    bindings[1].sampler = g_linear;
-    bindings[2].texture = g_uiPictures;
-    bindings[2].sampler = g_linear;
-    SDL_BindGPUFragmentSamplers(pPass, 0, bindings, 3);
-    UiTargetParams tp;
-    tp.fWidth = static_cast<float>(nWidth);
-    tp.fHeight = static_cast<float>(nHeight);
-    tp.fUnused[0] = tp.fUnused[1] = 0.0f;
-    SDL_PushGPUVertexUniformData(pCmd, 0, &tp, sizeof tp);
-    SDL_PushGPUFragmentUniformData(pCmd, 0, &tp, sizeof tp);
-    SDL_DrawGPUPrimitives(pPass, static_cast<Uint32>(nPrims) * 6u, 1, 0, 0);
+    GpuUiRuns(pCmd, pPass, static_cast<Uint32>(nWidth), static_cast<Uint32>(nHeight), pPrims, 0, nPrims, false);
   }
   SDL_EndGPURenderPass(pPass);
   return true;
@@ -503,15 +547,20 @@ bool GpuUiDrawInto(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pTarget, int nWid
 // A list drawn in parts inside a pass on the swapchain the caller began (the HUD's slots,
 // port_gpu_hud.cpp): GpuUiStage uploads it before the pass, GpuUiDrawPart draws nCount of its
 // primitives from nFirst.
-// The pipeline for a target: the swapchain's format, or RGBA8.
-static SDL_GPUGraphicsPipeline *GpuUiPipelineFor(bool bSwap)
-{
-  return !bSwap || g_swapFormat == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM ? g_uiPipeline : g_overlayPipeline;
-}
-
 bool GpuUiStage(SDL_GPUCommandBuffer *pCmd, const UiPrim *pPrims, int nPrims, bool bSwap)
 {
-  return nPrims > 0 && GpuUiInit() && GpuUiPipelineFor(bSwap) != NULL && GpuUiUpload(pCmd, pPrims, nPrims);
+  // nothing is staged until this one is, so a part drawn after a stage that failed is drawn
+  // whole rather than cut from a list that is not there
+  g_pStaged = NULL;
+  g_nStaged = 0;
+  if (nPrims <= 0 || !GpuUiInit() || GpuUiPipelineFor(bSwap, false) == NULL ||
+      !GpuUiUpload(pCmd, pPrims, nPrims))
+    return false;
+  // the list as it was staged, so that the parts drawn from it can be cut into runs. The
+  // caller's array is not copied, so it has to outlive every part drawn from it.
+  g_pStaged = pPrims;
+  g_nStaged = nPrims;
+  return true;
 }
 
 void GpuUiDrawPart(SDL_GPUCommandBuffer *pCmd, SDL_GPURenderPass *pPass, Uint32 nWidth, Uint32 nHeight, int nFirst,
@@ -519,23 +568,7 @@ void GpuUiDrawPart(SDL_GPUCommandBuffer *pCmd, SDL_GPURenderPass *pPass, Uint32 
 {
   if (nCount <= 0)
     return;
-  SDL_BindGPUGraphicsPipeline(pPass, GpuUiPipelineFor(bSwap));
-  SDL_BindGPUVertexStorageBuffers(pPass, 0, &g_uiPrims, 1);
-  SDL_GPUTextureSamplerBinding bindings[3];
-  bindings[0].texture = g_uiAtlas;
-  bindings[0].sampler = g_linear;
-  bindings[1].texture = g_uiPlanet != NULL ? g_uiPlanet : g_uiAtlas;
-  bindings[1].sampler = g_linear;
-  bindings[2].texture = g_uiPictures;
-  bindings[2].sampler = g_linear;
-  SDL_BindGPUFragmentSamplers(pPass, 0, bindings, 3);
-  UiTargetParams tp;
-  tp.fWidth = static_cast<float>(nWidth);
-  tp.fHeight = static_cast<float>(nHeight);
-  tp.fUnused[0] = tp.fUnused[1] = 0.0f;
-  SDL_PushGPUVertexUniformData(pCmd, 0, &tp, sizeof tp);
-  SDL_PushGPUFragmentUniformData(pCmd, 0, &tp, sizeof tp);
-  SDL_DrawGPUPrimitives(pPass, static_cast<Uint32>(nCount) * 6u, 1, static_cast<Uint32>(nFirst) * 6u, 0);
+  GpuUiRuns(pCmd, pPass, nWidth, nHeight, nFirst + nCount <= g_nStaged ? g_pStaged : NULL, nFirst, nCount, bSwap);
 }
 
 // The overlay over a game's frame (port_overlay.cpp): its list drawn into the swapchain
@@ -556,25 +589,9 @@ void GpuUiOverlay(SDL_GPUCommandBuffer *pCmd, SDL_GPUTexture *pSwap, Uint32 nWid
   target.texture = pSwap;
   target.load_op = SDL_GPU_LOADOP_LOAD;
   target.store_op = SDL_GPU_STOREOP_STORE;
-  SDL_GPURenderPass *pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
-  SDL_BindGPUGraphicsPipeline(pPass, pPipeline);
-  SDL_BindGPUVertexStorageBuffers(pPass, 0, &g_uiPrims, 1);
   // the planet's texture is the front end's, made when it first draws; the overlay draws
   // none, and the atlas stands in for it until then
-  SDL_GPUTextureSamplerBinding bindings[3];
-  bindings[0].texture = g_uiAtlas;
-  bindings[0].sampler = g_linear;
-  bindings[1].texture = g_uiPlanet != NULL ? g_uiPlanet : g_uiAtlas;
-  bindings[1].sampler = g_linear;
-  bindings[2].texture = g_uiPictures;
-  bindings[2].sampler = g_linear;
-  SDL_BindGPUFragmentSamplers(pPass, 0, bindings, 3);
-  UiTargetParams tp;
-  tp.fWidth = static_cast<float>(nWidth);
-  tp.fHeight = static_cast<float>(nHeight);
-  tp.fUnused[0] = tp.fUnused[1] = 0.0f;
-  SDL_PushGPUVertexUniformData(pCmd, 0, &tp, sizeof tp);
-  SDL_PushGPUFragmentUniformData(pCmd, 0, &tp, sizeof tp);
-  SDL_DrawGPUPrimitives(pPass, static_cast<Uint32>(nPrims) * 6u, 1, 0, 0);
+  SDL_GPURenderPass *pPass = SDL_BeginGPURenderPass(pCmd, &target, 1, NULL);
+  GpuUiRuns(pCmd, pPass, nWidth, nHeight, pPrims, 0, nPrims, true);
   SDL_EndGPURenderPass(pPass);
 }

@@ -71,6 +71,10 @@ void accel_apply_profile();  // Hyperion: event_Win.cpp (the hotkeys milestone K
 #include "../port/gameplay/port_score.h"  // Hyperion: PortScoreFrame
 #include "../port/gameplay/port_richbases.h"  // Hyperion: RichBasesFrame
 #include "../port/hud/port_hudstate.h"  // Hyperion: the HUD's data layer
+#include "../port/data/port_moddata.h"  // Hyperion: ModRaceMusicTrack
+#include "../port/data/port_modstatus.h"  // Hyperion: ModStatusFrame
+#include "../port/data/port_modlua.h"  // Hyperion: ModLuaFrame
+#include "../port/hud/port_readout.h"  // Hyperion: PortReadoutFrame
 
 // GetTickCount, KERNEL32's, at IAT slot 0x4EB2FC; declared here, since this tree
 // keeps <windows.h> off the include path.
@@ -482,6 +486,7 @@ void gameloop_update_game()
         sub_46C180();
         AiVisionRefresh();  // Hyperion: a computer that sees the whole map
         MutatorsVisionRefresh();  // Hyperion: and the fog mutator's map
+        ModLuaVisionRefresh();    // and the ground a mode's scripts reveal
         PortPerfEnd(PERF_FOG);
     }
     PortPerfBegin(PERF_UNITS);
@@ -492,6 +497,11 @@ void gameloop_update_game()
     CFlingy::UpdateFlingies();
     CThingy::UpdateThingies();
     PortPerfEnd(PERF_MOVERS);
+    if (g_hxModGame) {
+        ModStatusFrame();  // Hyperion: a mod's statuses, auras and action blocks
+        ModLuaFrame();     // and its scripts
+        PortReadoutFrame();  // and the unit readout's own clock and events, presentation
+    }
     set_rand_enabled(0);
 }
 #pragma optimize("", on)
@@ -640,7 +650,7 @@ WORD run_game()
     dword_6663E4 = 1;
     HxSaveRunGame();  // Hyperion: a Hyperion save's count to the next fog update
     PortTrainerGameStart();  // Hyperion: a trainer session's first line
-    snd_play_music(word_5264BE_g);
+    snd_play_music(ModRaceMusicTrack(word_5264BE_g));  // Hyperion: a mod's race may play another race's music
     mou_set_pos(g_portView.nWidth / 2, g_portView.nHeight / 2);  // Hyperion: 320, 240
     sgbGameRunning_g = 1;
     unpause_game(0);

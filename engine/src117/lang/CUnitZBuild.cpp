@@ -31,6 +31,7 @@
 #include "../h/CUnit.h"
 #include "../h/tile2.h"        // sub_4B46E0, sub_4B4DD0, tile_is_occupied, tile_can_have_creep
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../port/render/port_view.h"  // Hyperion: g_portView
 #include "../h/selectlimits.h"  // Hyperion: SELECTION_MAX
 #include "../h/handicap.h"  // Hyperion: a player's handicap
@@ -184,7 +185,7 @@ void sub_43B380(intptr_t nArg0)
   glGameCounts_g[5][pUnit->bPlayer] -= guwUnitScoreMake[0x29];
   --glGameCounts_g[2][pUnit->bPlayer];
 
-  if (pUnit->wType == 0x95)
+  if (pUnit->wType == 0x95 || ModRulesModGas(pUnit->wType))  // Hyperion: or a mod's gas building
   {
     pSprite = pUnit->pSprite;
     wX = pSprite->wPosX;
@@ -369,7 +370,7 @@ void CUnit::DispatchBuildSelfZerg()
     break;
 
   case 1:
-    if (this->wType == 0x95)
+    if (this->wType == 0x95 || ModRulesModGas(this->wType))  // Hyperion: or a mod's gas building
     {
       pImage = this->pSprite->OverlayGetImage(0x159, 0x159);
       if (pImage != 0)
@@ -480,7 +481,7 @@ void CUnit::DispatchDroneBuild()
       if (pPowerup != 0)
         DropInventory();
 
-      if (static_cast<WORD>(nType) == 0x95)
+      if (static_cast<WORD>(nType) == 0x95 || ModRulesModGas(nType))  // Hyperion: or a mod's gas building
         DroneBuildExtractor();
       else
         DroneBuildStructure(nType);
@@ -707,7 +708,9 @@ void CUnit::DroneBuild()
 // free; otherwise the drone hands off to the unit already there and dies.
 void CUnit::DroneBuildExtractor()
 {
-  CUnit *pOther = ReplaceGeyser(0x95);
+  // Hyperion: the mod's gas building the drone was told to build, else the Extractor
+  const WORD wGas = this->wBuildQueue[this->bBuildQueueSlot];
+  CUnit *pOther = ReplaceGeyser(ModRulesModGas(wGas) ? wGas : 0x95);
 
   if (pOther == 0)
   {

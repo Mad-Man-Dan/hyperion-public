@@ -56,6 +56,7 @@
 #include "sai_PathFindLocal.h" // ours: sub_4928F0
 #undef mtx_query_place_bldg
 #include "../gen/globals117.h"
+#include "../port/data/port_modrules.h"  // Hyperion: a mod's race's building rules and advisor
 #include "../port/render/port_view.h"  // Hyperion: g_portView, PortViewScreenToMap
 #include "../port/data/port_moddata.h"  // Hyperion: ModRaceStartUnit
 #include "../h/mutators.h"  // Hyperion: the start workers
@@ -478,9 +479,9 @@ void placebox_highlight_addons()
       if (TTBaseUnitType((WORD)nType) == wPlaceType) {
         pSprite = pUnit->pSprite;
         nx = PosU(pSprite->wPosX - gUnitPlaceboxSize[nType].x / 2 -
-                    gUnitAddOnOffset[nType - 106].x);
+                    ModRulesAddOnOffset(nType).x);
         ny = PosU(pSprite->wPosY - gUnitPlaceboxSize[nType].y / 2 -
-                    gUnitAddOnOffset[nType - 106].y);
+                    ModRulesAddOnOffset(nType).y);
         pStat = gpStatUnit;
         if (!sub_413150(pStat, pStat->bPlayer, PosS(nx) / 32,
                         (short)ny / 32, wPlaceType)) {
@@ -538,8 +539,8 @@ void placebox_query_place_addon(order_id_t cArg0, int nArg1, point16_t ptIn)
   int rc = mtx_query_place_bldg(pUnit, pUnit->bPlayer, ptIn.x, ptIn.y,
                                 nArg1, 1, 0, 0, 0);
   if (rc == 0) {
-    int nCellX = ptIn.x - gUnitAddOnOffset[(WORD)nArg1 - 106].x / 32;
-    int nCellY = ptIn.y - gUnitAddOnOffset[(WORD)nArg1 - 106].y / 32;
+    int nCellX = ptIn.x - ModRulesAddOnOffset((WORD)nArg1).x / 32;
+    int nCellY = ptIn.y - ModRulesAddOnOffset((WORD)nArg1).y / 32;
 
     rc = mtx_query_place_bldg(pUnit, pUnit->bPlayer, (short)nCellX, (short)nCellY,
                               pUnit->wType, 0, 0, 0, 0);
@@ -878,8 +879,8 @@ int sub_47DB80()
     WORD wType = sgwPlaceUnitType[1];
     int nParent = mtx_query_place_bldg(
         gpStatUnit, sgbPlaceboxPlyr_g,
-        (short)(sgPlacePos_g.x - gUnitAddOnOffset[wType - 106].x / 32),
-        (short)(sgPlacePos_g.y - gUnitAddOnOffset[wType - 106].y / 32),
+        (short)(sgPlacePos_g.x - ModRulesAddOnOffset(wType).x / 32),
+        (short)(sgPlacePos_g.y - ModRulesAddOnOffset(wType).y / 32),
         sgwPlaceUnitType[0], 0, 1, 0, 0);
     if (nRet == 0)
       return nParent;
@@ -1048,8 +1049,8 @@ void placebox_update()
 
   if (sgbParentOn != 0) {
     WORD wType = sgwPlaceUnitType[1];
-    pt.x -= gUnitAddOnOffset[wType - 106].x;
-    pt.y -= gUnitAddOnOffset[wType - 106].y;
+    pt.x -= ModRulesAddOnOffset(wType).x;
+    pt.y -= ModRulesAddOnOffset(wType).y;
     placebox_update_mtx(0, reinterpret_cast<intptr_t>(&pt));
   }
 
@@ -1265,7 +1266,7 @@ void placebox_on(BYTE bCursor, WORD wUnitType)
   game_reset_handlers();
 
   if (gpStatUnit != NULL) {
-    if (gpStatUnit->GetRace() == 2)
+    if (gpStatUnit->GetRace() == 2 || ModRulesPowerShown(wUnitType))  // Hyperion: a mod's that needs power
       ShowPowerTemplates();
   }
   if (gpStatUnit != NULL)

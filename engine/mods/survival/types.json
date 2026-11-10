@@ -1,0 +1,618 @@
+{
+  "comment": "Survival's content: three race libraries of spells, statuses and effects the waves draw on, the seven bodies a run rolls its elites onto, and the hooks that roll a run and play the mode. The names are our own; no ability of another game is copied. What the format cannot say falls to a Luau function through {\"do\": \"script\"}. The effects are in looks.json.",
+
+  "generate": "LsGenerate",
+
+  "game": {
+    "start": "LsStart",
+    "tick": "LsTick",
+    "every": 1,
+    "on_death": "LsOnDeath",
+    "director": {"call": "LsDirector", "every": 1}
+  },
+  "marks": {
+    "comment": "the looks the perimeter and its band may wear, by name: how a mark of that look is drawn, in map pixels and seconds -- a minimap block alone is in the minimap's own pixels. scripts/mode.luau's LOOK picks one and says the rest -- the shape, the colour, who sees it and what lights it. The numbers are the design's; every one of them is also the engine's own default, written out so that a change to a default never moves the perimeter without this file saying so.",
+
+    "ward": {
+      "about": "A low wall of light standing on the perimeter.",
+      "warn": "#ffb347", "edge_width": 3, "pulse": 2.2, "pulse_depth": 0.3,
+      "curve": "sharp", "crossing": "ripple",
+      "field": {"height": 26, "bands": 6, "alpha": 0.42, "fade": 1, "add": true},
+      "cells": {"spacing": 13, "rows": [0.30, 0.72], "stagger": 0.5, "radius": 4.2,
+                "squash": 0.8, "width": 1, "alpha": 0.7, "least": 0.12, "base": 0.55,
+                "swing": 0.45, "rate": 3.1, "along": 0.37, "row": 1.7, "warm": 0.2},
+      "foot": {"glow": 4, "alpha": 0.22},
+      "tear": {"life": 0.9, "width": 10, "grow": 30, "height": 1.6, "alpha": 0.9},
+      "ripple": {"speed": 384, "width": 46, "life": 1.6, "flash": 50, "flash_life": 0.5},
+      "outside": {"style": "tint", "band": 128, "radius": 26, "alpha": 0.55, "base": 0.65,
+                  "swing": 0.35, "beat": 4, "past": 9, "color": "#ffb347",
+                  "far_color": "#e0453a"},
+      "minimap": {"comment": "the ring on the minimap as well as the ground, so a player reads the whole perimeter rather than the stretch in front of them. It takes no colour of its own, so it is drawn in the ring's, and nothing of the field, the beat or the light reaches it: it shows whole, whatever the ground is doing. width and dash are minimap pixels, not the map's. Every renderer draws this, the fallback included, which is where a player would otherwise see no perimeter at all.",
+                  "on": true, "fill": 0, "edge": 1, "width": 1, "dash": 2}
+    },
+
+    "line": {
+      "about": "The perimeter as a plain ring, the look it wore before the ward. It has no blocks, so it stands nothing up off the ground: it is the edge and the glow under it.",
+      "edge": 0.9, "edge_width": 6, "soft": 1,
+      "outside": {"style": "tint", "band": 128},
+      "minimap": {"on": true, "fill": 0, "edge": 1, "width": 1, "dash": 0}
+    },
+
+    "band": {
+      "about": "The warning band, on the minimap and nowhere else. The ground shows the band as the light under a unit standing in it, which is a light rather than a shape, so there is nothing of it for the minimap to draw; a mark in this look is that shape. It draws nothing on the ground -- no blocks, and an edge of nothing -- and on the minimap it is dashed and in the warning colour, so a player reads where the cost begins as well as where the line is. The dash is what tells the two rings apart: four tiles of band is four minimap pixels on a 128-tile map, so the gap between them is not what the player sees.",
+      "fill": 0, "edge": 0,
+      "minimap": {"on": true, "fill": 0, "edge": 1, "width": 1, "dash": 3, "color": "#ffb347"}
+    }
+  },
+
+  "statuses": {
+    "t_scorched": {"name": "Scorched", "duration": 4, "damage_per_second": 10, "stacking": "refresh",
+      "overlay": "thingy_ofirev", "overlay_by_size": true},
+    "t_slagged": {"comment": "a status's kind picks the glyph, the hue and the icon a player reads it by, and it is worked out from the fields in a fixed order: what stops the unit, then what hurts it, then the rest. That names the first field it finds, which for a status with two is not always what the status is about -- Slagged is a slow with a burn beside it, not a burn -- so look.kind is written out on the ten where the order would name the lesser half. The other thirty-two read right from their fields and say nothing.",
+      "name": "Slagged", "look": {"kind": "slow"}, "duration": 6, "move_speed": -35, "damage_per_second": 4,
+      "overlay": "thingy_ensgoos", "overlay_by_size": true},
+    "t_jammed": {"name": "Jammed", "duration": 5, "attack_cooldown": 60, "start_image": "thingy_emp"},
+    "t_blinded": {"name": "Blinded", "duration": 3, "cannot_attack": true, "start_image": "thingy_empl"},
+    "t_clamped": {"name": "Clamped", "duration": 3, "cannot_move": true, "overlay": "thingy_empl"},
+    "t_marked": {"name": "Marked", "duration": 8, "armor": -3, "stacking": "stack", "max_stacks": 3,
+      "overlay": "terran_tcirglow"},
+    "t_braced": {"name": "Braced", "duration": 8, "armor": 3, "overlay": "thingy_pshield"},
+    "t_veiled": {"name": "Veiled", "duration": 6, "armor": 2, "move_speed": 15, "overlay": "thingy_smoke"},
+    "t_mending": {"name": "Mending", "duration": 6, "life_per_second": 8, "overlay": "thingy_tmehealm"},
+    "t_overclocked": {"comment": "side is written out on the three a caster puts on itself, whose fields point both ways: a cost beside the gain (the burn here, no attacking while it molts, no moving while it is anchored) that the sum would weigh against the gain. Every other status reads right from its fields alone.",
+      "name": "Overclocked", "side": "good", "duration": 10, "attack_cooldown": -35, "damage_dealt": 20,
+      "damage_per_second": 2, "overlay": "thingy_tveglowo"},
+    "t_anchored": {"name": "Anchored", "look": {"kind": "might"}, "side": "good", "duration": 8, "cannot_move": true, "damage_dealt": 50, "armor": 2,
+      "overlay": "thingy_tbaglow"},
+    "t_drone_warded": {"name": "Drone-warded", "duration": 12, "armor": 2, "life_per_second": 3,
+      "overlay": "thingy_tdrglow"},
+
+    "z_corroded": {"comment": "an overlay is never a bullet's image. The acid spores, the plague cloud, the seeker spores, the parasite and the consume effect are all a weapon's own picture, and a bullet's script does a bullet's damage when its death animation runs: put one on a unit and the unit's death runs it with no bullet behind it, which is a crash and an attack sound out of nowhere. The pictures below are overlays, the ones classic hangs on a unit, so look for a thingy_ name or a glow and never a name a weapon also has. overlay_by_size wants three images in a row, small then medium then large, which the ensnare goo and the parasite have and the devourer's goo does not: its next two rows are the small one's deeper stacks.",
+      "name": "Corroded", "duration": 8, "armor": -4, "stacking": "stack", "max_stacks": 4,
+      "overlay": "thingy_zdvgoos"},
+    "z_bile_rot": {"name": "Bile rot", "duration": 8, "damage_per_second": 7, "stacking": "stack",
+      "max_stacks": 3, "overlay": "thingy_eradlrg"},
+    "z_spored": {"name": "Spored", "look": {"kind": "slow"}, "duration": 7, "move_speed": -30, "armor": -2,
+      "overlay": "thingy_ensgoos", "overlay_by_size": true},
+    "z_hobbled": {"name": "Hobbled", "duration": 5, "move_speed": -55, "overlay": "thingy_ensgoos",
+      "overlay_by_size": true},
+    "z_rooted": {"name": "Rooted", "duration": 2.5, "cannot_move": true, "overlay": "thingy_zdvgoos"},
+    "z_brood_touched": {"name": "Brood-touched", "duration": 10, "damage_per_second": 3, "move_speed": -15,
+      "overlay": "thingy_pdaparsm", "overlay_by_size": true},
+    "z_knit": {"name": "Knit", "duration": 8, "life_per_second": 10, "overlay": "zerg_zcirglow"},
+    "z_carapace_hard": {"name": "Hardened carapace", "duration": 10, "armor": 4, "overlay": "zerg_zcirglow"},
+    "z_frenzied": {"name": "Frenzied", "duration": 8, "attack_cooldown": -40, "move_speed": 25,
+      "overlay": "zerg_zcirglow"},
+    "z_gorged": {"name": "Gorged", "look": {"kind": "might"}, "duration": 12, "damage_dealt": 25, "life_per_second": 5,
+      "overlay": "zerg_zcirglow"},
+    "z_hive_linked": {"name": "Hive-linked", "look": {"kind": "might"}, "duration": 6, "damage_dealt": 15, "armor": 1,
+      "overlay": "zerg_zcirglow"},
+    "z_molting": {"name": "Molting", "look": {"kind": "heal"}, "side": "good", "duration": 3, "life_per_second": 30, "cannot_attack": true,
+      "start_image": "thingy_zbgexplo"},
+
+    "p_mind_burned": {"name": "Mind-burned", "duration": 6, "damage_per_second": 8, "overlay": "thingy_pcaglow"},
+    "p_rent": {"name": "Rent", "duration": 8, "armor": -3, "damage_dealt": -20, "overlay": "thingy_pscglow"},
+    "p_dilated": {"name": "Dilated", "duration": 6, "move_speed": -45, "attack_cooldown": 50,
+      "overlay": "protoss_stasis"},
+    "p_rifted": {"name": "Rifted", "duration": 2, "cannot_move": true, "overlay": "protoss_pb1glow"},
+    "p_tethered": {"name": "Tethered", "duration": 4, "move_speed": -70, "overlay": "protoss_pneglow"},
+    "p_nulled": {"name": "Nulled", "duration": 4, "cannot_attack": true, "overlay": "thingy_pabglow"},
+    "p_void_marked": {"name": "Void-marked", "duration": 10, "damage_per_second": 5, "armor": -2,
+      "stacking": "stack", "max_stacks": 3, "overlay": "thingy_pteglow"},
+    "p_shield_woven": {"name": "Shield-woven", "look": {"kind": "armor_up"}, "duration": 10, "armor": 3, "life_per_second": 6,
+      "overlay": "thingy_pshield"},
+    "p_phased": {"name": "Phased", "duration": 6, "move_speed": 35, "overlay": "thingy_pshglow"},
+    "p_khala_lit": {"name": "Khala-lit", "look": {"kind": "might"}, "duration": 8, "damage_dealt": 20, "life_per_second": 4,
+      "overlay": "protoss_pcirglow"},
+    "p_warp_lag": {"name": "Warp lag", "duration": 5, "attack_cooldown": 45, "overlay": "thingy_pcsglow"},
+    "p_echo_bound": {"name": "Echo-bound", "duration": 8, "damage_dealt": -30, "overlay": "protoss_pb1glow"},
+
+    "ls_born_tough": {"comment": "the six below are what a unit may be born with: one small turn of its own on top of its group's roll, drawn as it walks in (scripts/pools/tiers.luau, LS.born). They come in pairs, one for the unit and one against it, and the numbers are small, so the group is still the group. No overlay and no icon, because a unit that stands a little apart should still look like the rest of its wave; the duration is the longest a status may run, which makes it the unit's life.",
+      "name": "Tough", "side": "good", "look": {"kind": "tough", "show": ["readout"]}, "duration": 2700, "armor": 1, "damage_taken": -6},
+    "ls_born_frail": {"name": "Frail", "side": "bad", "look": {"show": ["readout"]}, "duration": 2700, "damage_taken": 8},
+    "ls_born_quick": {"name": "Quick", "side": "good", "look": {"kind": "swift", "show": ["readout"]}, "duration": 2700, "move_speed": 10, "attack_cooldown": -6},
+    "ls_born_slow": {"name": "Slow", "side": "bad", "look": {"show": ["readout"]}, "duration": 2700, "move_speed": -8},
+    "ls_born_savage": {"name": "Savage", "side": "good", "look": {"show": ["readout"]}, "duration": 2700, "damage_dealt": 10},
+    "ls_born_blunt": {"name": "Blunt", "side": "bad", "look": {"show": ["readout"]}, "duration": 2700, "damage_dealt": -8}
+  },
+
+  "techs": {
+    "ls_t_scorch_round": {"base": "psionic_storm", "name": "Scorch Round", "energy": 50, "icon": 185},
+    "ls_t_null_pulse": {"base": "emp_shockwave", "name": "Null Pulse", "energy": 70, "icon": 182},
+    "ls_t_sentry_drone": {"base": "scanner_sweep", "name": "Sentry Drone", "energy": 60, "icon": 184},
+    "ls_t_barrage_call": {"base": "psionic_storm", "name": "Barrage Call", "energy": 75, "icon": 180},
+    "ls_t_bulwark_field": {"base": "defensive_matrix", "name": "Bulwark Field", "energy": 60, "icon": 183},
+    "ls_t_flare_mark": {"base": "optical_flare", "name": "Flare Mark", "energy": 40, "icon": 356},
+    "ls_t_thermite_spray": {"base": "psionic_storm", "name": "Thermite Spray", "energy": 45, "icon": 185},
+    "ls_t_repair_swarm": {"base": "healing", "name": "Repair Swarm", "energy": 55, "icon": 186},
+    "ls_t_shock_clamp": {"base": "lockdown", "name": "Shock Clamp", "energy": 50, "icon": 181},
+    "ls_t_overclock": {"base": "defensive_matrix", "name": "Overclock", "energy": 40, "icon": 187,
+      "comment": "Not based on stim_packs: a tech made from that row stims the caster in place of running the order's blocks (docs/mod-data.md, What a mod's type does not do yet)."},
+    "ls_t_smoke_veil": {"base": "defensive_matrix", "name": "Smoke Veil", "energy": 50, "icon": 183},
+    "ls_t_siege_anchor": {"base": "defensive_matrix", "name": "Siege Anchor", "energy": 35, "icon": 180},
+
+    "ls_z_acid_bloom": {"base": "plague", "name": "Acid Bloom", "energy": 55, "icon": 201},
+    "ls_z_bile_spray": {"base": "plague", "name": "Bile Spray", "energy": 60, "icon": 201},
+    "ls_z_spore_cloud": {"base": "ensnare", "name": "Spore Cloud", "energy": 50, "icon": 203},
+    "ls_z_root_snare": {"base": "ensnare", "name": "Root Snare", "energy": 45, "icon": 203},
+    "ls_z_spawn_brood": {"base": "spawn_broodlings", "name": "Spawn Brood", "energy": 70, "icon": 204},
+    "ls_z_infest_husk": {"base": "infestation", "name": "Infest Husk", "energy": 75, "icon": 205},
+    "ls_z_carapace_knit": {"base": "healing", "name": "Carapace Knit", "energy": 50, "icon": 206},
+    "ls_z_molt": {"base": "consume", "name": "Molt", "energy": 40, "icon": 207},
+    "ls_z_frenzy_pheromone": {"base": "ensnare", "name": "Frenzy Pheromone", "energy": 55, "icon": 202},
+    "ls_z_devour": {"base": "consume", "name": "Devour", "energy": 45, "icon": 207},
+    "ls_z_burrow_strike": {"base": "burrowing", "name": "Burrow Strike", "energy": 50, "icon": 208},
+    "ls_z_hive_mind": {"base": "dark_swarm", "name": "Hive Mind", "energy": 60, "icon": 202},
+
+    "ls_p_mind_lash": {"base": "feedback", "name": "Mind Lash", "energy": 50, "icon": 356},
+    "ls_p_void_rend": {"base": "psionic_storm", "name": "Void Rend", "energy": 75, "icon": 220},
+    "ls_p_psi_nova": {"base": "psionic_storm", "name": "Psi Nova", "energy": 70, "icon": 221},
+    "ls_p_warp_step": {"base": "recall", "name": "Warp Step", "energy": 40, "icon": 222},
+    "ls_p_summon_echo": {"base": "hallucination", "name": "Summon Echo", "energy": 65, "icon": 223},
+    "ls_p_shield_weave": {"base": "restoration", "name": "Shield Weave", "energy": 55, "icon": 224},
+    "ls_p_khala_surge": {"base": "restoration", "name": "Khala Surge", "energy": 60, "icon": 224},
+    "ls_p_time_dilation": {"base": "stasis_field", "name": "Time Dilation", "energy": 65, "icon": 225},
+    "ls_p_chrono_rift": {"base": "stasis_field", "name": "Chrono Rift", "energy": 70, "icon": 225},
+    "ls_p_null_field": {"base": "maelstrom", "name": "Null Field", "energy": 60, "icon": 226},
+    "ls_p_phase_veil": {"base": "disruption_web", "name": "Phase Veil", "energy": 45, "icon": 227},
+    "ls_p_void_tether": {"base": "mind_control", "name": "Void Tether", "energy": 55, "icon": 220}
+  },
+
+  "weapons": {
+    "ls_t_scorch_round": {"base": "psionic_storm", "name": "Scorch Round", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 224, "damage": 0,
+      "inner_splash": 24, "middle_splash": 48, "outer_splash": 72, "cooldown": 30,
+      "comment": "A spell with blocks does not fire its weapon: the weapon gives the range, the cooldown and, through its splash, the ground a computer's caster looks at. behavior 5 casts where the unit stands, 4 where it was aimed."},
+    "ls_t_null_pulse": {"base": "emp_shockwave", "name": "Null Pulse", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 48, "middle_splash": 80, "outer_splash": 112, "cooldown": 44},
+    "ls_t_sentry_drone": {"base": "psionic_shockwave", "name": "Sentry Drone", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 32, "middle_splash": 64, "outer_splash": 96, "cooldown": 60},
+    "ls_t_barrage_call": {"base": "psionic_storm", "name": "Barrage Call", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 64, "max_range": 384, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 104, "cooldown": 60},
+    "ls_t_bulwark_field": {"base": "psionic_shockwave", "name": "Bulwark Field", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 96, "outer_splash": 128, "cooldown": 50},
+    "ls_t_flare_mark": {"base": "optical_flare", "name": "Flare Mark", "behavior": 4, "explosion": 1,
+      "target_flags": 67, "min_range": 0, "max_range": 288, "damage": 0,
+      "inner_splash": 16, "middle_splash": 24, "outer_splash": 32, "cooldown": 26},
+    "ls_t_thermite_spray": {"base": "psionic_shockwave", "name": "Thermite Spray", "behavior": 5,
+      "explosion": 3, "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 30},
+    "ls_t_repair_swarm": {"base": "psionic_shockwave", "name": "Repair Swarm", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 40},
+    "ls_t_shock_clamp": {"base": "lockdown", "name": "Shock Clamp", "behavior": 4, "explosion": 1,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 16, "middle_splash": 24, "outer_splash": 40, "cooldown": 30},
+    "ls_t_overclock": {"base": "psionic_shockwave", "name": "Overclock", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 96, "cooldown": 44},
+    "ls_t_smoke_veil": {"base": "psionic_shockwave", "name": "Smoke Veil", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 40},
+    "ls_t_siege_anchor": {"base": "psionic_shockwave", "name": "Siege Anchor", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 24, "middle_splash": 40, "outer_splash": 56, "cooldown": 50},
+
+    "ls_z_acid_bloom": {"base": "psionic_storm", "name": "Acid Bloom", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 224, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 34},
+    "ls_z_bile_spray": {"base": "psionic_storm", "name": "Bile Spray", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 96, "cooldown": 40},
+    "ls_z_spore_cloud": {"base": "psionic_storm", "name": "Spore Cloud", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 288, "damage": 0,
+      "inner_splash": 56, "middle_splash": 96, "outer_splash": 128, "cooldown": 44},
+    "ls_z_root_snare": {"base": "psionic_storm", "name": "Root Snare", "behavior": 4, "explosion": 3,
+      "target_flags": 66, "min_range": 0, "max_range": 224, "damage": 0,
+      "inner_splash": 40, "middle_splash": 64, "outer_splash": 88, "cooldown": 36},
+    "ls_z_spawn_brood": {"base": "psionic_storm", "name": "Spawn Brood", "behavior": 4, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 224, "damage": 0,
+      "inner_splash": 24, "middle_splash": 40, "outer_splash": 64, "cooldown": 50},
+    "ls_z_infest_husk": {"base": "psionic_storm", "name": "Infest Husk", "behavior": 4, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 192, "damage": 0,
+      "inner_splash": 24, "middle_splash": 40, "outer_splash": 64, "cooldown": 56},
+    "ls_z_carapace_knit": {"base": "psionic_shockwave", "name": "Carapace Knit", "behavior": 5,
+      "explosion": 1, "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 40},
+    "ls_z_molt": {"base": "psionic_shockwave", "name": "Molt", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 16, "middle_splash": 24, "outer_splash": 32, "cooldown": 44},
+    "ls_z_frenzy_pheromone": {"base": "psionic_shockwave", "name": "Frenzy Pheromone", "behavior": 5,
+      "explosion": 1, "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 96, "outer_splash": 128, "cooldown": 44},
+    "ls_z_devour": {"base": "psionic_storm", "name": "Devour", "behavior": 4, "explosion": 1,
+      "target_flags": 67, "min_range": 0, "max_range": 160, "damage": 0,
+      "inner_splash": 16, "middle_splash": 24, "outer_splash": 32, "cooldown": 30},
+    "ls_z_burrow_strike": {"base": "psionic_storm", "name": "Burrow Strike", "behavior": 4, "explosion": 3,
+      "target_flags": 66, "min_range": 0, "max_range": 320, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 44},
+    "ls_z_hive_mind": {"base": "psionic_shockwave", "name": "Hive Mind", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 56, "middle_splash": 104, "outer_splash": 144, "cooldown": 50},
+
+    "ls_p_mind_lash": {"base": "psionic_storm", "name": "Mind Lash", "behavior": 4, "explosion": 1,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 16, "middle_splash": 24, "outer_splash": 40, "cooldown": 30},
+    "ls_p_void_rend": {"base": "psionic_storm", "name": "Void Rend", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 44},
+    "ls_p_psi_nova": {"base": "psionic_shockwave", "name": "Psi Nova", "behavior": 5, "explosion": 3,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 80, "outer_splash": 112, "cooldown": 44},
+    "ls_p_warp_step": {"base": "psionic_storm", "name": "Warp Step", "behavior": 4, "explosion": 3,
+      "target_flags": 66, "min_range": 0, "max_range": 320, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 36},
+    "ls_p_summon_echo": {"base": "psionic_shockwave", "name": "Summon Echo", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 32, "middle_splash": 56, "outer_splash": 80, "cooldown": 56},
+    "ls_p_shield_weave": {"base": "psionic_shockwave", "name": "Shield Weave", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 44},
+    "ls_p_khala_surge": {"base": "psionic_shockwave", "name": "Khala Surge", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 50},
+    "ls_p_time_dilation": {"base": "psionic_storm", "name": "Time Dilation", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 288, "damage": 0,
+      "inner_splash": 48, "middle_splash": 80, "outer_splash": 112, "cooldown": 50},
+    "ls_p_chrono_rift": {"base": "psionic_storm", "name": "Chrono Rift", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 288, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 96, "cooldown": 56},
+    "ls_p_null_field": {"base": "psionic_storm", "name": "Null Field", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 256, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 96, "cooldown": 50},
+    "ls_p_phase_veil": {"base": "psionic_shockwave", "name": "Phase Veil", "behavior": 5, "explosion": 1,
+      "target_flags": 66, "min_range": 0, "max_range": 8192, "damage": 0,
+      "inner_splash": 48, "middle_splash": 88, "outer_splash": 120, "cooldown": 40},
+    "ls_p_void_tether": {"base": "psionic_storm", "name": "Void Tether", "behavior": 4, "explosion": 3,
+      "target_flags": 67, "min_range": 0, "max_range": 320, "damage": 0,
+      "inner_splash": 40, "middle_splash": 72, "outer_splash": 96, "cooldown": 44},
+
+    "ls_drone_sting": {"base": "burst_lasers", "name": "Drone Sting", "damage": 6, "damage_bonus": 0,
+      "max_range": 128, "cooldown": 22,
+      "comment": "The Sentry Drone's own attack: a weapon that fires, not a spell."}
+  },
+
+  "orders": {
+    "ls_t_scorch_round": {"base": "cast_psionic_storm", "weapon": "ls_t_scorch_round",
+      "tech": "ls_t_scorch_round",
+      "comment": "Each spell is Psionic Storm's order with its own weapon and tech, and blocks in place of firing. The script blocks are in scripts/spells.luau.",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_eldfire"},
+        {"do": "damage", "amount": 24, "damage_type": "explosive", "radius": 72, "targets": "enemies"},
+        {"do": "status", "status": "t_scorched", "radius": 72, "targets": "enemies"}
+      ]},
+    "ls_t_null_pulse": {"comment": "a sprite a block shows is never a weapon's own, for the reason a status's overlay is not: a shot's picture does the shot's damage in its own animation, and shown on its own there is no shot behind it. The EMP shockwave, the acid spore, the plague cloud, the seeker spores and the psionic shockwave all do, and two of them -- the plague cloud and the psionic shockwave -- the moment they appear, because their first animation has no ender and runs straight on into the damage. So the shows here use the thingy_ pictures instead. A weapon's name is the warning sign and not the test: the dark swarm shares its name with one and is a thingy picture, which is why Hive Mind still shows it.",
+      "base": "cast_psionic_storm", "weapon": "ls_t_null_pulse", "tech": "ls_t_null_pulse",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_evecast"},
+        {"do": "energy", "amount": -100, "radius": 112, "targets": "enemies"},
+        {"do": "status", "status": "t_jammed", "radius": 112, "targets": "enemies"},
+        {"do": "script", "call": "LsNullPulseShields"}
+      ]},
+    "ls_t_sentry_drone": {"base": "cast_psionic_storm", "weapon": "ls_t_sentry_drone",
+      "tech": "ls_t_sentry_drone",
+      "blocks": [
+        {"do": "sound", "sound": "misc_buzz"},
+        {"do": "spawn", "unit": "ls_sentry_drone", "count": 2, "seconds": 30, "at": "caster"},
+        {"do": "status", "status": "t_drone_warded", "radius": 96, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_t_barrage_call": {"base": "cast_psionic_storm", "weapon": "ls_t_barrage_call",
+      "tech": "ls_t_barrage_call",
+      "blocks": [
+        {"do": "repeat", "times": 4, "blocks": [
+          {"do": "wait", "seconds": 0.75, "blocks": [
+            {"do": "show", "sprite": "thingy_explo2"},
+            {"do": "damage", "amount": 18, "damage_type": "explosive", "radius": 64, "targets": "enemies",
+              "buildings": true}
+          ]}
+        ]}
+      ]},
+    "ls_t_bulwark_field": {"base": "cast_psionic_storm", "weapon": "ls_t_bulwark_field",
+      "tech": "ls_t_bulwark_field",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_evecast"},
+        {"do": "status", "status": "t_braced", "radius": 128, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_t_flare_mark": {"base": "cast_psionic_storm", "weapon": "ls_t_flare_mark", "tech": "ls_t_flare_mark",
+      "blocks": [
+        {"do": "status", "status": "t_marked"},
+        {"do": "status", "status": "t_blinded"},
+        {"do": "script", "call": "LsFlareReveal"}
+      ]},
+    "ls_t_thermite_spray": {"base": "cast_psionic_storm", "weapon": "ls_t_thermite_spray",
+      "tech": "ls_t_thermite_spray",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_flamer"},
+        {"do": "script", "call": "LsThermiteCone"}
+      ]},
+    "ls_t_repair_swarm": {"base": "cast_psionic_storm", "weapon": "ls_t_repair_swarm",
+      "tech": "ls_t_repair_swarm",
+      "blocks": [
+        {"do": "status", "status": "t_mending", "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "heal", "amount": 20, "radius": 120, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_t_shock_clamp": {"base": "cast_psionic_storm", "weapon": "ls_t_shock_clamp", "tech": "ls_t_shock_clamp",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_esfhit"},
+        {"do": "status", "status": "t_clamped"},
+        {"do": "damage", "amount": 10, "damage_type": "concussive"}
+      ]},
+    "ls_t_overclock": {"base": "cast_psionic_storm", "weapon": "ls_t_overclock", "tech": "ls_t_overclock",
+      "blocks": [
+        {"do": "status", "status": "t_overclocked", "radius": 96, "targets": "own", "at": "caster"}
+      ]},
+    "ls_t_smoke_veil": {"base": "cast_psionic_storm", "weapon": "ls_t_smoke_veil", "tech": "ls_t_smoke_veil",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_gsmoke"},
+        {"do": "status", "status": "t_veiled", "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "status", "status": "t_jammed", "radius": 120, "targets": "enemies", "at": "caster"}
+      ]},
+    "ls_t_siege_anchor": {"base": "cast_psionic_storm", "weapon": "ls_t_siege_anchor",
+      "tech": "ls_t_siege_anchor",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_bdust"},
+        {"do": "status", "status": "t_anchored", "at": "caster"}
+      ]},
+
+    "ls_z_acid_bloom": {"base": "cast_psionic_storm", "weapon": "ls_z_acid_bloom", "tech": "ls_z_acid_bloom",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_sporehit"},
+        {"do": "damage", "amount": 20, "radius": 80, "targets": "enemies"},
+        {"do": "status", "status": "z_corroded", "radius": 80, "targets": "enemies"}
+      ]},
+    "ls_z_bile_spray": {"base": "cast_psionic_storm", "weapon": "ls_z_bile_spray", "tech": "ls_z_bile_spray",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_gresmoke"},
+        {"do": "status", "status": "z_bile_rot", "radius": 96, "targets": "enemies", "buildings": true}
+      ]},
+    "ls_z_spore_cloud": {"base": "cast_psionic_storm", "weapon": "ls_z_spore_cloud", "tech": "ls_z_spore_cloud",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_bsmoke"},
+        {"do": "status", "status": "z_spored", "radius": 128, "targets": "enemies"},
+        {"do": "wait", "seconds": 3, "blocks": [
+          {"do": "status", "status": "z_spored", "radius": 128, "targets": "enemies"}
+        ]}
+      ]},
+    "ls_z_root_snare": {"base": "cast_psionic_storm", "weapon": "ls_z_root_snare", "tech": "ls_z_root_snare",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_zdvhit"},
+        {"do": "status", "status": "z_rooted", "radius": 88, "targets": "enemies"},
+        {"do": "status", "status": "z_hobbled", "radius": 88, "targets": "enemies"}
+      ]},
+    "ls_z_spawn_brood": {"base": "cast_psionic_storm", "weapon": "ls_z_spawn_brood", "tech": "ls_z_spawn_brood",
+      "blocks": [
+        {"do": "spawn", "unit": "zerg_broodling", "count": 4, "seconds": 25},
+        {"do": "status", "status": "z_brood_touched", "radius": 64, "targets": "enemies"}
+      ]},
+    "ls_z_infest_husk": {"base": "cast_psionic_storm", "weapon": "ls_z_infest_husk", "tech": "ls_z_infest_husk",
+      "blocks": [
+        {"do": "script", "call": "LsInfestHusk"}
+      ]},
+    "ls_z_carapace_knit": {"base": "cast_psionic_storm", "weapon": "ls_z_carapace_knit",
+      "tech": "ls_z_carapace_knit",
+      "blocks": [
+        {"do": "status", "status": "z_knit", "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "status", "status": "z_carapace_hard", "radius": 120, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_z_molt": {"base": "cast_psionic_storm", "weapon": "ls_z_molt", "tech": "ls_z_molt",
+      "blocks": [
+        {"do": "remove_statuses", "at": "caster"},
+        {"do": "status", "status": "z_molting", "at": "caster"}
+      ]},
+    "ls_z_frenzy_pheromone": {"base": "cast_psionic_storm", "weapon": "ls_z_frenzy_pheromone",
+      "tech": "ls_z_frenzy_pheromone",
+      "blocks": [
+        {"do": "status", "status": "z_frenzied", "radius": 128, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_z_devour": {"base": "cast_psionic_storm", "weapon": "ls_z_devour", "tech": "ls_z_devour",
+      "blocks": [
+        {"do": "damage", "amount": 35},
+        {"do": "script", "call": "LsDevourFeed"}
+      ]},
+    "ls_z_burrow_strike": {"base": "cast_psionic_storm", "weapon": "ls_z_burrow_strike",
+      "tech": "ls_z_burrow_strike",
+      "blocks": [
+        {"do": "teleport"},
+        {"do": "show", "sprite": "thingy_bdust"},
+        {"do": "damage", "amount": 22, "radius": 80, "targets": "enemies", "at": "caster"},
+        {"do": "status", "status": "z_rooted", "radius": 80, "targets": "enemies", "at": "caster"}
+      ]},
+    "ls_z_hive_mind": {"base": "cast_psionic_storm", "weapon": "ls_z_hive_mind", "tech": "ls_z_hive_mind",
+      "blocks": [
+        {"do": "show", "sprite": "dark_swarm"},
+        {"do": "status", "status": "z_hive_linked", "radius": 144, "targets": "allies", "at": "caster"},
+        {"do": "repeat", "times": 3, "blocks": [
+          {"do": "wait", "seconds": 2, "blocks": [
+            {"do": "status", "status": "z_hive_linked", "radius": 144, "targets": "allies", "at": "caster"}
+          ]}
+        ]}
+      ]},
+
+    "ls_p_mind_lash": {"base": "cast_psionic_storm", "weapon": "ls_p_mind_lash", "tech": "ls_p_mind_lash",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_dbl_exp"},
+        {"do": "energy", "amount": -75},
+        {"do": "damage", "amount": 30, "damage_type": "independent"},
+        {"do": "status", "status": "p_mind_burned"}
+      ]},
+    "ls_p_void_rend": {"base": "cast_psionic_storm", "weapon": "ls_p_void_rend", "tech": "ls_p_void_rend",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_pteglow"},
+        {"do": "damage", "amount": 40, "damage_type": "independent", "radius": 80, "targets": "enemies"},
+        {"do": "status", "status": "p_rent", "radius": 80, "targets": "enemies"},
+        {"do": "status", "status": "p_void_marked", "radius": 80, "targets": "enemies"}
+      ]},
+    "ls_p_psi_nova": {"base": "cast_psionic_storm", "weapon": "ls_p_psi_nova", "tech": "ls_p_psi_nova",
+      "blocks": [
+        {"do": "repeat", "times": 3, "blocks": [
+          {"do": "wait", "seconds": 0.5, "blocks": [
+            {"do": "show", "sprite": "thingy_maelhit"},
+            {"do": "damage", "amount": 16, "radius": 112, "targets": "enemies", "at": "caster"}
+          ]}
+        ]}
+      ]},
+    "ls_p_warp_step": {"base": "cast_psionic_storm", "weapon": "ls_p_warp_step", "tech": "ls_p_warp_step",
+      "blocks": [
+        {"do": "damage", "amount": 14, "radius": 72, "targets": "enemies", "at": "caster"},
+        {"do": "teleport"},
+        {"do": "show", "sprite": "thingy_recall"},
+        {"do": "status", "status": "p_phased", "at": "caster"}
+      ]},
+    "ls_p_summon_echo": {"base": "cast_psionic_storm", "weapon": "ls_p_summon_echo",
+      "tech": "ls_p_summon_echo",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_recall"},
+        {"do": "spawn", "unit": "ls_warp_echo", "count": 2, "seconds": 25}
+      ]},
+    "ls_p_shield_weave": {"base": "cast_psionic_storm", "weapon": "ls_p_shield_weave",
+      "tech": "ls_p_shield_weave",
+      "blocks": [
+        {"do": "status", "status": "p_shield_woven", "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "script", "call": "LsShieldWeave"}
+      ]},
+    "ls_p_khala_surge": {"base": "cast_psionic_storm", "weapon": "ls_p_khala_surge",
+      "tech": "ls_p_khala_surge",
+      "blocks": [
+        {"do": "energy", "amount": 50, "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "status", "status": "p_khala_lit", "radius": 120, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_p_time_dilation": {"base": "cast_psionic_storm", "weapon": "ls_p_time_dilation",
+      "tech": "ls_p_time_dilation",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_ensnare"},
+        {"do": "status", "status": "p_dilated", "radius": 112, "targets": "enemies"},
+        {"do": "status", "status": "p_warp_lag", "radius": 112, "targets": "enemies"}
+      ]},
+    "ls_p_chrono_rift": {"base": "cast_psionic_storm", "weapon": "ls_p_chrono_rift",
+      "tech": "ls_p_chrono_rift",
+      "blocks": [
+        {"do": "status", "status": "p_rifted", "radius": 96, "targets": "enemies"},
+        {"do": "wait", "seconds": 2, "blocks": [
+          {"do": "show", "sprite": "thingy_dbl_exp"},
+          {"do": "damage", "amount": 45, "damage_type": "independent", "radius": 96, "targets": "enemies"}
+        ]}
+      ]},
+    "ls_p_null_field": {"base": "cast_psionic_storm", "weapon": "ls_p_null_field", "tech": "ls_p_null_field",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_evecast"},
+        {"do": "status", "status": "p_nulled", "radius": 96, "targets": "enemies"},
+        {"do": "energy", "amount": -50, "radius": 96, "targets": "enemies"}
+      ]},
+    "ls_p_phase_veil": {"base": "cast_psionic_storm", "weapon": "ls_p_phase_veil", "tech": "ls_p_phase_veil",
+      "blocks": [
+        {"do": "status", "status": "p_phased", "radius": 120, "targets": "allies", "at": "caster"},
+        {"do": "remove_statuses", "status": "p_dilated", "radius": 120, "targets": "allies", "at": "caster"}
+      ]},
+    "ls_p_void_tether": {"base": "cast_psionic_storm", "weapon": "ls_p_void_tether", "tech": "ls_p_void_tether",
+      "blocks": [
+        {"do": "show", "sprite": "thingy_spotrail"},
+        {"do": "status", "status": "p_tethered", "radius": 96, "targets": "enemies"},
+        {"do": "script", "call": "LsVoidTetherPull"}
+      ]}
+  },
+
+  "units": {
+    "ls_ravager": {"base": "zerg_ultralisk", "name": "Ravager", "hit_points": 880, "armor": 3,
+      "destroy_score": 600,
+      "flags": ["regenerate", "organic", "spellcaster", "large_overlays", "battle_reactions", "auto_attack"],
+      "scripts": {"brain": "LsBrainBruiser", "every": 1},
+      "comment": "One of the seven bodies a run rolls its elites onto: a unit the game already has with more life, a look of its own in looks.json and the library spells on its card. Its name, its stats, its affixes and the spell it casts are rolled for each run (scripts/pools/tiers.luau, LS.eliteArchs), so what rides a wave is never this row as written. The generator's own kinds are made for one game (scripts/generate.luau). The ground the Ravager crosses burns: its brain lays Thermite Spray as it walks."},
+    "ls_phase_templar": {"base": "protoss_dark_templar", "name": "Phase Templar", "hit_points": 192,
+      "shields_enabled": 1, "shields": 96, "armor": 2, "destroy_score": 600,
+      "flags": ["spellcaster", "organic", "medium_overlays", "battle_reactions", "auto_attack", "cloakable"],
+      "scripts": {"brain": "LsBrainAssassin", "every": 1}},
+    "ls_siege_breaker": {"base": "terran_siege_tank_siege_mode", "name": "Siege Breaker", "hit_points": 390,
+      "armor": 3, "destroy_score": 700,
+      "flags": ["spellcaster", "mechanical", "large_overlays", "battle_reactions", "auto_attack"],
+      "scripts": {"brain": "LsBrainSiege", "every": 1}},
+    "ls_aegis_host": {"base": "protoss_archon", "name": "Aegis Host", "hit_points": 60, "shields_enabled": 1,
+      "shields": 630, "armor": 1, "destroy_score": 700,
+      "flags": ["spellcaster", "large_overlays", "battle_reactions", "auto_attack"],
+      "aura": {"status": "p_shield_woven", "radius": 192, "targets": "allies", "every": 2, "self": true},
+      "scripts": {"brain": "LsBrainSupport", "every": 1}},
+    "ls_stormcaller": {"base": "protoss_high_templar", "name": "Stormcaller", "hit_points": 64,
+      "shields_enabled": 1, "shields": 64, "armor": 1, "destroy_score": 650,
+      "flags": ["spellcaster", "organic", "medium_overlays", "battle_reactions"],
+      "scripts": {"brain": "LsBrainCaster", "every": 1}},
+    "ls_singularity": {"base": "zerg_devourer", "name": "Singularity", "hit_points": 500, "armor": 3,
+      "destroy_score": 800,
+      "flags": ["flyer", "regenerate", "organic", "spellcaster", "large_overlays", "battle_reactions",
+        "auto_attack"],
+      "scripts": {"brain": "LsBrainCaster", "every": 1}},
+    "ls_hybrid_reaver": {"base": "zerg_ultralisk", "name": "Hybrid Reaver", "hit_points": 900,
+      "shields_enabled": 1, "shields": 400, "armor": 4, "destroy_score": 1500,
+      "flags": ["regenerate", "organic", "spellcaster", "large_overlays", "battle_reactions", "auto_attack"],
+      "scripts": {"brain": "LsBrainBoss", "every": 1},
+      "comment": "Leads the last wave and then holds the enemy base. Its phases are in scripts/ai/bosses.luau."},
+
+    "ls_sentry_drone": {"base": "protoss_observer", "name": "Sentry Drone", "hit_points": 60, "armor": 0,
+      "ground_weapon": "ls_drone_sting", "max_ground_hits": 1, "sight_range": 9, "destroy_score": 0,
+      "flags": ["flyer", "mechanical", "robotic", "detector", "auto_attack", "spellcaster"],
+      "comment": "What Sentry Drone makes: a small flyer that sees and stings, for 30 seconds."},
+    "ls_warp_echo": {"base": "protoss_zealot", "name": "Warp Echo", "hit_points": 40, "shields_enabled": 1,
+      "shields": 40, "armor": 0, "destroy_score": 0,
+      "flags": ["organic", "medium_overlays", "battle_reactions", "auto_attack"],
+      "comment": "What Summon Echo warps in. It fades after 25 seconds."}
+  },
+
+  "cards": {
+    "ls_ravager": [
+      {"position": 7, "cast": "ls_t_thermite_spray", "ai": {"call": "LsAiThermiteSpray", "every": 1},
+        "hotkey": "t", "text": "<T>hermite Spray"},
+      {"position": 8, "cast": "ls_t_overclock", "ai": {"call": "LsAiOverclock", "every": 2},
+        "hotkey": "o", "text": "<O>verclock"}
+    ],
+    "ls_phase_templar": [
+      {"position": 7, "cast": "ls_p_warp_step", "target": true, "ai": {"call": "LsAiWarpStep", "every": 1},
+        "hotkey": "w", "text": "<W>arp Step"},
+      {"position": 8, "cast": "ls_p_void_rend", "target": true, "ai": {"call": "LsAiVoidRend", "every": 1},
+        "hotkey": "v", "text": "<V>oid Rend"}
+    ],
+    "ls_siege_breaker": [
+      {"position": 7, "cast": "ls_t_barrage_call", "target": true,
+        "ai": {"call": "LsAiBarrageCall", "every": 2}, "hotkey": "b", "text": "<B>arrage Call"},
+      {"position": 8, "cast": "ls_t_siege_anchor", "ai": {"call": "LsAiSiegeAnchor", "every": 2},
+        "hotkey": "a", "text": "Siege <A>nchor"}
+    ],
+    "ls_aegis_host": [
+      {"position": 7, "cast": "ls_t_bulwark_field", "ai": {"call": "LsAiBulwarkField", "every": 2},
+        "hotkey": "f", "text": "Bulwark <F>ield"},
+      {"position": 8, "cast": "ls_p_shield_weave", "ai": {"call": "LsAiShieldWeave", "every": 2},
+        "hotkey": "s", "text": "<S>hield Weave"},
+      {"position": 9, "cast": "ls_t_repair_swarm", "ai": {"call": "LsAiRepairSwarm", "every": 2},
+        "hotkey": "r", "text": "<R>epair Swarm"}
+    ],
+    "ls_stormcaller": [
+      {"position": 7, "cast": "ls_p_psi_nova", "ai": {"call": "LsAiPsiNova", "every": 1},
+        "hotkey": "n", "text": "Psi <N>ova"},
+      {"position": 8, "cast": "ls_p_chrono_rift", "target": true,
+        "ai": {"call": "LsAiChronoRift", "every": 1}, "hotkey": "c", "text": "<C>hrono Rift"},
+      {"position": 9, "cast": "ls_p_time_dilation", "target": true,
+        "ai": {"call": "LsAiTimeDilation", "every": 2}, "hotkey": "d", "text": "Time <D>ilation"}
+    ],
+    "ls_singularity": [
+      {"position": 7, "cast": "ls_p_void_tether", "target": true,
+        "ai": {"call": "LsAiVoidTether", "every": 1}, "hotkey": "t", "text": "Void <T>ether"},
+      {"position": 8, "cast": "ls_p_null_field", "target": true,
+        "ai": {"call": "LsAiNullField", "every": 2}, "hotkey": "l", "text": "Nul<l> Field"}
+    ],
+    "ls_hybrid_reaver": [
+      {"position": 6, "cast": "ls_p_void_rend", "target": true, "ai": {"call": "LsAiVoidRend", "every": 1},
+        "hotkey": "v", "text": "<V>oid Rend"},
+      {"position": 7, "cast": "ls_z_hive_mind", "ai": {"call": "LsAiHiveMind", "every": 2},
+        "hotkey": "h", "text": "<H>ive Mind"},
+      {"position": 8, "cast": "ls_z_spawn_brood", "target": true,
+        "ai": {"call": "LsAiSpawnBrood", "every": 2}, "hotkey": "b", "text": "Spawn <B>rood"},
+      {"position": 9, "cast": "ls_p_psi_nova", "ai": {"call": "LsAiPsiNova", "every": 1},
+        "hotkey": "n", "text": "Psi <N>ova"}
+    ],
+    "ls_sentry_drone": [
+      {"position": 7, "cast": "ls_t_flare_mark", "target": true, "ai": {"call": "LsAiFlareMark", "every": 2},
+        "hotkey": "m", "text": "Flare <M>ark"}
+    ]
+  }
+}

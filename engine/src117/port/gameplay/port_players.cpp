@@ -4,6 +4,7 @@
 // map's Hyperion players section; the computers past 7 the command line asks for.
 #include <windows.h>
 #include <string.h>
+#include <vector>
 
 #include "../../h/playertables.h"
 #include "port_eud.h"
@@ -33,6 +34,10 @@ static PlayerMapSlot g_mapSlots[PLAYER_SLOTS_MAX];
 // blue; slot 11's entry is neutral's, and not read. Presentation only.
 static BYTE g_mapRgb[PLAYER_SLOTS_MAX][4];
 
+// The slots the map's UNIT sections give a start location, and whether a pass read any.
+static bool g_abMapStart[PLAYER_SLOTS_MAX];
+static bool g_bMapStarts;
+
 const PlayerMapSlot *PlayersMapSlot(int nSlot) {
   return &g_mapSlots[nSlot];
 }
@@ -44,6 +49,34 @@ void PlayersMapBegin() {
   g_hxSlots = PLAYER_SLOTS_MAX;
   memset(g_mapSlots, 0, sizeof g_mapSlots);
   memset(g_mapRgb, 0, sizeof g_mapRgb);
+  memset(g_abMapStart, 0, sizeof g_abMapStart);
+  g_bMapStarts = false;
+}
+
+int __stdcall PlayersMapUnit(void *pFile, int nSize, void *pDest) {
+  PoolsMapUnit(pFile, nSize, pDest);
+  // a UNIT record is 36 bytes, its type at 8 and its owner at 16; 214 is a start location
+  if (nSize >= 36) {
+    std::vector<BYTE> ab(static_cast<size_t>(nSize));
+    if (ReadChunk(pFile, ab.data())) {
+      g_bMapStarts = true;
+      for (int at = 0; at + 36 <= nSize; at += 36) {
+        WORD wType;
+        memcpy(&wType, &ab[at + 8], 2);
+        const BYTE bOwner = ab[at + 16];
+        if (wType == 214 && bOwner < PLAYER_SLOTS_MAX)
+          g_abMapStart[bOwner] = true;
+      }
+    }
+  }
+  return 1;
+}
+
+bool PlayersMapSeat(int nSlot) {
+  if (nSlot < PLAYER_LOBBY_117 || nSlot >= PLAYER_SLOTS_MAX || nSlot == PLAYER_NEUTRAL)
+    return false;
+  const BYTE bOwner = g_mapSlots[nSlot].bOwner;
+  return (bOwner == 5 || bOwner == 6) && (!g_bMapStarts || g_abMapStart[nSlot]);
 }
 
 // The game's slots: one past the last the map gives an owner, never fewer than 1.17's 12.
@@ -196,7 +229,7 @@ void PlayersSetExtraComputerRace(int i, unsigned char bRace) {
 }
 
 static bool MapSlotOpen(int nSlot) {
-  return nSlot != PLAYER_NEUTRAL && (g_mapSlots[nSlot].bOwner == 5 || g_mapSlots[nSlot].bOwner == 6);
+  return PlayersMapSeat(nSlot);
 }
 
 int PlayersExtraComputers() {
