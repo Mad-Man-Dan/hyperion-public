@@ -3,6 +3,33 @@
   "about": "Hyperion's release notes, newest first (docs/versioning.md). Hyperion.exe carries them: the build compiles this file in, the home screen shows the first three entries as notifications (each with its line), and Patch Notes shows them all. tools/release_notes.py checks it against hyperion/version.h and writes docs/release-notes.md from it.",
   "entries": [
     {
+      "id": "v0.7.4-beta",
+      "kind": "release",
+      "version": "0.7.4-beta",
+      "date": "2026-11-10",
+      "title": "Saved games fix",
+      "summary": "Fixes saved games that would not load after restarting Hyperion.",
+      "line": "Fixes saved games that would not load after restarting Hyperion.",
+      "improved": [
+        {
+          "text": "The map format guide for editor authors is rewritten to explain each change from StarCraft’s own format."
+        }
+      ],
+      "changed": [
+        {
+          "text": "Games saved in this version do not load in earlier versions."
+        }
+      ],
+      "fixed": [
+        {
+          "text": "Saved games load again after Hyperion is restarted, including saves made in v0.7.3-beta."
+        },
+        {
+          "text": "Saved games are much smaller again."
+        }
+      ]
+    },
+    {
       "id": "v0.7.3-beta",
       "kind": "release",
       "version": "0.7.3-beta",
@@ -34,13 +61,13 @@
           "text": "Some early-format maps load again as Use Map Settings."
         },
         {
-          "text": "A map made for a mod no longer starts without that mod."
-        },
-        {
           "text": "Screenshots save the window as shown, with the HUD design and full colour."
         },
         {
           "text": "Safer reading of sound files from mods and maps."
+        },
+        {
+          "text": "Various other bug fixes."
         }
       ]
     },

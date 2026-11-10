@@ -4,6 +4,23 @@ What changed in each version of Hyperion, newest first. The game shows the same 
 Patch Notes. Versions are numbered as `docs/versioning.md` says; this page is written from
 `engine/notes/release-notes.json` by `engine/tools/release_notes.py md`.
 
+## v0.7.4-beta, 2026-11-10
+
+**Saved games fix.** Fixes saved games that would not load after restarting Hyperion.
+
+### Improved
+
+- The map format guide for editor authors is rewritten to explain each change from StarCraft’s own format.
+
+### Changed
+
+- Games saved in this version do not load in earlier versions.
+
+### Fixed
+
+- Saved games load again after Hyperion is restarted, including saves made in v0.7.3-beta.
+- Saved games are much smaller again.
+
 ## v0.7.3-beta, 2026-11-10
 
 **Map and mod groundwork, and fixes.** Groundwork for larger maps and deeper mods, and fixes for games with more than 8 players.
@@ -19,9 +36,9 @@ Patch Notes. Versions are numbered as `docs/versioning.md` says; this page is wr
 - Replays of games with more than 12 players seat a player who was destroyed before the end.
 - Building placement previews no longer draw over attack overlays, nor health bars over selection circles.
 - Some early-format maps load again as Use Map Settings.
-- A map made for a mod no longer starts without that mod.
 - Screenshots save the window as shown, with the HUD design and full colour.
 - Safer reading of sound files from mods and maps.
+- Various other bug fixes.
 
 ## v0.7.2-beta, 2026-11-04
 

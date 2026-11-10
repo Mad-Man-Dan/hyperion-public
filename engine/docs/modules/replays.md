@@ -75,6 +75,14 @@ SPRT THNG FLNG UNIT BULT ORDR CREP DECY MAPS TRIG STRS SELS PATH AI DATS VIEW`, 
 `port_formats.cpp`, `PortSaveBegin` to `PortLoadEnd`). `PortLoadBegin` tells the two formats
 apart by the marker, so Hyperion loads 1.17's saves as well; 1.17 does not read Hyperion's.
 
+The format version is 3. From it, a run of records is written as differences: each byte less
+the byte one record before (`PortSaveDelta`, `PortLoadUndelta`). That covers the runs
+`PortSave117Compress` writes (the orders, the AI's pools), the path pool and the pools' free
+lists in `HXGM` and `HXST`. A game by Hyperion's rules has the largest unit table, and its free
+records differ only by their links, so they pack to little: a four-player game's save is about
+1 MB where format 2 wrote 13.7 MB. A save of format 2 loads as before; a build that knows
+format 2 alone refuses one of format 3.
+
 A game by Hyperion's rules (`HxSaveNeeded()`, the same test) adds sections of its own:
 
 | Section | Where | What it holds |
@@ -251,7 +259,11 @@ low halves where 1.17 has its WORDs (`SAVE117_OFFSET16`, `tools/save_layouts.py`
 `SCRIPT_OFFSETS`) and `HXWI` the high halves.
 
 Loading goes the other way: `HxLoadSetUp` reads `HXGM` before the game starts (a save without it
-is 1.17's, which turns the extra player entries off and sets classic rules),
+is 1.17's, which turns the extra player entries off and sets classic rules). `HXGM`'s free lists
+come before `HXUN`, so they are read before the pools are sized for the save's unit table: their
+size is held to the largest game's sprites and images (`ListsMostBytes`), not to the pools of the
+game before, and checked against the game's own pools when they are applied. A set-up that
+cannot be read names the part in `hyperion_save.log`.
 `HxSaveBeforePsiLinks` puts the sprite and image free lists back before `RestorePsiLinks` rebuilds
 the power fields, so the fields take the slots they took in the game saved, and `HxLoadState` reads
 `HXST`. Once the game is set up, `HxSaveLoaded` restores the random state, compares the state with
@@ -350,7 +362,9 @@ detail.
   keeping each game's live log as the replay's reference and saving at the frame an entry names as
   its `checkpoint`. `hxsuite` plays each of those replays on `hx64` and fails it when the replay
   is refused, when a check differs or is left unmade, or when its log differs from the live game's;
-  for an entry with a checkpoint it also loads the save and holds the loaded game to the same log.
+  for an entry with a checkpoint it also loads the save and holds the loaded game to the same log,
+  and then plays the game live again, saves it with the build under test and loads that save in a
+  new process, held to the same log, so a build whose own saves do not load fails.
 - `loadmatrix.py` and `savecompare.py` are the save checks: every build saves at one frame, every
   build loads every save, and the saves themselves are compared item by item.
 - `compare.py` plays any replays on 1.17 and on Hyperion and shows the comparison for a person to

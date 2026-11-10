@@ -1,92 +1,101 @@
 # Hyperion maps for map editors
 
-This is for the author of a map editor who wants it to open, save and test Hyperion's
-maps. It says:
+This guide is for the developer of a map editor who wants the editor to open, save and test
+Hyperion's maps. It assumes you know StarCraft's map format (the CHK inside an `.scm` or
+`.scx`) and describes Hyperion's format as a set of changes to it: for each area, how
+StarCraft does it, what Hyperion changed, and what an editor has to write.
 
-- what Hyperion is and which game files it reads;
-- what a Hyperion map is;
-- how to support it, step by step;
-- what Hyperion does with a map when a game starts;
-- what is stable now and what is planned;
-- how to test a map.
+Two reference documents come with it:
 
-Two documents sit beside this file:
+- `hxm-format.md`: every field of the format, with its type and default.
+- `live-channel-for-editors.md`: the protocol for loading a map into a Hyperion that is
+  already running.
 
-- `hxm-format.md`, the field-by-field reference;
-- `live-channel-for-editors.md`, for testing a map in a Hyperion that is already running.
+This guide describes Hyperion v0.7.3-beta (2026-11-10) and format version 1. Where
+v0.7.2-beta behaves differently, the text says "from v0.7.3-beta".
 
-This covers Hyperion v0.7.3-beta (2026-11-10) and format version 1. What v0.7.2-beta does not
-have says "from v0.7.3-beta".
+## Terms
+
+- **CHK**: the `scenario.chk` file inside an `.scm` or `.scx`, made of four-letter sections
+  (`DIM`, `OWNR`, `UNIT`, `TRIG` and so on).
+- **Player index**: a player's number as the CHK stores it, counted from 0. Index 0 is the
+  player StarEdit calls Player 1, index 7 is Player 8, and index 11 is Player 12, the neutral
+  player. This guide and the format use the index, and give StarEdit's name beside it where
+  that helps.
+- **Controller**: who controls a player, which the CHK stores in `OWNR` (human, computer,
+  rescuable, neutral and so on). In `map.json` this is a player's `slot` field.
+- **Classic map**: a map within StarCraft's limits, which can be saved as `.scm` or `.scx`
+  and which StarCraft itself plays.
+- **Hyperion map**: a map past those limits. Only Hyperion plays it.
 
 ## What Hyperion is
 
-Hyperion is a 64-bit engine for StarCraft: Brood War, for Windows, Mac (Apple silicon) and
-Linux (x64 and ARM64).
+Hyperion is a 64-bit engine for StarCraft: Brood War. It runs on Windows, Mac (Apple silicon)
+and Linux (x64 and ARM64).
 
-It plays the game's maps as the original does, to the frame:
+It plays StarCraft's maps exactly as the original game does, frame for frame:
 
-- `.scm` and `.scx`;
-- the maps StarEdit, ScmDraft 2 and Remastered save;
-- the campaign's maps.
+- `.scm` and `.scx` files;
+- maps saved by StarEdit, ScmDraft 2 and StarCraft: Remastered;
+- the campaign maps.
 
-For maps past the original's limits it has a format of its own, `.hxm`. An `.hxm` map can be
-bigger, hold more players, give each player a colour in full RGB, place units a mod adds, and
-later have the features listed under "Planned".
+For maps past StarCraft's limits it has its own format, `.hxm`. An `.hxm` map can be larger,
+have more players, give each player any RGB colour, and place units that a mod adds.
 
-Hyperion holds none of the game's files. It reads them from the player's own install, which
+Hyperion ships none of StarCraft's files. It reads them from the player's own install, which
 is one of two kinds:
 
-- **StarCraft: Remastered, from Battle.net** (free). Hyperion reads its CASC storage, the same
+- **StarCraft: Remastered from Battle.net** (free). Hyperion reads its CASC storage, the same
   data StarDraft reads.
-- **A classic install's MPQs:** `StarDat.mpq`, `BrooDat.mpq`, `patch_rt.mpq`, and the CDs'
-  `StarCraft.mpq` and `BroodWar.mpq`, with `Local.dll`.
+- **A classic install's MPQ files:** `StarDat.mpq`, `BrooDat.mpq`, `patch_rt.mpq`, the CDs'
+  `StarCraft.mpq` and `BroodWar.mpq`, and `Local.dll`.
 
-Hyperion runs from a folder of its own and only reads the game's folders. It never writes
-into them.
+Hyperion runs from its own folder. It reads the game's folders and never writes to them.
 
-## Where maps go
+## Where Hyperion looks for maps
 
-Hyperion's map list shows the maps in these folders, and `--map` finds a map in them by
-name:
+The in-game map list shows the maps in these folders, and the `--map` option finds a map in
+them by file name:
 
-- the game's own `Maps` folder, whether the files are Battle.net's StarCraft or a classic
-  install. A map an editor saves there needs nothing else.
-- Hyperion's data folder, `Data\maps\` (`Data/maps/` on Mac and Linux). Hyperion's own maps
-  are in `Data\maps\Hyperion\`.
-- up to eight more folders, given with `--maps <folder>`.
+- StarCraft's own `Maps` folder, in either kind of install. A map your editor saves there
+  needs no other set-up.
+- Hyperion's data folder, `Data\maps\` (`Data/maps/` on Mac and Linux). The maps that come
+  with Hyperion are in `Data\maps\Hyperion\`.
+- up to eight more folders, each given with `--maps <folder>`.
 
-Hyperion compiles a `.hxm` into the game's own form when it is played, and keeps the result
-in `Data\cache\hxm\`. The cache is keyed by the map's path, the compiler's revision and the
-data of the mod loaded, and redone whenever the file is newer. So an editor should write the
-file afresh when it saves, giving it a new modification time; a save that keeps the old time
-plays the old map.
+**Hyperion compiles an `.hxm` to a CHK before it plays it**, and caches the result in
+`Data\cache\hxm\`. The cache entry is keyed by the map's path, the compiler's revision and
+the loaded mod's data, and it is rebuilt when the `.hxm` file's modification time is newer.
+So when your editor saves, it must write the file with a new modification time. A save that
+preserves the old time makes Hyperion play the cached, older map.
 
-## The format in short
+## The file format in short
 
-A `.hxm` file is a zip of:
+An `.hxm` file is a zip archive containing:
 
-    map.json              the map as one JSON document
-    layers/<name>.bin     the per-tile data, binary, little-endian
-    files/<path>          the map's other files (its sounds), by their path in the map
+    map.json              the whole map except per-tile data, as one JSON document
+    layers/<name>.bin     per-tile data, binary, little-endian
+    files/<path>          the map's other files (its sounds), at their path in the map
 
-The same tree in a folder is the unpacked form. Hyperion reads the zip; the folder is for
-editing by hand and version control.
+The same tree as a plain folder is the unpacked form. Hyperion plays the zip; the folder
+form is for hand editing and version control.
 
-`map.json` uses names for the game's numbers (`terran_marine`, `jungle`, `at_least`).
-Wherever it takes a name it also takes the number, so nothing outside the lists is lost.
+How `map.json` is written:
 
-- Text is plain UTF-8 JSON text.
-- The game's colour codes are the control characters they always were.
-- Strings are written where they are used: there is no string table to keep.
+- It uses names for StarCraft's numeric ids (`terran_marine`, `jungle`, `at_least`). Every
+  field that accepts a name also accepts the number, so an id with no name is never lost.
+- Text is UTF-8. StarCraft's colour codes are the same control characters as in a CHK.
+- There is no string table. Each string is written in the field that uses it, where a CHK
+  would hold an index into `STR `.
 
-Every CHK converts to the format and back. An editor that already models a CHK can treat an
-`.hxm` as that model in another form:
+Every CHK converts to `.hxm` and back without loss. If your editor already has a model of a
+CHK, an `.hxm` is that model in another container:
 
-| CHK | `.hxm` |
+| CHK section | `map.json` |
 |---|---|
-| `DIM`, `ERA`, `VER` (`expansion`) | `size`, `tileset`, `expansion` |
+| `DIM`, `ERA`, `VER` | `size`, `tileset`, `expansion` |
 | `SPRP` | `name`, `description` |
-| `OWNR`, `SIDE`, `COLR`, `CRGB`, `IOWN` | `players` (`slot`, `race`, `color`, `color_mode`, `rgb`, `editor_slot`) |
+| `OWNR`, `SIDE`, `COLR`, `CRGB`, `IOWN` | `players`: each player's `slot`, `race`, `color`, `color_mode`, `rgb`, `editor_slot` |
 | `FORC` | `forces`, and each player's `force` |
 | `UNIT` | `units` |
 | `THG2` | `doodads` |
@@ -97,210 +106,338 @@ Every CHK converts to the format and back. An editor that already models a CHK c
 | `PUNI`, `PUPx`, `PTEx` (and `UPGR`, `PTEC`) | `availability` |
 | `WAV `, `SWNM` | `sounds`, `switches` |
 | `MTXM`, `TILE`, `ISOM`, `MASK`, `DD2 ` | the layers `tiles`, `editor_tiles`, `isom`, `fog`, `editor_doodads` |
-| `STR `, `STRx` | the text in place |
-| `TYPE`, `IVER`, `IVE2`, `VCOD`, odd section sizes | `compat` |
-| any other section | `sections`, kept as they were |
+| `STR `, `STRx` | the strings, written in place |
+| `TYPE`, `IVER`, `IVE2`, `VCOD`, sections with unusual sizes | `compat` |
+| any other section | `sections`, kept byte for byte |
 
-**The CHK's `VER`.** A map past the original's limits (more than 256 tiles a side, players
-past 7 who take part, triggers for slots past 11, or a mod's units) compiles to a CHK whose
-`VER` is 1206, or 1064 when it does not need Brood War. No Blizzard version uses them, so map
-sites and tools tell such a map from a classic one by `VER` alone, whatever the file is
-called. An editor that writes a Hyperion map as a CHK, in an `.scx` or alone, writes the same
-`VER`. A map within the limits keeps the original's (59, 63, 64, 205 or 206).
+## What Hyperion changes, at a glance
 
-Hyperion reads 1206 as Remastered's 206 and 1064 as 64, so such a CHK has the sections those
-versions have: `MRGN` with 255 locations, and `STR ` or `STRx`. The original refuses a `VER`
-it does not know, so it never plays such a map wrongly. What a Hyperion map adds
-is in three sections of its own, each with a version number first, and Hyperion refuses a
-version it does not read (`hxm-format.md`, "Hyperion's sections in a compiled map"):
+| | StarCraft | Hyperion |
+|---|---|---|
+| Map size | `DIM` up to 256 by 256 tiles | up to 1,024 by 1,024; 512 is the supported target for now |
+| Players | 12 entries in `OWNR` and `SIDE`: Players 1 to 8 can be played, Players 9 to 11 can only own units, Player 12 is neutral | up to 64 players that can be played (32 is the supported target for now): indices 0 to 10 and 12 to 64. Index 11 stays neutral |
+| Player colours | `COLR`, one palette colour for each of Players 1 to 8; Remastered adds `CRGB` | any RGB colour for any player |
+| Triggers | run for Players 1 to 8 and the player groups | run for any player index, and can name any player |
+| Unit types | 228 | a mod adds more, up to 4,096 in a game |
+| Units alive at once | 1,700 | 262,144 in a game by Hyperion's rules |
+| Forces | 4 | 4 |
+| Locations | 64 (`VER` 59) or 255 | 255 |
 
-| Section | Holds |
-|---|---|
-| `HXPL` | the kind, race, force and colour of every slot from 8 on |
-| `HXRG` | the RGB colours of the slots from 8 on |
-| `HXTE` | the slots past 11 each trigger runs for |
+### How a compiled Hyperion map is marked: `VER`
 
-## Supporting it, step by step
+StarCraft identifies a CHK's format by `VER`: 59 for original StarCraft, 63 for a hybrid
+map, 205 for Brood War, and 64 and 206 for the Remastered forms.
 
-Each step is useful on its own.
+A classic map compiled from `.hxm` keeps one of those values.
 
-### 1. Open and save `.hxm` within the original's limits
+A Hyperion map compiles to a CHK with a `VER` no Blizzard version uses:
 
-This step covers a map of up to 256 tiles a side and 8 players. It plays in Hyperion as the
-same map saved as `.scx` would, so the step is about the file, not the game.
+- **1206**, or
+- **1064** when the map does not need Brood War (`"expansion": false`).
 
-- Read `map.json`, the layers it lists under `layers`, and the files under `files`.
-- Write only what differs from the defaults in `hxm-format.md`. Every field has one.
-- When the map was converted from a CHK, keep `compat` and `sections` as they came, so it
-  converts back to the same bytes. A new map has neither.
-- Keep the `isom` layer. Hyperion does not read it, but an editor needs it to paint terrain,
-  as with a CHK's ISOM. It has the CHK section's layout at the map's size.
+A map is a Hyperion map when any of these is true:
+
+- it is more than 256 tiles wide or high;
+- a player at index 8 or above can be played (see "More players");
+- a trigger runs for, or names, a player index above 11;
+- it places a unit that a mod adds.
+
+Because the value is unique, a map site or a tool can tell a Hyperion map from a classic one
+by `VER` alone, whatever the file is called. If your editor writes a Hyperion map directly as
+a CHK, alone or inside an `.scx`, write the same `VER`.
+
+Hyperion reads `VER` 1206 with the same section layout as Remastered's 206, and 1064 as 64.
+So such a CHK has `MRGN` with 255 locations and its strings in `STR ` or `STRx`. StarCraft
+rejects a `VER` it does not know, so it can never load such a map and misread it.
+
+The data that does not fit StarCraft's fixed-size sections goes in three extra sections.
+Each starts with a version number, and Hyperion rejects a version it does not know. Their
+byte layouts are in `hxm-format.md`, "Hyperion's sections in a compiled map".
+
+| Section | Why it exists | Contents |
+|---|---|---|
+| `HXPL` | `OWNR`, `SIDE`, `FORC` and `COLR` have room for 12, 12, 8 and 8 players | the controller, race, force and colour of every player from index 8 up |
+| `HXRG` | `CRGB` has room for 8 players | the RGB colour of each player from index 8 up |
+| `HXTE` | a trigger's list of who it runs for has entries only for Players 1 to 12 and the groups | for each trigger, the player indices above 11 it runs for |
+
+## Supporting the format, step by step
+
+Each step is useful without the ones after it.
+
+### 1. Open and save `.hxm` for a classic map
+
+This covers a map of up to 256 by 256 tiles with Players 1 to 8. Such a map plays in Hyperion
+exactly as the same map saved as `.scx`, so this step is only about reading and writing the
+file.
+
+- Read `map.json`, each layer it lists under `layers`, and each file it lists under `files`.
+- When writing, you may omit any field that has its default value. Every field has a default
+  (`hxm-format.md`).
+- If the map was converted from a CHK, write `compat` and `sections` back unchanged. They
+  hold what is needed to convert the map back to the same CHK bytes. A map created new has
+  neither.
+- Keep the `isom` layer. It is the CHK's `ISOM` section at the map's size. StarCraft and
+  Hyperion ignore it, but an editor needs it to paint isometric terrain.
+- Write `"limits": "classic"` for a map you intend to save as `.scm` or `.scx` as well (see
+  "Declaring a map classic", below).
 
 ### 2. Larger maps
 
-Hyperion plays maps up to 1,024 tiles a side, wide or tall. **The target for now is 512.**
-For a larger map only `size` and the layers' lengths change:
+**StarCraft:** `DIM` holds the width and height in tiles. StarEdit offers 64, 96, 128, 192
+and 256 for each, chosen independently. The engine cannot go past 256 in either direction.
 
-- **Width and height are chosen apart**, as in the original, and each is any whole number of
-  tiles from 1 up. An editor that offers the original's sizes (64, 96, 128, 192, 256) can add
-  384 and 512 to the same list and pair any width with any height: 512 by 256, 128 by 512,
-  384 by 192. Maps of 512 by 256, 256 by 512, 384 by 128 and 128 by 512 were played to check
-  this (2026-11-09).
-- **Tiles.** `tiles` holds width times height u16 values, rows top to bottom. A 512 by 512
-  map has 262,144 tiles, which is why the layers are binary.
-- **Positions** are pixels from the top left, as in a CHK, up to the map's size times 32.
-- **Units.**
-  - A game on a classic map holds the original's 1,700 units, unless the player raises the
-    limit in Game Options.
-  - A game on a Hyperion map sizes its unit table for the units the map places and for its
-    players, up to 262,144.
-  - The map's preplaced units count.
-- **Pathing.** Hyperion builds the map's pathing regions when the game starts, as the
-  original does.
-  - On a map past 256 tiles the regions are coarser.
-  - A map whose terrain has too many separate pieces is refused with the original's "too
-    many obstructions" message.
-  - Only a game shows this: "Testing", below, has a quick way to start one.
+**Hyperion:** the engine plays up to 1,024 tiles in each direction. **Maps up to 512 are the
+supported target for now.** Nothing in the format changes for a larger map except the numbers
+in `size` and the length of each layer.
+
+- **Size.** Width and height are still independent, and each can be any whole number of
+  tiles from 1 up. An editor that offers StarEdit's sizes can add 384 and 512 to the list and
+  allow any pairing, for example 512 by 256, 128 by 512 or 384 by 192. Maps of 512 by 256,
+  256 by 512, 384 by 128 and 128 by 512 were played to confirm this (2026-11-09).
+- **Tiles.** The `tiles` layer is `MTXM`: width times height u16 values, row by row from the
+  top. A 512 by 512 map has 262,144 tiles, which is why layers are binary files and not JSON.
+- **Coordinates** are pixels from the top-left corner, as in `UNIT` and `MRGN`, up to the
+  size in tiles times 32.
+- **Unit count.** StarCraft holds 1,700 units at once, and the units a map preplaces count
+  toward that. A game by Hyperion's rules holds 262,144, and a Hyperion map is always played
+  by Hyperion's rules (see "Rule sets").
+- **Pathfinding.** Like StarCraft, Hyperion divides the map into pathfinding regions when a
+  game starts.
+  - Above 256 tiles the regions are coarser.
+  - If the terrain breaks into too many separate pieces, the map fails to start with
+    StarCraft's "too many obstructions" error.
+  - This can only be found by starting a game. "Testing" below has a quick way to do that.
 
 ### 3. More players
 
-Up to 32 players. The engine plays 64; 32 is the target for now. The rules:
+The supported target for now is 32 players. The engine plays 64.
 
-- **The slot numbers.**
-  - Slots 0 to 7 are the original lobby's slots, and 8 to 10 the three no lobby offers.
-  - Slot 11 is neutral, which the document keeps apart in `neutral`.
-  - The new slots are 12 and up, to 64. So 64 players are slots 0 to 10 and 12 to 64.
-  - The `players` list is in slot order without slot 11, so **entry 11 of the list is
-    slot 12**, entry 12 is slot 13, and so on.
-  - A unit's or doodad's `owner` is the slot number itself (0 to 10, then 12 and up), or
-    `"neutral"`.
-- **What makes it a Hyperion map:** a player from list entry 8 on whose `slot` is `human` or
-  `computer`. Such a map has no form the original plays, and its CHK carries Hyperion's `VER`
-  (above). A map without one is a classic map.
-- **Saying it outright: `"limits": "classic"`.** With it the map is never a Hyperion map:
-  slots 8 to 10 are owners no lobby seats whatever their `slot` says, and Hyperion refuses
-  the map if it is past the original's limits in some other way (more than 256 tiles a side,
-  a slot past 10, a mod's unit). Write it for every map meant to be saved as `.scm` or
-  `.scx`. Some classic maps call players 9 to 11 computers; converted to `.hxm` they carry
-  this field, which keeps them classic. Left out, the map's content decides, as above.
-  In the compiled map the mark is the `VER`, which Hyperion writes from this.
-- **Slots no one plays.** Hyperion keeps the original's and adds none of its own.
-  - Slot 11, the original's player 12, is the neutral player: mineral fields, geysers,
-    critters and whatever else a map gives `"neutral"`. No player ever takes it, on any map.
-  - Slots 8 to 10 are the original's players 9 to 11: owners a map can give units to, whom no
-    lobby seats. On a classic map they are exactly that.
-  - On a Hyperion map every slot from 8 on (8 to 10, then 12 and up) is what its `slot` says:
-    a player when it is `human` or `computer`, and otherwise an owner no one plays
-    (`rescuable`, `neutral`, `unused`), as in the original. A map that keeps such owners has
-    that many fewer players: with 64 players every slot but neutral's is a player's.
-  - These owners are for Use Map Settings, as in the original. In such a game their units
-    stay and no one is seated in them (checked with slots 9, 10 and 12, 2026-11-09).
-  - In a melee game, of the slots from 8 on only the seats take a player: the slots that are
-    `human` or `computer` and have a start location. The others keep their place and no one
-    is put in them (from v0.7.3-beta; v0.7.2-beta could seat a player in one, who was
-    eliminated as the game started).
-  - Slots 0 to 7 keep the original's melee rule, which is looser: its start shuffle may seat
-    a player in a slot that is `rescuable`, `unused` or `neutral` too, start location or not.
-    So on a map meant for melee, give a slot from 0 to 7 that no one plays `inactive`, the
-    default.
-- **Humans and computers.**
-  - In a skirmish, the person playing takes the first human slot, and every other open slot
-    gets a computer of the race the map gives it.
-  - A room on the local network seats up to 8 people for now. Seats for more people come
-    with Hyperion's online play.
-- **Forces:** four, as in the original. Each player's `force` is 0 to 3.
-- **Colours.**
-  - A player's `color` takes the original's and Remastered's names and numbers (0 to 22),
-    and from 23 on Hyperion's own (`hxm-format.md`, Player).
-  - `"rgb": [r, g, b]` gives a player any colour. Slots 0 to 7 need
-    `"color_mode": "rgb"` with it, as Remastered maps have it. The slots past 7 take it on
-    its own.
-  - Hyperion draws the colour itself. Its 8-bit drawing takes the nearest palette ramp.
-- **Triggers.**
-  - A trigger names any slot by its number, the new ones too, and the groups
-    (`all_players`, `foes`, `allies`, `force_1` to `force_4`, and the rest in
-    `hxm-format.md`). The groups reach every slot.
-  - A trigger can run for a slot past 11, a condition or action can name one, and Give Units
-    can give to one.
-  - The leaderboards, mission objectives, and the Most and Least conditions count every slot.
-  - Text, sounds and the view still act only for the people playing, in slots 0 to 7.
-- **Start locations:** one `start_location` unit for each slot a human or a computer can
-  take, owned by that slot, as in the original.
+#### Player indices
 
-### 4. Units a mod adds
+**StarCraft:** `OWNR` and `SIDE` have 12 entries.
 
-A Hyperion mod can add unit types after the game's own: thousands of units, with their
-weapons, sprites, images, orders and techs. It can also change the game's own units.
-`mod-data.md`, beside this file in the hand-off, is the mod format.
+| Index | StarEdit's name | Role |
+|---|---|---|
+| 0 to 7 | Players 1 to 8 | the players a lobby can seat |
+| 8 to 10 | Players 9 to 11 | can own units and be named in triggers; no lobby ever seats them |
+| 11 | Player 12 | the neutral player: mineral fields, geysers, critters |
 
-**Placing a mod's unit.** A map places such a unit by the name the mod gives it, in a unit's
-`type`, as it places the game's own units:
+**Hyperion:** indices 0 to 11 keep exactly those meanings on a classic map. A Hyperion map
+adds player indices 12 to 64, and can turn indices 8 to 10 into real players. Index 11 is
+never a player: it stays the neutral player, so every unit owner value that means "neutral"
+in StarCraft still does.
+
+That gives 64 players that can be played: indices 0 to 10 (11 players) and 12 to 64 (53
+players).
+
+In `map.json`:
+
+- The neutral player is not in the `players` list. It is the separate field `neutral`, and a
+  unit owned by it has `"owner": "neutral"`.
+- The `players` list is in index order with index 11 left out. **So list entry 11 is player
+  index 12**, entry 12 is index 13, and so on.
+- A unit's or doodad's `owner` is the player index itself (0 to 10, or 12 and up), or
+  `"neutral"`.
+
+#### Controllers
+
+A player's `slot` field is its `OWNR` value, by name:
+
+| `slot` | `OWNR` | Meaning in StarCraft |
+|---|---|---|
+| `inactive` (default) | 0 | not in the game |
+| `rescuable` | 3 | units wait to be rescued |
+| `unused` | 4 | no controller |
+| `computer` | 5 | a computer player |
+| `human` | 6 | an open slot for a person |
+| `neutral` | 7 | neutral units |
+| `closed` | 8 | a closed slot |
+
+`OWNR` values 1 and 2, which StarCraft uses only while a game runs, are `computer_game` and
+`human_occupied`. A converted map that has them keeps them.
+
+Hyperion does not add controller values. On a Hyperion map, a player at index 8 or above
+whose `slot` is `human` or `computer` is a real player. Any other value means the same as in
+StarCraft: a player that owns units and is never played.
+
+If a map keeps some indices for unit owners of that kind, it has that many fewer players.
+A map with all 64 players has every index except 11 as `human` or `computer`.
+
+#### What makes a map a Hyperion map
+
+For players, the rule is: **a player at list entry 8 or above whose `slot` is `human` or
+`computer`.** Such a map cannot be written as a CHK that StarCraft plays, so its compiled CHK
+gets Hyperion's `VER`. A map with no such player, and within the other limits, is a classic
+map.
+
+#### Declaring a map classic: `"limits": "classic"`
+
+Some existing StarCraft maps give Players 9 to 11 a `computer` controller in `OWNR`, even
+though StarCraft never seats them. By the rule above those would be taken for Hyperion maps.
+
+`"limits": "classic"` at the top level of `map.json` settles it:
+
+- Indices 8 to 10 are unit owners that no lobby seats, whatever their `slot` says, as in
+  StarCraft.
+- The compiled CHK keeps a classic `VER`.
+- Hyperion rejects the map if it exceeds StarCraft's limits in another way: more than 256
+  tiles in either direction, a player index above 10, or a mod's unit.
+
+Write it for every map meant to be saved as `.scm` or `.scx`. Hyperion's converter adds it
+when it converts such a CHK to `.hxm`. Without the field, the map's contents decide, by the
+rule above. (From v0.7.3-beta; v0.7.2-beta ignores the field.)
+
+#### Start locations, melee and Use Map Settings
+
+**StarCraft:** a Start Location unit (unit 214) owned by a player marks where that player
+starts. In Use Map Settings, `OWNR` decides who plays. In melee, StarCraft shuffles the
+players of the game into Players 1 to 8, and the shuffle is loose about `OWNR`: it can seat
+a player in one whose controller is `rescuable`, `unused` or `neutral` as well as `human` or
+`computer`, whether or not it owns a Start Location.
+
+**Hyperion:**
+
+- Place one `start_location` unit for each player that a person or a computer can take,
+  owned by that player. This is unchanged.
+- **Use Map Settings** works as in StarCraft for every index. Players that are not `human`
+  or `computer` keep their preplaced units and nobody is seated in them. This was checked
+  with indices 9, 10 and 12 (2026-11-09).
+- **Melee, indices 0 to 7:** StarCraft's rule is kept unchanged, so classic maps play as
+  they always have. On a map meant for melee, set any of Players 1 to 8 that should not be
+  played to `inactive`, which is the default.
+- **Melee, index 8 and above:** a player is seated only where `slot` is `human` or `computer`
+  and the player owns a Start Location. Other indices keep their units and are never seated.
+  (From v0.7.3-beta. In v0.7.2-beta the shuffle could seat a player in an index with no Start
+  Location, and that player was eliminated as the game started.)
+
+#### People and computers
+
+- In a single-player skirmish, the person takes the first `human` player and every other
+  open player gets a computer of the race the map gives it.
+- A LAN room seats up to 8 people for now, in Players 1 to 8. More than 8 people in one game
+  comes with Hyperion's online play.
+
+#### Forces
+
+**StarCraft:** `FORC` assigns each of Players 1 to 8 to one of 4 forces.
+
+**Hyperion:** still 4 forces. Every player, at any index, has a `force` from 0 to 3.
+
+#### Colours
+
+**StarCraft:** `COLR` gives each of Players 1 to 8 a palette colour. Remastered adds `CRGB`,
+which can give each of them an RGB colour instead.
+
+**Hyperion:**
+
+- `color` accepts StarCraft's and Remastered's colour names and numbers (0 to 22), and
+  Hyperion's own from 23 up (`hxm-format.md`, "Player").
+- `"rgb": [r, g, b]` gives a player any colour. For indices 0 to 7 also set
+  `"color_mode": "rgb"`, which is how `CRGB` marks an RGB colour. For index 8 and above `rgb`
+  alone is enough.
+- Hyperion's full-colour renderer draws the exact colour. Its 8-bit palette renderer uses the
+  nearest of StarCraft's colour ramps.
+
+#### Triggers
+
+**StarCraft:** a trigger has a list of the players and groups it runs for, and its conditions
+and actions name a player or a group by number: 0 to 11 for Players 1 to 12, then the groups
+(Current Player, Foes, Allies, All Players, Force 1 to 4 and the rest).
+
+**Hyperion:**
+
+- A trigger can run for a player index above 11, up to 63.
+- A condition or an action can name any player index. Give Units to Player can give to one.
+- The groups (`all_players`, `foes`, `allies`, `force_1` to `force_4`, and the others listed
+  in `hxm-format.md`) include every player index.
+- Leaderboards, mission objectives, and the Most and Least conditions count every player.
+- Actions that address one person's screen and speakers (Display Text, Play WAV, Center View
+  and similar) still act only for people, who are always in Players 1 to 8.
+
+In `map.json` a player is written as its index in all of these places. How the compiled CHK
+stores an index above 11 is in `hxm-format.md`.
+
+### 4. Units that a mod adds
+
+**StarCraft:** a unit's type is an index into `units.dat`, 0 to 227. `UNIT` stores it as a
+u16.
+
+**Hyperion:** a mod can add unit types after StarCraft's 228, each with its own weapons,
+sprites, images, orders and techs, and it can change StarCraft's own units. A game holds up
+to 4,096 unit types. `mod-data.md` describes the mod format.
+
+**Placing a mod's unit.** Write the name the mod gives the unit in the unit's `type`, as you
+would for one of StarCraft's units:
 
     {"type": "hybrid_reaver", "x": 1024, "y": 960, "owner": 0}
 
-**When the map loads.** Only a game that has the mod's data loads it: a game started with
-`--mod <id>`, or with the mod chosen in Hyperion's Mods menu. Without the mod, the map is
-refused with "unknown unit hybrid_reaver".
+**Use the name, never a number.** StarCraft's units keep their names and their numbers. A
+mod's unit has no fixed number: the mod's data assigns it one from 256 up when it loads, and
+another mod, or a later version of the same mod, may assign a different one. Hyperion
+resolves the name to the number when it compiles the map, which is why the compile cache is
+keyed by the mod's data.
 
-**Names and numbers.** The game's own units keep their names, and a number still works for
-any unit. A mod's unit has no fixed number, so use its name: the mod's data gives it one from
-256 up when it loads (a game holds up to 4,096 unit types), and another mod, or a later
-version of the same one, may give it another.
+**Loading.** The map loads only in a game that has the mod's data: one started with
+`--mod <id>`, or with the mod selected in Hyperion's Mods menu. Without the mod, Hyperion
+rejects the map with "unknown unit hybrid_reaver".
 
-**Where a mod's name is read.** In a unit's `type`, a doodad's `unit` and a trigger's `unit`.
-The map's `settings` and `availability` reach the game's own 228 units, 61 upgrades and 44
-techs only, as the CHK sections they become do. A mod's unit named there is left out without
-a message, and a mod's upgrade or tech is refused as unknown. A mod sets its own units' costs
-and stats in its data.
+**Where a mod's unit name is accepted:** a unit's `type`, a doodad's `unit`, and a trigger's
+`unit`.
 
-**What a mod changes.** Mods can change the game's own units, so in a mod's game a unit's
-stats may not be the original's. A mod can also change how the eight tilesets are drawn and
-played: their colours, their tiles' pictures, and where units walk and build (from
-v0.7.3-beta). A map still names one of the eight; with such a mod its terrain looks and plays as
-the mod has it. An editor that shows a mod's map as the game does needs the mod's `tilesets`
-(`mod-data.md`).
+**Where it is not:** the map's `settings` and `availability`. They compile to the CHK
+sections `UNIx`, `UPGx`, `TECx`, `PUNI`, `PUPx` and `PTEx`, which have fixed room for
+StarCraft's 228 units, 61 upgrades and 44 techs. A mod's unit named there is dropped without
+a message, and a mod's upgrade or tech is rejected as unknown. A mod sets the costs and stats
+of its own units in its own data.
 
-**A mod's races.** A mod can bring playable races. A player picks one when the game starts
-(`--race <the race's name>`); a map's slot takes the original's races only, for now.
+**What else a mod can change.**
 
-**For now, the map does not name its mod.** An editor that offers a mod's units has to be
-told which mod the map is for (see "Planned").
+- StarCraft's own units. In a game with a mod, a unit's stats may differ from StarCraft's.
+- The eight tilesets: their palette, their tile graphics, and which tiles units can walk and
+  build on (from v0.7.3-beta). A map still names one of the eight tilesets in `tileset`. With
+  such a mod its terrain looks and plays as the mod defines. An editor that wants to show the
+  map as the game will draw it needs the mod's `tilesets` data (`mod-data.md`).
+- Races. A mod can add playable races. A player picks one when the game starts
+  (`--race <name>`). A map's `race` field accepts only StarCraft's races for now.
+
+**The map does not record which mod it needs, for now.** An editor that offers a mod's units
+has to be told which mod the map is for (see "Planned").
 
 ### 5. Testing in Hyperion
 
-Hyperion's command line has three things for an editor. Pass full paths. On Mac and Linux the
-program is `Hyperion.app/Contents/MacOS/Hyperion` or `./Hyperion.x86_64`
-(`./Hyperion.aarch64` on ARM), with the same options.
+Hyperion's command line gives an editor three tools. Pass full paths. On Mac the program is
+`Hyperion.app/Contents/MacOS/Hyperion` and on Linux `./Hyperion.x86_64` (`./Hyperion.aarch64`
+on ARM); the options are the same.
 
-**The check.**
+#### Validate a map without starting the game
 
     Hyperion.exe --hxm-check <map.hxm> [<report.txt>]
 
-It reads the map as a game would and reports one line for each problem: the errors that stop
-the map playing, and the warnings an editor should show. It checks for:
+This reads the map exactly as a game would and writes one line for each problem: errors,
+which stop the map from playing, and warnings, which an editor should show its user. It
+checks for:
 
-- a format version newer than the build;
-- a size outside 1 to 1,024;
-- a map whose `limits` are `classic` that is past the original's limits;
-- a unit outside the map, or owned by a slot the map does not have;
-- a link to no unit;
-- a slot open to a human or a computer with no start location;
+- a format version newer than this build reads;
+- a width or height outside 1 to 1,024;
+- `"limits": "classic"` on a map that exceeds StarCraft's limits;
+- a unit outside the map, or owned by a player index the map does not have;
+- a `link` to a unit that does not exist;
+- a `human` or `computer` player with no Start Location;
 - more preplaced units than a game holds;
 - a location defined twice;
-- a trigger naming a location the map does not have;
-- a short tiles layer;
-- a size or player count past the targets.
+- a trigger that names a location the map does not have;
+- a `tiles` layer shorter than width times height;
+- a size or a player count above the supported targets (a warning).
 
-The last line is `plays: ...` or `refused: ...`, with the counts.
+The last line is `plays: ...` or `refused: ...`, with counts.
 
-- The report goes to the file named, or to standard output without one.
-- The exit code is 0 when the map plays, 1 when it is refused, and 2 when the file cannot be
-  read.
-- The check does not start the game, needs no game files, and takes well under a second.
-- It knows the game's own units only, so it reports a mod's unit as unknown. Test a map with
-  a mod's units with `--mod`, below.
+- The report goes to the named file, or to standard output if none is given.
+- The exit code is 0 if the map plays, 1 if it is refused, and 2 if the file cannot be read.
+- The check needs no StarCraft files and takes well under a second.
+- It knows only StarCraft's own units, so it reports a mod's unit as unknown. To test a map
+  that places a mod's units, start a game with `--mod` as below.
 
-**Test play.**
+#### Start a game on the map
 
     Hyperion.exe --map <map.hxm> [--race zerg|terran|protoss|random] [--computers <n>]
     Hyperion.exe --map <map.hxm> --ums
@@ -309,170 +446,174 @@ The last line is `plays: ...` or `refused: ...`, with the counts.
     Hyperion.exe --map <map.hxm> --mode <id>
     Hyperion.exe --mod <id> --map <map.hxm>
 
-- **`--map`** starts a melee game on the map at once, the player against computers. By
-  default there is a computer in every other start, as Play Custom seats them, and on a map
-  with players past 7 one in every open slot past 7. `--computers` takes 1 to 63.
-- **`--ums`** starts it as Use Map Settings, so the map's triggers run. The player takes the
-  first `human` slot and every `computer` slot gets a computer.
-- **`--rules`** chooses the rule set (below).
-- **`--teams`** puts the players in teams, and `--starts` gives them start locations.
-- **`--mode`** plays a game mode a mod brings (from v0.7.3-beta). A mode reads the map's
-  start locations and its clusters of mineral fields and geysers, and nothing else of the
-  map's own, so a map needs no field for it.
-- **`--mod`** plays with a mod's data.
-- `.scm` and `.scx` work the same way.
-- After the game, Hyperion shows its menus.
-- When a map cannot be played, Hyperion shows its menus at once, and `hyperion_hxm.log` in
-  the `Data` folder says why.
+- **`--map`** starts a melee game immediately, the user against computers. By default each
+  of the remaining Start Locations gets a computer, as StarCraft's Play Custom screen fills
+  them, and on a map with players at index 8 and above, so does every open one of those.
+  `--computers` sets the number, 1 to 63.
+- **`--ums`** starts the map as Use Map Settings, so its triggers run. The user takes the
+  first `human` player and every `computer` player gets a computer.
+- **`--rules`** selects the rule set (see "Rule sets").
+- **`--teams`** assigns teams, and `--starts` assigns Start Locations.
+- **`--mode`** plays a game mode that a mod provides (from v0.7.3-beta). A mode uses only the
+  map's Start Locations and its groups of mineral fields and geysers, so a map needs no
+  extra field to support one.
+- **`--mod`** loads a mod's data for the game.
+- `.scm` and `.scx` files work with all of these.
+- When the game ends, Hyperion goes to its menus.
+- If the map cannot be played, Hyperion goes straight to its menus and writes the reason to
+  `hyperion_hxm.log` in its `Data` folder.
 
-**A quick run with no one watching.**
+#### Run a game unattended
 
     Hyperion.exe --map <map.hxm> --record=600,<out.rep>
 
-This plays the game by itself to frame 600 (about 25 seconds of game time at the fastest
-speed), writes its replay and exits. It is the way to see that the pathing regions build and
-the game starts.
+This plays the game with no input until frame 600 (about 25 seconds of game time at Fastest),
+writes the replay and exits. It is the quickest way to confirm that the pathfinding regions
+build and the game starts.
 
-**Live testing.** With `Hyperion.exe --control` running, an editor can switch the game to a
-map without restarting Hyperion:
+#### Reload the map in a running game
 
-- `map_load` loads the saved file, any `.scm`, `.scx` or `.hxm`.
-- `map_push` sends just the terrain, up to 256 tiles a side.
+Start Hyperion with `--control`. An editor can then switch the running game to a map without
+restarting:
 
-Each switch goes out and comes in with a fade, and can play a scripted cutscene on the map.
+- `map_load` loads a saved `.scm`, `.scx` or `.hxm` file.
+- `map_push` sends only the terrain, for maps up to 256 by 256 tiles.
 
-- `live-channel-for-editors.md` has the messages.
-- `http://127.0.0.1:27117/guide`, while Hyperion runs that way, shows and tries each of
-  them on the game, with the code for it. `live-guide.html` beside this file is the same, to
-  read offline.
-- Hyperion's packages include a client for C++ in one header (`Data\tools\hxlive_cpp\hxlive.h`)
-  and one for Python and the command line (`Data\tools\hxlive.py`).
+Each switch fades out and in, and can play a scripted cutscene on the map.
 
-## The rules a game plays by
+- `live-channel-for-editors.md` documents the messages.
+- While Hyperion runs with `--control`, `http://127.0.0.1:27117/guide` shows each message,
+  runs it against the game, and gives sample code. `live-guide.html` is the same page for
+  offline reading.
+- Hyperion's packages include two clients: a single-header C++ one
+  (`Data\tools\hxlive_cpp\hxlive.h`) and a Python one that is also a command-line tool
+  (`Data\tools\hxlive.py`).
 
-A game plays by a rule set, and its replay and saved game record which:
+## Rule sets
 
-- **Classic:** the original's, exactly.
-- **Hyperion's:** the original's with fixes, among them Remastered's order fixes and
-  selections of up to 255 units.
+Every game is played by one of two rule sets. A replay and a saved game record which one.
 
-Which set a game uses:
+- **Classic:** StarCraft's rules exactly, frame for frame.
+- **Hyperion:** StarCraft's rules with fixes, including Remastered's order fixes and
+  selections of up to 255 units, and room for 262,144 units at once (from v0.7.3-beta no
+  setting is needed for that).
 
-- **New games default to Hyperion's.** A player can choose Classic in a skirmish's Game
-  Options, or for one game with `--rules classic`.
-- **Some games always play by Hyperion's:**
-  - a game on a map past the original's limits;
+How the rule set is chosen:
+
+- A new game uses Hyperion's rules by default. A player can choose Classic in a skirmish's
+  Game Options, or with `--rules classic`.
+- These games always use Hyperion's rules:
+  - a game on a Hyperion map;
   - a game with more than 8 players;
   - a game with a mod's data;
-  - a game with teams, handicaps, mutators, the computer levels or a game mode.
+  - a game with teams, handicaps, mutators, computer difficulty levels or a game mode.
 
-Nothing in a map chooses the set yet (see "Planned").
+A map cannot select the rule set yet (see "Planned").
 
-## Game options that are not in the map
+## Game options that a map does not store
 
-The player sets these when a game starts, so a map does not carry them and an editor needs
-no field for them:
+The player chooses these when starting a game. A map has no field for them and an editor
+needs no user interface for them:
 
-- the computers' levels (Very Easy to Elite, and three Cheater levels);
+- computer difficulty (Very Easy to Elite, and three Cheater levels);
 - handicaps;
 - mutators: starting workers, supply, fog of war, build time, tech and upgrades, and rich
-  resources.
-
-A game by Hyperion's rules holds up to 262,144 units at once, whatever the map; from v0.7.3-beta
-no setting asks for it.
-
-Rich resources choose bases from the map's own mineral fields and geysers when the game
-starts. A map needs nothing for them.
+  resources. Rich resources picks bases from the map's own mineral fields and geysers when
+  the game starts, so a map needs nothing for it.
 
 ## Terrain
 
-- `tiles` holds the CHK's MTXM values: a tile group times 16 plus the tile's index in it,
-  from the tileset's CV5. `isom` is the editor's isometric layer.
-- **Remastered's newer tiles and doodads** (the ones added in Remastered 1.22) play when
-  Hyperion reads a Remastered install. A classic install's tilesets do not have them, so a
-  map that uses them needs a Remastered install. StarDraft reads Remastered's data, so its
-  maps that use them play on a Remastered install.
+- The `tiles` layer holds `MTXM` values: the tile group's index in the tileset's CV5 times
+  16, plus the tile's index within the group.
+- The `isom` layer is `ISOM`, the editor's isometric data.
+- **Remastered's added tiles and doodads** (from Remastered 1.22) play when Hyperion reads a
+  Remastered install. A classic install's tilesets do not contain them, so a map that uses
+  them needs a Remastered install. StarDraft reads Remastered's data, so a StarDraft map that
+  uses them plays on a Remastered install.
 
-## EUD maps and text
+## EUD maps and text encoding
 
-**EUD maps.** Triggers that read and write the game's memory play as they do in
-StarCraft: Remastered. These are Deaths and Set Deaths on a player or unit past the game's
-own, as euddraft and EUD Editor make them.
+**EUD maps.** Triggers that read and write game memory, through Deaths and Set Deaths with a
+player or unit number outside the normal range, behave as they do in StarCraft: Remastered.
+Maps made with euddraft and EUD Editor rely on this.
 
-- Hyperion serves every address that Remastered serves.
-- An address Hyperion does not serve stops the map's triggers, as in Remastered.
-- A map whose triggers write memory cannot be saved during a game.
-- EUD needs no field in `.hxm`: it is all in the triggers.
-- Native features that do what EUD maps use memory for are planned (below).
+- Hyperion emulates every address that Remastered emulates.
+- An access to an address Hyperion does not emulate stops the map's triggers, as in
+  Remastered.
+- A game on a map whose triggers write memory cannot be saved.
+- EUD needs no field in `.hxm`. It is entirely in the triggers.
+- Native features to replace common uses of EUD are planned (below).
 
-**Text.** A map's text may be UTF-8, and a Korean map's may be CP949. Both are drawn.
+**Text encoding.** A map's strings may be UTF-8, and a Korean map's may be CP949. Hyperion
+draws both.
 
-## Versions and what stays stable
+## Format versions and stability
 
 - **Version 1 has been frozen since 2026-10-13.** Every field in `hxm-format.md` keeps its
   meaning.
-- **A field may be added in version 1** when leaving it out means what version 1 meant.
-  Three things have been added since the freeze. The first two are values that were refused
-  before, and the third is a field that changes nothing when left out, so no map changed
-  meaning:
-  - slots past 11 in triggers (2026-10-13);
-  - a mod's unit by name in a unit's `type` (2026-10-14);
-  - `limits` (2026-11-09, from v0.7.3-beta; v0.7.2-beta ignores it).
-- **A change to what an existing field means raises the version.** Hyperion refuses a map of
-  a version newer than it reads, and says so, rather than playing it without the parts it
-  does not know. An editor should do the same.
-- **Hyperion ignores fields it does not know.** An editor's own data, such as view settings
-  or layers of its own, goes under `editor`, in an object named after the editor:
+- **A field can be added within version 1** only if omitting it means what version 1 already
+  meant. Three additions have been made since the freeze, and none changed the meaning of an
+  existing map:
+  - player indices above 11 in triggers (2026-10-13), which were rejected before;
+  - a mod's unit name in a unit's `type` (2026-10-14), which was rejected before;
+  - `limits` (2026-11-09, from v0.7.3-beta), which changes nothing when omitted.
+- **Changing what an existing field means raises the version number.** Hyperion rejects a map
+  with a version newer than it reads, with a message, and does not try to play the parts it
+  understands. An editor should do the same.
+- **Hyperion ignores fields it does not know.** Put an editor's own data (view settings,
+  extra layers) under `editor`, in an object named after the editor:
   `"editor": {"stardraft": {...}}`. Hyperion never reads or writes it.
-- **Hyperion does not write `.hxm` files.** Only editors and tools do.
+- **Hyperion never writes `.hxm` files.** Only editors and tools do.
 
 ## Planned, not in version 1
 
-None of these are in the format yet, and what they will look like is not fixed. Each note
-says what the feature will do, so an editor can plan for it. Each will arrive as new fields
-with defaults or as a new version, as above, and this document will say so.
+None of these is in the format yet, and their final form is not decided. Each entry says
+what the feature will do so an editor can plan for it. Each will arrive either as new fields
+with defaults or as a new version, as described above, and this guide will be updated.
 
-- **The mod a map is made for.** The map will name its mod (and the mods that mod builds on),
-  so an editor knows which units to offer and Hyperion loads the mod with the map.
-- **A mod's race in a slot.** Mods bring playable races now, which a player picks as the game
-  starts. A map will be able to give a slot such a race.
-- **A tileset of a mod's own.** A map names one of the eight tilesets by number; a ninth
-  needs a field for its name.
-- **A mod's units in `settings` and `availability`**, which reach the game's own for now.
-- **The rule set in the map.** A map will be able to say which rule set it is made for.
-  Later versions of the game's balance will be rule sets too.
-- **Campaigns.** A campaign will be a set of maps in order, carried by a mod, with what a
-  mission carries into the next: surviving units, resources, research and choices. A map will
-  be able to say what it takes in and what it passes on.
-- **Scenes in the map.** The cutscenes the live channel plays, kept in a map and started by
-  its triggers, in the same step format.
-- **A data fingerprint.** A map may record a hash of the game data it was made against, so a
-  game on other data can say so.
-- **More people in a room**, past 8, with Hyperion's online play.
-- **Maps past 1,024 tiles a side.** Paused for now.
+- **The mod a map needs.** The map will name its mod, and the mods that mod depends on, so
+  an editor knows which units to offer and Hyperion loads the mod with the map.
+- **A mod's race for a player.** A map will be able to give a player a race that a mod adds.
+- **A mod's own tileset.** `tileset` names one of StarCraft's eight by number. A ninth needs
+  a field for its name.
+- **A mod's units in `settings` and `availability`.**
+- **The rule set.** A map will be able to say which rule set it is made for. Later balance
+  versions will be rule sets too.
+- **Campaigns.** A campaign will be an ordered set of maps carried by a mod, with what one
+  mission passes to the next: surviving units, resources, research and choices. A map will
+  be able to declare what it receives and what it passes on.
+- **Cutscenes in the map.** The cutscenes the live channel can play, stored in the map and
+  started by its triggers, in the same step format.
+- **A data fingerprint.** A map may record a hash of the game data it was made with, so a
+  game with different data can warn about it.
+- **More than 8 people in one game**, with Hyperion's online play.
+- **Maps above 1,024 tiles.** On hold.
 
 ## Example maps
 
-Hyperion's packages carry these, in `Data\maps\Hyperion\`. They are remakes of the game's
-own maps at Hyperion's sizes, and each passes `--hxm-check`:
+Hyperion's packages include these in `Data\maps\Hyperion\`. They are remakes of StarCraft's
+maps at Hyperion's sizes, and each passes `--hxm-check`.
 
-| Map | Tiles a side | Players |
+| Map | Tiles (width and height) | Players |
 |---|---|---|
 | Big Game Hunters 2x | 256 | 16 |
 | Big Game Hunters 2x (24) | 256 | 24 |
 | Big Game Hunters 3x3 | 384 | 32 |
 | Big Game Hunters XL | 512 | 16 |
-| Big Game Hunters XL 1800 | 512 | 16, about 1,800 units placed |
+| Big Game Hunters XL 1800 | 512 | 16, with about 1,800 preplaced units |
 | Elderlands 2x | 384 | 16 |
 | Garden of Aiur 2x | 384 | 16 |
 | Experimental: Big Game Hunters 4x4 | 512 | 64 |
 | Experimental: Big Game Hunters 8x8 | 1,024 | 64 |
 
-- The two Experimental maps are past the targets, and the check says so.
-- All but the 24-player map carry an `isom` layer, so an editor can paint their terrain.
+- The two Experimental maps are above the supported targets, and `--hxm-check` warns about
+  it.
+- Every map except the 24-player one has an `isom` layer, so an editor can paint its
+  terrain.
 - `tools\hxmap` in Hyperion's source converts any map to `.hxm` and back:
   `python -m tools.hxmap convert <map> <out.hxm>`.
 
 ## Questions
 
-Questions go to Hyperion's developer, who adds what an editor needs.
+Send questions and requests to Hyperion's developer. If an editor needs something the format
+or the tools do not provide, it can be added.

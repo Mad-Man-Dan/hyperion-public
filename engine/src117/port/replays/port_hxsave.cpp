@@ -223,24 +223,32 @@ int ListsSave(void *pFile, bool bEarly) {
     v[nAt] = static_cast<DWORD>(v.size() - nAt - 1);
   }
   const DWORD nBytes = static_cast<DWORD>(v.size() * sizeof(DWORD));
+  PortSaveDelta(v.data(), nBytes, sizeof(DWORD));  // a free list is mostly slots in order
   return pfwrite(&nBytes, 4, pFile) && compress(v.data(), nBytes, pFile);
 }
 
-// The most a save's lists hold: each pool's slots once and each list's count; 1 MB at least,
-// the limit before the pools passed 65,535.
-DWORD ListsMostBytes() {
+// The most a save's lists hold. The early lists are read with the set-up, before the save's
+// unit table is known and the pools sized for it, so theirs is the largest game's sprites and
+// images. The late lists are read with the pools sized: each pool's slots once and each
+// list's count; 1 MB at least, the limit before the pools passed 65,535.
+DWORD ListsMostBytes(bool bEarly) {
+  if (bEarly)
+    return static_cast<DWORD>((static_cast<size_t>(POOL_SPRITES_MAX) + POOL_IMAGES_MAX + 2) * sizeof(DWORD));
   const PoolSizes &p = g_pools;
   const size_t n = (static_cast<size_t>(p.units) + p.sprites + p.images + 2 * p.bullets + 4 * p.thingies + p.orders + 16) *
                    sizeof(DWORD);
   return static_cast<DWORD>(n > 0x100000 ? n : 0x100000);
 }
 
-int ListsRead(void *pFile, std::vector<DWORD> *pv) {
+int ListsRead(void *pFile, std::vector<DWORD> *pv, bool bEarly) {
   DWORD nBytes = 0;
-  if (!pfread(&nBytes, 4, pFile) || nBytes % 4 != 0 || nBytes > ListsMostBytes())
+  if (!pfread(&nBytes, 4, pFile) || nBytes % 4 != 0 || nBytes > ListsMostBytes(bEarly))
     return 0;
   pv->resize(nBytes / 4);
-  return decompress(pv->data(), nBytes, pFile);
+  if (!decompress(pv->data(), nBytes, pFile))
+    return 0;
+  PortLoadUndelta(pv->data(), nBytes, sizeof(DWORD));
+  return 1;
 }
 
 int ListsApply(const std::vector<DWORD> &v, bool bEarly) {
@@ -525,6 +533,12 @@ int ModTechLoad(void *pFile) {
 
 const PortLogger Log("hyperion_save.log");
 
+// A save whose set-up cannot be read: the part, for the log.
+int SetUpUnread(const char *pszPart) {
+  Log("not loaded: the save's %s cannot be read", pszPart);
+  return 0;
+}
+
 }  // namespace
 
 const char *HxSaveTarget() {
@@ -626,45 +640,45 @@ int HxLoadSetUp(void *pFile) {
   DWORD cbRule = 0, dwPlayers = 0;
   if (!pfread(&cbRule, 4, pFile) || !ReplayHxRuleSizeKnown(cbRule) || cbRule > sizeof abRule
       || !pfread(abRule, cbRule, pFile))
-    return 0;
+    return SetUpUnread("rules");
   if (const char *pszWhy = ReplayHxRuleRefusal(abRule, cbRule)) {
     Log("refused: %s", pszWhy);
     return 0;
   }
   ReplayHxRuleApply(abRule, cbRule);
   if (!pfread(&dwPlayers, 4, pFile))
-    return 0;
+    return SetUpUnread("players");
   if (!dwPlayers)
     PlayersLoadNone();
   else if (!PlayersLoadSetUp(pFile))
-    return 0;
-  if (!ListsRead(pFile, &g_early))
-    return 0;
+    return SetUpUnread("players");
+  if (!ListsRead(pFile, &g_early, true))
+    return SetUpUnread("sprite and image lists");
   const int nRgb = PortLoadSectionIf(pFile, kColours);
   DWORD dwSlots = 0;
   if (nRgb < 0 || (nRgb > 0 && (!pfread(&dwSlots, 4, pFile) || dwSlots != PLAYER_SLOTS_MAX
                                  || !pfread(g_abLoadRgb, sizeof g_abLoadRgb, pFile))))
-    return 0;
+    return SetUpUnread("colours");
   g_bLoadRgb = nRgb > 0;
   const int nRaces = PortLoadSectionIf(pFile, kRaces);
   BYTE abRaces[PLAYER_SLOTS_MAX];
   if (nRaces < 0 || (nRaces > 0 && (!pfread(&dwSlots, 4, pFile) || dwSlots != PLAYER_SLOTS_MAX
                                      || !pfread(abRaces, sizeof abRaces, pFile))))
-    return 0;
+    return SetUpUnread("races");
   if (nRaces > 0)
     ModRacesRecorded(abRaces, PLAYER_SLOTS_MAX);
   const int nLevels = PortLoadSectionIf(pFile, kAiLevels);
   BYTE abLevels[PLAYER_SLOTS_MAX * AI_PROFILE_BYTES];
   if (nLevels < 0 || (nLevels > 0 && (!pfread(&dwSlots, 4, pFile) || dwSlots != PLAYER_SLOTS_MAX
                                        || !pfread(abLevels, sizeof abLevels, pFile))))
-    return 0;
+    return SetUpUnread("computer levels");
   if (nLevels > 0)
     AiProfilesRecorded(abLevels, PLAYER_SLOTS_MAX);
   const int nHandicaps = PortLoadSectionIf(pFile, kHandicaps);
   BYTE abHandicaps[PLAYER_SLOTS_MAX];
   if (nHandicaps < 0 || (nHandicaps > 0 && (!pfread(&dwSlots, 4, pFile) || dwSlots != PLAYER_SLOTS_MAX
                                              || !pfread(abHandicaps, sizeof abHandicaps, pFile))))
-    return 0;
+    return SetUpUnread("handicaps");
   if (nHandicaps > 0)
     HandicapsRecorded(abHandicaps, PLAYER_SLOTS_MAX);
   const int nMutators = PortLoadSectionIf(pFile, kMutators);
@@ -673,14 +687,14 @@ int HxLoadSetUp(void *pFile) {
   const int nMutatorBytes = nMutators > 0 ? PortLoadSectionBytes() : 0;
   if (nMutators < 0 ||
       (nMutators > 0 && (!MutatorRecordBytesRead(nMutatorBytes) || !pfread(abMutators, nMutatorBytes, pFile))))
-    return 0;
+    return SetUpUnread("mutators");
   if (nMutators > 0)
     MutatorsRecorded(abMutators, nMutatorBytes);
   const int nMode = PortLoadSectionIf(pFile, kMode);
   BYTE abMode[PORT_MODE_RECORD_BYTES];
   const int nModeBytes = nMode > 0 ? PortLoadSectionBytes() : 0;
   if (nMode < 0 || (nMode > 0 && (!PortModeRecordBytesRead(nModeBytes) || !pfread(abMode, nModeBytes, pFile))))
-    return 0;
+    return SetUpUnread("game mode");
   if (nMode > 0) {
     PortModeRecorded(abMode, nModeBytes);
     if (const char *pszWhy = PortModeRecordRefusal()) {
@@ -691,7 +705,7 @@ int HxLoadSetUp(void *pFile) {
   const int nUnits = PortLoadSectionIf(pFile, kUnits);
   DWORD dwUnits = 0;
   if (nUnits < 0 || (nUnits > 0 && !pfread(&dwUnits, 4, pFile)))
-    return 0;
+    return SetUpUnread("unit table");
   PoolsUnitsRecorded(dwUnits > POOL_UNITS_MAX ? POOL_UNITS_MAX : static_cast<int>(dwUnits));
   g_earlyPending = true;
   g_loading = true;
@@ -743,7 +757,7 @@ int HxLoadState(void *pFile) {
   if (!pfread(&head, sizeof head, pFile) || (g_hxPlayers && !PlayerTablesLoad(pFile))
       || !TypeRowsLoad<PlayerUnitCountsGrid>(pFile) || (head.dwVision && !VisionHxLoad(pFile)) || !TableLoad(sglCachedGameCounts_g, pFile)
       || !TableLoad(sglCachedUnitCounts_g, pFile) || !TableLoad(sglCachedCompletedCounts_g, pFile)
-      || !ListsRead(pFile, &late) || !ListsApply(late, false) || !DemandsLoad(pFile) || !CountersLoad(pFile)
+      || !ListsRead(pFile, &late, false) || !ListsApply(late, false) || !DemandsLoad(pFile) || !CountersLoad(pFile)
       || (PoolsWideIds() && !CargoLoad(pFile)) || (SelectionWide() && !SelectionLoad(pFile))
       || (RichBasesInGame() && !RichBasesLoad(pFile)) || !WideIdsLoad(pFile) || !ModTechLoad(pFile) || !ModStatusLoadGame(pFile)
       || !ModLuaLoadGame(pFile))

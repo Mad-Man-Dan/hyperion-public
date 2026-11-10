@@ -146,6 +146,16 @@ and the set is recorded again. The set is in `testrun\`, which every branch shar
 going to a branch of another revision, `hxrecord` comes before `hxsuite`, or every replay
 is refused ("another revision of Hyperion's simulation").
 
+A save in the set was written by the build that recorded it, so loading it holds old saves to
+the build under test and says nothing of the saves that build writes. `hxsuite` therefore
+checks both. For each entry with a checkpoint it loads the kept save, and, on the first kind of
+files, it plays the entry's game live again, saves it at the checkpoint with the build under
+test and loads that save in a new process (`hx_fresh_save`). The live game must be the
+reference's and the loaded one must go on as it did, so a build whose saves do not load in a
+fresh start fails the gate. The runs are tagged `<tag>_live` and `<tag>_fresh_load`;
+`--no-fresh-saves` leaves the step out. The set is not written to: recording it again with
+`hxrecord` is still what moves the kept saves to a new format.
+
 `hxsuite` plays each game of `hxsuite.json` on `hx64`, on each kind of files `--data`
 names as the suite does (`hxr` and `hx64`, both held to the one reference), and fails it
 when:

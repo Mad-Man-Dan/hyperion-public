@@ -460,12 +460,15 @@ static_assert(sizeof(SaveSection) == 20, "the section header is 20 bytes on both
 
 const char kMarker[8] = {'H', 'Y', 'P', 'E', 'R', 'I', 'O', 'N'};
 // 2: the Hyperion sections of a game past 1.17's limits (port_hxsave.cpp)
-const DWORD kFormatVersion = 2;
+// 3: runs of records as differences (PortSaveDelta)
+const DWORD kFormatVersion = 3;
+const DWORD kFormatDeltas = 3;
 
 SaveSection s_section;
 LONG s_sectionStart = -1;   // the header's place in the file, -1 for none open
 LONG s_sectionEnd;          // on load, where the section ends
 bool s_hyperion;            // on load, whether the save is Hyperion's
+bool s_deltas;              // whether the save being written or read holds its runs as differences
 
 void IdsTo117(const void *pSlots, unsigned int count, std::vector<DWORD> &out)
 {
@@ -533,6 +536,24 @@ int __cdecl PortSaveChunk(const void *pBuf, int nBytes, unsigned int count, void
   return compress(pBuf, nBytes, pFile);
 }
 
+void PortSaveDelta(void *pRecs, size_t nBytes, size_t nRecord)
+{
+  BYTE *p = static_cast<BYTE *>(pRecs);
+  if (!s_deltas || nRecord == 0)
+    return;
+  for (size_t i = nBytes; i-- > nRecord;)
+    p[i] = static_cast<BYTE>(p[i] - p[i - nRecord]);
+}
+
+void PortLoadUndelta(void *pRecs, size_t nBytes, size_t nRecord)
+{
+  BYTE *p = static_cast<BYTE *>(pRecs);
+  if (!s_deltas || nRecord == 0)
+    return;
+  for (size_t i = nRecord; i < nBytes; i++)
+    p[i] = static_cast<BYTE>(p[i] + p[i - nRecord]);
+}
+
 int __cdecl PortSave117Compress(unsigned int layout, const void *pRecs, unsigned int count, void *pFile)
 {
   const Save117Layout &l = kSave117Layouts[layout];
@@ -540,6 +561,7 @@ int __cdecl PortSave117Compress(unsigned int layout, const void *pRecs, unsigned
   for (unsigned int i = 0; i < count; i++)
     To117(layout, static_cast<const BYTE *>(pRecs) + static_cast<size_t>(i) * l.size,
           &buf[static_cast<size_t>(i) * l.size86]);
+  PortSaveDelta(buf.data(), buf.size(), l.size86);
   return PortSaveChunk(buf.data(), static_cast<int>(buf.size()), count, pFile);
 }
 
@@ -549,6 +571,7 @@ int __cdecl PortSave117Decompress(unsigned int layout, void *pRecs, unsigned int
   std::vector<BYTE> buf(static_cast<size_t>(count) * l.size86);
   if (!decompress(buf.data(), static_cast<int>(buf.size()), pFile))
     return 0;
+  PortLoadUndelta(buf.data(), buf.size(), l.size86);
   for (unsigned int i = 0; i < count; i++)
     From117(layout, &buf[static_cast<size_t>(i) * l.size86],
             static_cast<BYTE *>(pRecs) + static_cast<size_t>(i) * l.size);
@@ -627,6 +650,7 @@ int __cdecl PortSaveDecompressIds(void *pSlots, unsigned int count, void *pFile)
 int __cdecl PortSaveBegin(void *pFile)
 {
   s_sectionStart = -1;
+  s_deltas = true;
   if (!pFile)
     return 0;
   return pfwrite(kMarker, sizeof kMarker, pFile) && pfwrite(&kFormatVersion, 4, pFile);
@@ -664,11 +688,13 @@ int __cdecl PortLoadBegin(void *pFile)
   char marker[sizeof kMarker];
   DWORD dwVersion;
   s_hyperion = false;
+  s_deltas = false;
   s_sectionStart = -1;
   if (fread(marker, sizeof marker, 1, f) == 1 && memcmp(marker, kMarker, sizeof marker) == 0) {
     if (fread(&dwVersion, 4, 1, f) != 1 || dwVersion > kFormatVersion)
       return 0;
     s_hyperion = true;
+    s_deltas = dwVersion >= kFormatDeltas;
     return 1;
   }
   return fseek(f, -static_cast<long>(sizeof marker), SEEK_CUR) == 0;

@@ -231,23 +231,29 @@ def game_running() -> bool:
     """True while a Hyperion.exe runs from one of the suite's game folders, which hold the staged
     replay. By name, with each one's path where Windows gives it (the limited query the game's
     InitACL leaves open): one in another folder, another checkout's or a data folder of its own,
-    shares nothing with a run here; one whose path is not given counts. None off Windows, where
-    the oracle does not run and its runs come from the cache."""
+    shares nothing with a run here. A process just starting or ending has no path for a moment,
+    so one without a path is asked for again, six times half a second apart, and counts only if
+    it still has none: two suites in two checkouts can then run side by side. None off Windows,
+    where the oracle does not run and its runs come from the cache."""
     if sys.platform != "win32":
         return False
-    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {GAME_EXE.name}", "/NH"],
-                         capture_output=True, text=True).stdout
-    if GAME_EXE.name.lower() not in out.lower():
-        return False
-    paths = subprocess.run(["powershell", "-NoProfile", "-Command",
-                            f"Get-Process -Name {GAME_EXE.stem} | ForEach-Object {{ '|' + $_.Path }}"],
-                           capture_output=True, text=True).stdout
     folders = {os.path.normcase(str(p)) for p in (GAME, HX64_GAME, HXR_GAME)}
-    for line in paths.split("|")[1:]:
-        path = line.strip()
-        if not path or os.path.normcase(os.path.dirname(path)) in folders:
+    for attempt in range(6):
+        out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {GAME_EXE.name}", "/NH"],
+                             capture_output=True, text=True).stdout
+        if GAME_EXE.name.lower() not in out.lower():
+            return False
+        paths = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                f"Get-Process -Name {GAME_EXE.stem} | ForEach-Object {{ '|' + $_.Path }}"],
+                               capture_output=True, text=True).stdout
+        found = [line.strip() for line in paths.split("|")[1:]]
+        if any(p and os.path.normcase(os.path.dirname(p)) in folders for p in found):
             return True
-    return False
+        if all(found):
+            return False
+        if attempt < 5:
+            time.sleep(0.5)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1147,7 +1153,10 @@ def cmd_hxsuite(args) -> int:
     (the game it recorded), and its log must match its kept reference, the log
     of the game it recorded (hxrecord) or a first run (--keep-ref). A replay with a save
     beside it (<name>.sav, an entry's checkpoint) is also loaded from the save, which must
-    go on as the live game did. Each is played on every kind of files --data names, all
+    go on as the live game did. That save is the recording build's, so on the first kind of
+    files the game is also played live again, saved by this build and that save loaded in a
+    fresh start (hx_fresh_save; --no-fresh-saves leaves it out). Each replay is played on
+    every kind of files --data names, all
     held to the one reference. The set is the manifest's (hxsuite.json): an entry with no
     replay fails, as does a replay with no kept reference unless --keep-ref makes one."""
     entries = hx_entries()
@@ -1177,6 +1186,7 @@ def cmd_hxsuite(args) -> int:
         run_dir = out / rep.stem
         ref = HX_REF / rep.stem
         kept = False
+        fresh = not getattr(args, "no_fresh_saves", False)
         for a in each_source(args, "hx64"):
             tag = a.tag
             a.game_arg = list(args.game_arg) + hx_mod_args(entry, engine_folder("hx64", a.data))
@@ -1216,6 +1226,9 @@ def cmd_hxsuite(args) -> int:
                     failed.append(f"{save.name} {tag}, saved at {at}: {why}")
                 else:
                     print(f"  {save.name} {tag}: loaded at {at}, goes on as the live game did")
+                if fresh and entry.get("map"):
+                    fresh = False  # once, on the first kind of files
+                    hx_fresh_save(entry, rep, run_dir, ref, at, meta.get("frames") or 0, a, args.game_arg, failed)
             elif save.exists():
                 failed.append(f"{save.name}: no live reference with its checkpoint (hxrecord makes one)")
     rows = write_report(out, "hxref", prov)
@@ -1226,6 +1239,78 @@ def cmd_hxsuite(args) -> int:
     print(f"report: {out / 'report.html'}")
     print("hxsuite: " + ("every replay plays the game it recorded" if not failed else f"{len(failed)} failed"))
     return 1 if failed else 0
+
+
+def hx_live_args(e: dict, game: Path, rep: Path) -> list[str]:
+    """The command line of an entry's live game, recorded to rep."""
+    live = [f'--map="{HX_MAPS / e["map"]}"', f"--race={e.get('race', 'terran')}", f"--seed={e['seed']}",
+            f'--record="{e["frames"]},{rep}"']  # quoted: the path has spaces
+    if e.get("computers"):
+        live.append(f"--computers={e['computers']}")
+    if e.get("computer_race"):
+        live.append(f"--computer-race={e['computer_race']}")
+    if e.get("ums"):
+        live.append("--ums")
+    if e.get("rules"):
+        live.append(f"--rules={e['rules']}")
+    if e.get("ai_levels"):
+        live.append(f"--ai-levels={e['ai_levels']}")
+    if e.get("handicaps"):
+        live.append(f"--handicaps={e['handicaps']}")
+    if e.get("mutators"):
+        live.append(f"--mutators={e['mutators']}")
+    if e.get("teams"):
+        live.append(f"--teams={e['teams']}")
+    live += hx_mod_args(e, game)
+    live += hx_mode_args(e)
+    if e.get("orders"):
+        live.append(f"--record-orders={orders_arg(e)}")
+    return live
+
+
+def hx_fresh_save(entry: dict, rep: Path, run_dir: Path, ref: Path, at: int, frames: int, a, game_arg: list,
+                  failed: list) -> None:
+    """A save this build writes, loaded in a fresh start. The save kept beside a replay was
+    written by the build that recorded the set, so loading it holds old saves to this build and
+    says nothing of the saves this build writes. Here the entry's game is played live again and
+    saved at its checkpoint, and a new process loads that save. The live game must be the
+    reference's, and the loaded one must go on as it did. Failures are added to failed."""
+    name, tag = rep.stem, a.tag
+    if not (HX_MAPS / entry["map"]).exists():
+        failed.append(f"{name}: no map {HX_MAPS / entry['map']} to play it live for a fresh save")
+        return
+    live_args = argparse.Namespace(**vars(a))
+    live_args.tag, live_args.game_arg = f"{tag}_live", list(game_arg)
+    live_args.save_frame, live_args.save_name = at, f"hx_{name}_fresh"
+    live = hx_live_args(entry, engine_folder("hx64", a.data), (run_dir / f"{tag}_live.rep").resolve())
+    meta = run_one("hx64", rep, run_dir, live_args, live=live)
+    why = meta.get("source_check") or meta.get("files_check")
+    if why:
+        failed.append(f"{name} {tag}, played live again: {why}")
+    live_csv = run_dir / f"{tag}_live.csv"
+    cmp = compare(parse_csv(ref / "hxref.csv"), parse_csv(live_csv), None, False) if live_csv.exists() else None
+    if cmp is None or cmp["first_divergence"] is not None:
+        failed.append(f"{name} {tag}: played live again, " + ("it logged nothing" if cmp is None else
+                      f"it differs from its reference at frame {cmp['first_divergence']}"))
+    if not meta.get("saves"):
+        failed.append(f"{name} {tag}: this build wrote no save at frame {at}")
+        return
+    load_args = argparse.Namespace(**vars(a))
+    load_tag = f"{tag}_fresh_load"
+    load_args.load, load_args.max_frames, load_args.tag = str(meta["saves"][0]), frames, load_tag
+    if entry.get("orders"):
+        load_args.game_arg = list(a.game_arg) + [f"--record-orders={orders_arg(entry)}"]
+    lmeta = run_one("hx64", rep, run_dir, load_args)
+    why = lmeta.get("source_check") or lmeta.get("files_check")
+    if why:
+        failed.append(f"{name} {tag}, this build's save: {why}")
+    why = hx_checkpoint(ref / "hxref.csv", run_dir / f"{load_tag}.csv", at)
+    size = Path(meta["saves"][0]).stat().st_size
+    if why:
+        failed.append(f"{name} {tag}, this build's save at {at} ({size:,} bytes), loaded in a fresh start: {why}")
+    else:
+        print(f"  {name} {tag}: saved at {at} by this build ({size:,} bytes), loaded in a fresh start, "
+              "goes on as the live game did")
 
 
 def orders_arg(entry: dict) -> str:
@@ -1313,28 +1398,7 @@ def cmd_hxrecord(args) -> int:
         save = rep.with_suffix(".sav")
         args.save_frame = e.get("checkpoint", 0)
         args.save_name = f"hx_{e['name']}"
-        live = [f'--map="{mp}"', f"--race={e.get('race', 'terran')}", f"--seed={e['seed']}",
-                f'--record="{e["frames"]},{rep}"']  # quoted: the path has spaces
-        if e.get("computers"):
-            live.append(f"--computers={e['computers']}")
-        if e.get("computer_race"):
-            live.append(f"--computer-race={e['computer_race']}")
-        if e.get("ums"):
-            live.append("--ums")
-        if e.get("rules"):
-            live.append(f"--rules={e['rules']}")
-        if e.get("ai_levels"):
-            live.append(f"--ai-levels={e['ai_levels']}")
-        if e.get("handicaps"):
-            live.append(f"--handicaps={e['handicaps']}")
-        if e.get("mutators"):
-            live.append(f"--mutators={e['mutators']}")
-        if e.get("teams"):
-            live.append(f"--teams={e['teams']}")
-        live += hx_mod_args(e, game)
-        live += hx_mode_args(e)
-        if e.get("orders"):
-            live.append(f"--record-orders={orders_arg(e)}")
+        live = hx_live_args(e, game, rep)
         args.tag = tag
         run_dir = out / e["name"]
         # The observer ends the process once the game is left, before Hyperion copies the
@@ -2053,6 +2117,9 @@ def build_parser() -> argparse.ArgumentParser:
     hx.add_argument("--replays", nargs="+", help="replays or folders of them (default: the Hyperion set)")
     hx.add_argument("--keep-ref", action="store_true", dest="keep_ref",
                     help="keep this build's runs as the references")
+    hx.add_argument("--no-fresh-saves", action="store_true", dest="no_fresh_saves",
+                    help="load the kept saves only: do not play each checkpoint's game live again to "
+                         "save it with this build and load that save")
     add_run_args(hx)
     hx.set_defaults(updates=32)
     hx.set_defaults(func=cmd_hxsuite)

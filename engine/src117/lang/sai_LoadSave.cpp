@@ -334,6 +334,7 @@ int sai_PathingGlobWriteSave(void *pDest, int nSize)
   }
 
   memcpy(pOut, sai_PathPoolBuf, OC_SAVE_PATHS);
+  PortSaveDelta(pOut, OC_SAVE_PATHS, 0x80);  // Hyperion: the pool as differences (save format 3)
   sai_DecodeGlobFromSave();
   sub_48E600(1);
   return 1;
@@ -408,6 +409,7 @@ int read_save_paths(const BYTE *pIn, int nSize)
   }
 
   memcpy(sai_PathPoolBuf, pIn, OC_SAVE_PATHS);
+  PortLoadUndelta(sai_PathPoolBuf, OC_SAVE_PATHS, 0x80);  // Hyperion
   sai_DecodeGlobFromSave();
   sub_48E600(1);
   return 1;

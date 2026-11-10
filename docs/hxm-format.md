@@ -1,17 +1,21 @@
 # The Hyperion map format (.hxm)
 
-A Hyperion map is a small tree of files: a JSON document, `map.json`, that says everything
-about the map but its per-tile data, and the per-tile layers beside it. It is meant to be
-written by hand, by an editor or by a generator (an AI included) as easily as it is read,
-and every StarCraft map converts to it: the classic `.scm` and `.scx`, the maps
-Remastered and ScmDraft 2 save, the campaign's, and the map inside a replay.
+This is the field-by-field reference. `hxm-for-editors.md` is the guide: it explains each
+change from StarCraft, how to support the format step by step, and what is planned.
 
-It is Hyperion's own format. Beyond 1.17's limits it holds
-bigger maps and more player slots than 1.17's, and its numbers are not capped by 1.17's
-sections: a side is any size up to 65,535 tiles, and the players are a list of any length.
-The engine sets the limits it plays (`engine/docs/maps.md`): 1,024 tiles a side and 64
-players, with 512 and 32 the target for now. An editor's guide to the format, with what is
-planned for it, is `hxm-for-editors.md`.
+A Hyperion map is a small tree of files: one JSON document, `map.json`, which holds
+everything about the map except its per-tile data, and binary layers that hold the per-tile
+data. It carries the same information as StarCraft's CHK (the `scenario.chk` inside an
+`.scm` or `.scx`), as named fields in place of four-letter sections, so it can be written by
+hand, by an editor or by a generator as easily as it is read.
+
+Every StarCraft map converts to it and back: `.scm` and `.scx` files, maps saved by
+StarCraft: Remastered and ScmDraft 2, the campaign maps, and the map inside a replay.
+
+The format's own limits are only those of its number types: a side can be up to 65,535 tiles
+and `players` is a list of any length. A CHK stops at 256 tiles a side and 12 players. The
+engine decides what it plays (`engine/docs/maps.md`): 1,024 tiles a side and 64 players, with
+512 and 32 the supported target for now.
 
 `tools/hxmap` reads and writes the format and converts:
 
@@ -21,110 +25,144 @@ planned for it, is `hxm-for-editors.md`.
     python -m tools.hxmap info bgh.hxm
     python -m tools.hxmap roundtrip <maps or folders>     # check the conversion
 
+## Terms
+
+- **Player index:** a player's number as the CHK stores it, counted from 0. Index 0 is the
+  player StarEdit calls Player 1, and index 11 is Player 12, the neutral player.
+- **Controller:** who controls a player, the CHK's `OWNR` value. In `map.json` it is a
+  player's `slot` field.
+- **Classic map:** a map within StarCraft's limits, which StarCraft itself plays.
+- **Hyperion map:** a map past those limits, which only Hyperion plays.
+- **Compiled map:** the CHK that Hyperion builds from an `.hxm` to play it.
+
 ## The package
 
     map.json              the document
     layers/<name>.bin     each layer map.json lists
-    files/<path>          the map's other files (its sounds), by their path in the map,
+    files/<path>          the map's other files (its sounds), at their path in the map,
                           with slashes for backslashes
 
-A `.hxm` file is a zip of that tree (deflated or stored). The same tree in a folder is the
+An `.hxm` file is a zip of that tree (deflated or stored). The same tree in a folder is the
 unpacked form, for editing and version control. Both read the same.
 
 ## Conventions
 
-- Names are lower case with underscores (`terran_marine`, `jungle`, `at_least`). Wherever
-  the document takes a name for one of the game's numbers it also takes the number, so a
-  value outside the lists is never lost. `tools/hxmap/names.py` has every list; the engine
-  has the same (`engine/src117/port/data/port_hxm_names.h`).
-- Coordinates are pixels from the map's top left; a tile is 32 by 32 pixels.
-- Text is plain JSON text. The game's colour and formatting codes are the control
-  characters they always were (`\u0003` and so on).
-- A field left out takes its default, given below. The converter writes only what differs
-  from the defaults.
+- Names are lower case with underscores (`terran_marine`, `jungle`, `at_least`). Every field
+  that accepts a name for one of StarCraft's numeric ids also accepts the number, so an id
+  with no name is never lost. `tools/hxmap/names.py` has every list of names; the engine has
+  the same lists (`engine/src117/port/data/port_hxm_names.h`).
+- Coordinates are pixels from the map's top-left corner. A tile is 32 by 32 pixels.
+- Text is plain JSON text. StarCraft's colour and formatting codes are the same control
+  characters as in a CHK (`\u0003` and so on).
+- A field left out takes its default, given below. The converter writes only fields that
+  differ from their default.
 
 ## Players
 
-Player slots are counted from 0 and named by their number. The neutral player is not a
-slot: it is `"neutral"`. Triggers name groups of players with these names:
+### Player indices
+
+| Index | In StarCraft | In `map.json` |
+|---|---|---|
+| 0 to 7 | Players 1 to 8, the players a lobby can seat | entries 0 to 7 of `players` |
+| 8 to 10 | Players 9 to 11: they can own units, and no lobby seats them | entries 8 to 10 of `players`, written only when the map uses them |
+| 11 | Player 12, the neutral player, which owns resources and critters | not in `players`: the `neutral` field, and the name `"neutral"` wherever a player is named |
+| 12 to 64 | do not exist | entries 11 to 63 of `players`, on a Hyperion map only |
+
+So `players` is in index order with index 11 left out: entry 11 is index 12, entry 12 is
+index 13, and so on. A unit's or doodad's `owner` is the index itself (0 to 10, or 12 and
+up) or `"neutral"`. Triggers name a player by its index too.
+
+### Classic maps and Hyperion maps
+
+A map is a Hyperion map when a player at list entry 8 or above has the controller `human` or
+`computer`. (The other conditions are a side above 256 tiles, a trigger for a player index
+above 11, and a unit that a mod adds.)
+
+- On a classic map, indices 8 to 10 are what they are in StarCraft: owners a map can give
+  units to, whom no lobby seats.
+- On a Hyperion map, a player at index 8 or above is a real player when its `slot` is
+  `human` or `computer`. With any other controller it is an owner that nobody plays, as in
+  StarCraft.
+- Index 11 is the neutral player on every map.
+
+The compiled map stores the players from index 8 up in `HXPL` and their RGB colours in
+`HXRG` (see "Hyperion's sections in a compiled map").
+
+**`"limits": "classic"`** declares that a map is a classic map whatever the controllers of
+indices 8 to 10 are. Some StarCraft maps give Players 9 to 11 a `human` or `computer`
+controller, which no lobby seats. Such a map converts to `.hxm` with this field, so it
+converts back to the CHK it was. Added 2026-11-09 within version 1: a map without the field
+means what it did before.
+
+### Who is seated in a game
+
+- **Use Map Settings:** as in StarCraft, for every index. A player whose controller is not
+  `human` or `computer` keeps its preplaced units and nobody is seated in it.
+- **Melee, indices 0 to 7:** StarCraft's rule, unchanged. Its start shuffle can seat a
+  player in an index whose controller is `rescuable`, `unused` or `neutral` as well as
+  `human` or `computer`. On a map meant for melee, give an index that nobody should play the
+  controller `inactive`.
+- **Melee, index 8 and above:** a player is seated only where the controller is `human` or
+  `computer` and the player owns a Start Location.
+
+### Player groups
+
+Triggers name groups of players with these names:
 
 | Name | Who |
 |---|---|
-| `current_player` | the player the trigger runs for |
+| `current_player` | the player the trigger is running for |
 | `foes`, `allies` | the current player's enemies, allies |
 | `neutral_players` | players neutral to the current player |
 | `all_players` | every player |
-| `force_1` .. `force_4` | a force's players |
+| `force_1` .. `force_4` | the players of a force |
 | `non_allied_victory_players` | players not allied for victory |
 | `neutral` | the neutral player |
-| `unused_12`, `unused_22` .. `unused_25`, `group_N` | codes 1.17 does not use; kept as they are |
+| `unused_12`, `unused_22` .. `unused_25`, `group_N` | player codes StarCraft does not use; kept as they are |
 
-A 1.17 map's slots 1 to 11 are this format's 0 to 10, and its player 12 is `"neutral"`.
-Slots 8 to 10, which no 1.17 lobby offers, are written only when the map uses them.
-
-A map whose players from list entry 8 on include a `human` or a `computer` is a Hyperion
-map, which only Hyperion plays. Its slots past neutral's are 12 and up, and the `players`
-list leaves out slot 11: entry 11 is slot 12, entry 12 slot 13, and so on. A unit's or
-doodad's `owner` is the slot's number (0 to 10, then 12 and up) or `"neutral"`. Triggers
-name any slot by its number, and the groups reach every slot (Trigger, below). The
-compiled map carries those slots in HXPL and their RGB colours in HXRG (Hyperion's sections
-in a compiled map, below).
-
-Neutral's slot and slots 8 to 10 are classic's and unchanged: neutral owns the resources and
-critters, and 8 to 10 are owners a map gives units to, whom no lobby seats. On a Hyperion map
-a slot from 8 on is a player when its `slot` is `human` or `computer`, and otherwise an owner
-no one plays, as in classic. Those owners are for Use Map Settings. In a melee game, of the
-slots from 8 on only the seats take a player, the `human` and `computer` slots that have a
-start location; slots 0 to 7 keep classic's rule, whose start shuffle seats players in
-`rescuable`, `unused` and `neutral` slots as well, so one of those that no one plays is
-`inactive` on a map meant for melee.
-
-`"limits": "classic"` says a map is not a Hyperion map whatever its slots 8 to 10 are called.
-A classic map that calls one of them a human or a computer, which no lobby seats, converts
-with it, and so converts back to the map it was. Added 2026-11-09 within version 1: left out,
-a map means what it did.
+On a Hyperion map the groups include the players at index 12 and above.
 
 ## The document
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `format` | `"hyperion-map"` | required | |
-| `version` | 1 | required | this document's version (see Versions) |
-| `name`, `description` | text | none | the map's title and description |
-| `tileset` | name or 0-7 | required | `badlands`, `platform`, `installation`, `ashworld`, `jungle`, `desert`, `ice`, `twilight` |
-| `size` | `[width, height]` in tiles | required | |
+| `version` | 1 | required | the format version (see "Versions") |
+| `name`, `description` | text | none | the map's title and description (`SPRP`) |
+| `tileset` | name or 0-7 | required | `badlands`, `platform`, `installation`, `ashworld`, `jungle`, `desert`, `ice`, `twilight` (`ERA`) |
+| `size` | `[width, height]` in tiles | required | (`DIM`) |
 | `expansion` | bool | `true` | the map needs Brood War |
-| `limits` | `classic` | none | `classic`: the map keeps to classic's limits and is never a Hyperion map. Slots 8 to 10 are owners no lobby seats whatever their `slot`, and a map past the limits in another way is refused. Left out, the map's content decides (Players, above) |
-| `text_encoding` | `utf-8` or `cp1252` | `utf-8` | how text goes into a 1.17 map: `cp1252` writes each string in 1.17's code page when it can, as the classic editors did |
-| `players` | list of player | | the slots, in order |
-| `neutral` | player | inactive | the neutral player's slot record |
-| `forces` | list of force | | up to 4 for a 1.17 map |
-| `units` | list of unit | `[]` | units placed at the start |
-| `doodads` | list of doodad | `[]` | the sprites and unit doodads the map places |
-| `locations` | list of location | `[]` | |
-| `triggers` | list of trigger | `[]` | |
-| `briefing` | list of trigger | none | the mission briefing's triggers |
-| `unit_properties` | list | `[]` | the property sets triggers create units with |
+| `limits` | `classic` | none | `classic`: the map is a classic map. Indices 8 to 10 are owners no lobby seats whatever their `slot`, and Hyperion rejects the map if it exceeds StarCraft's limits in another way. Left out, the map's contents decide ("Classic maps and Hyperion maps", above) |
+| `text_encoding` | `utf-8` or `cp1252` | `utf-8` | how strings are written into a compiled classic map: `cp1252` writes each string in StarCraft's Windows-1252 code page when it can, as the classic editors did |
+| `players` | list of player | | the players, in index order without index 11 |
+| `neutral` | player | inactive | the neutral player's record (index 11) |
+| `forces` | list of force | | up to 4 |
+| `units` | list of unit | `[]` | preplaced units (`UNIT`) |
+| `doodads` | list of doodad | `[]` | the sprites and unit doodads the map places (`THG2`) |
+| `locations` | list of location | `[]` | (`MRGN`) |
+| `triggers` | list of trigger | `[]` | (`TRIG`) |
+| `briefing` | list of trigger | none | the mission briefing's triggers (`MBRF`) |
+| `unit_properties` | list | `[]` | the property sets that Create Units with Properties uses (`UPRP`) |
 | `settings` | object | none | unit, upgrade and tech costs and stats |
 | `availability` | object | none | what each player may build and research |
-| `sounds` | object | none | the map's sound list: slot to the sound's path in the map |
-| `switches` | object | none | switch number (from 1) to its name |
+| `sounds` | object | none | the map's sound list: sound number to the sound's path in the map (`WAV `) |
+| `switches` | object | none | switch number (from 1) to its name (`SWNM`) |
 | `layers` | object | | written by the tools: each layer's file and element type |
 | `files` | list | | written by the tools: the paths of the map's other files |
-| `sections` | list | none | sections of a converted map this format has no field for, as `{"tag", "data"}` (base64), written back as they were |
-| `editor` | object | none | `tiles_same_as_game`: the editor's tile layer equals the game's; an editor's own data under its name (`"stardraft": {...}`), which Hyperion never reads |
-| `compat` | object | none | what a converted map needs to come back the same: its CHK `chk_version`, `type`, `iver`, `ive2`, `vcod` (`"standard"` or base64), `strx`, `string_count`, and the byte counts of sections that had an unusual size |
+| `sections` | list | none | CHK sections of a converted map that this format has no field for, as `{"tag", "data"}` (base64). They are written back unchanged |
+| `editor` | object | none | `tiles_same_as_game`: the editor's tile layer equals the game's. An editor's own data goes in an object under its name (`"stardraft": {...}`), which Hyperion never reads |
+| `compat` | object | none | what a converted map needs to convert back to the same CHK: its `chk_version`, `type`, `iver`, `ive2`, `vcod` (`"standard"` or base64), `strx`, `string_count`, and the byte counts of sections that had an unusual size |
 
 ### Player
 
 | Field | Default | Meaning |
 |---|---|---|
-| `slot` | `inactive` | `human` (an open slot for a person), `computer`, `rescuable`, `neutral`, `closed`, `unused`, `inactive`, and 1.17's two in-game kinds `human_occupied`, `computer_game` |
-| `race` | `zerg` | `zerg`, `terran`, `protoss`, `user_select`, `random`, `independent`, `neutral`, `inactive` |
-| `force` | 0 | the force's index |
-| `color` | the slot's own | a colour name (`red`, `blue`, `teal`, `purple`, `orange`, `brown`, `white`, `yellow`, `green`, `pale_yellow`, `tan`, `azure`, Remastered's eleven more, and from 23 on Hyperion's own for the players past 7, `tools/hxmap/names.py`) or number. Players 0 to 7 take 1.17's and Remastered's; past 7 any of them, and with none a player from slot 12 on takes Hyperion's in turn |
-| `color_mode`, `rgb` | none | Remastered's colour choice: `random`, `player_choice`, `rgb` with `rgb: [r, g, b]`, or a predefined colour's number |
-| `editor_slot` | `slot` | the slot the editor shows, when it differs |
+| `slot` | `inactive` | the controller (`OWNR`): `human` (an open slot for a person), `computer`, `rescuable`, `neutral`, `closed`, `unused`, `inactive`, and the two values StarCraft uses only while a game runs, `human_occupied` and `computer_game` |
+| `race` | `zerg` | (`SIDE`) `zerg`, `terran`, `protoss`, `user_select`, `random`, `independent`, `neutral`, `inactive` |
+| `force` | 0 | the force's index, 0 to 3 |
+| `color` | the index's own | a colour name or number. The names are StarCraft's (`red`, `blue`, `teal`, `purple`, `orange`, `brown`, `white`, `yellow`, `green`, `pale_yellow`, `tan`, `azure`), Remastered's eleven more, and from 23 up Hyperion's own, made for the players above index 7 (`tools/hxmap/names.py`). Indices 0 to 7 accept StarCraft's and Remastered's. Above index 7 any of them is accepted, and a player at index 12 or above with no `color` gets the next of Hyperion's |
+| `color_mode`, `rgb` | none | Remastered's colour choice (`CRGB`): `random`, `player_choice`, `rgb` with `rgb: [r, g, b]`, or a predefined colour's number |
+| `editor_slot` | `slot` | the controller the editor shows (`IOWN`), when it differs |
 
 ### Force
 
@@ -135,156 +173,212 @@ a map means what it did.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `type` | required | a unit name or number, or the name of a unit a mod adds (Units a mod adds, below) |
+| `type` | required | a unit's name or number, or the name of a unit that a mod adds ("Units that a mod adds", below) |
 | `x`, `y` | required | the unit's centre, in pixels |
-| `owner` | 0 | a player or `"neutral"` |
-| `id` | its index | the unit's number, which `link` refers to |
-| `link`, `relation` | 0 | a nydus canal's exit or an add-on's building: `link` is the other unit's `id`; `relation` 0x200 for a nydus link, 0x400 for an add-on |
+| `owner` | 0 | a player index or `"neutral"` |
+| `id` | its position in the list | the unit's number, which `link` refers to |
+| `link`, `relation` | 0 | a Nydus Canal's exit or an add-on's building: `link` is the other unit's `id`; `relation` is 0x200 for a Nydus link and 0x400 for an add-on |
 | `hp`, `shields`, `energy` | 100 | percentages |
 | `resources` | 0 | a mineral field's or geyser's amount |
 | `hangar` | 0 | |
 | `state` | 0 | bits: 1 cloaked, 2 burrowed, 4 lifted, 8 hallucinated, 16 invincible |
-| `valid_state`, `valid_props` | 0x1F, 0x3F | which of the state bits and properties the map sets |
+| `valid_state`, `valid_props` | 0x1F, 0x3F | which of the state bits and which properties the map sets |
 | `unused` | 0 | |
 
-A `start_location` unit owned by a player is where that player starts.
+A `start_location` unit owned by a player marks where that player starts.
 
-#### Units a mod adds
+#### Units that a mod adds
 
-A unit's `type` (and a doodad's `unit`, and a trigger's `unit`) may be the name a mod gives
-one of its units, as `"hybrid_reaver"`. Such a map loads only in a game with that mod's
-data (`--mod <id>`, or the mod chosen in the Mods menu); without it the map is refused as
-naming an unknown unit. A mod's unit has no fixed number, so a map names it. Added
-2026-10-14 within version 1: such names were refused before, so no map changes meaning. The
-compiled map writes the unit's number in the game the mod's data gives, from 256 up, in
-UNIT's 16-bit type; the compile is kept for that mod's data alone, so a game with other data
-compiles the map again. `settings` and `availability` reach classic's 228 units, 61 upgrades
-and 44 techs: a mod's unit named there is left out, and a mod's upgrade or tech is refused.
-Naming the mod a map is made for is planned (`hxm-for-editors.md`).
+A unit's `type`, a doodad's `unit` and a trigger's `unit` can be the name a mod gives one of
+its units, for example `"hybrid_reaver"`.
+
+- **Loading.** Such a map loads only in a game that has the mod's data (`--mod <id>`, or the
+  mod selected in the Mods menu). Without it, Hyperion rejects the map as naming an unknown
+  unit.
+- **Why a name.** A mod's unit has no fixed number. The mod's data assigns it one from 256
+  up when it loads.
+- **In the compiled map.** `UNIT`'s 16-bit unit type holds the number the loaded mod's data
+  assigned. The compiled map is cached for that mod's data only, so a game with other data
+  compiles the map again.
+- **`settings` and `availability`** cover StarCraft's 228 units, 61 upgrades and 44 techs
+  only. A mod's unit named there is dropped, and a mod's upgrade or tech is rejected.
+- Added 2026-10-14 within version 1. Such names were rejected before, so no existing map
+  changed meaning.
+- Recording which mod a map needs is planned (`hxm-for-editors.md`).
 
 ### Doodad
 
 `{"sprite": n, "x", "y", "owner"}` for a sprite, or `{"unit": name, "x", "y", "owner"}`
-for a unit placed as a doodad, with optional `flags` (bit 0x8000 a disabled doodad) and
-`pad`.
+for a unit placed as a doodad, with optional `flags` (bit 0x8000 marks a disabled doodad)
+and `pad`.
 
 ### Location
 
 `{"id": n, "name": text, "left", "top", "right", "bottom", "elevation"}`. Ids count from
-1; 1.17 maps have 64 (version 59) or 255, and 64 is "Anywhere". `elevation` is the bit set
-of elevations the location leaves out.
+1. A StarCraft map has 64 locations (`VER` 59) or 255, and location 64 is "Anywhere".
+`elevation` is the set of elevation levels the location excludes, as bits.
 
 ### Trigger
 
 | Field | Meaning |
 |---|---|
-| `players` | the players and groups it runs for |
+| `players` | the players and groups the trigger runs for |
 | `conditions` | up to 16 |
 | `actions` | up to 64 |
-| `flags` | 1.17's trigger flags (bit 2 disabled, among others), when not 0 |
+| `flags` | the CHK's trigger flags (bit 2 is disabled, among others), when not 0 |
 | `player_bytes`, `current_action` | raw values of a converted map, when unusual |
 
-A condition is `{"type": name, ...}` with any of `location` (an id), `player` (a player
-or group), `amount`, `unit`, `comparison` (`at_least`, `at_most`, `exactly`), `resource`
-(the resource, score kind or switch number, by the type), `flags`, `mask`. An action is
-`{"type": name, ...}` with any of `location`, `text`, `wav` (a sound's path), `time` (ms),
-`player`, `number` (a second location, an amount, a state, or for
-`give_units_to_player` the player receiving them), `unit`, `modifier` (a count or how to
-change a value), `flags`, `pad`, `mask`. The names are 1.17's, in `names.py`:
-`CONDITIONS`, `ACTIONS`, and `BRIEFING_ACTIONS` for the briefing. A text field that a
-converted map pointed at no string is kept as `{"string_id": n}`.
+A condition is `{"type": name, ...}` with any of:
 
-On a Hyperion map, a trigger's `players` and a condition's or action's `player` (and
-`give_units_to_player`'s `number`) may be a slot from 12 up, by its number, as for slots
-0 to 10. A trigger's `players` takes slots up to 63. Added 2026-10-13 within version 1:
-such values were refused before, so no map changes meaning. The compiled map writes a
-condition's or action's slot past 11 as the player code 0x100 + slot, which 1.17 never
-writes and only a Hyperion game reads, and the slots past 11 a trigger runs for in a
-section of its own, HXTE, version 1: a DWORD version, a DWORD count of TRIG's triggers,
-then a QWORD for each, bit n for slot n. Briefings run only for slots 0 to 7.
+- `location` (a location id);
+- `player` (a player index or a group);
+- `amount`;
+- `unit`;
+- `comparison` (`at_least`, `at_most`, `exactly`);
+- `resource` (the resource, the score kind or the switch number, depending on the type);
+- `flags`, `mask`.
+
+An action is `{"type": name, ...}` with any of:
+
+- `location`;
+- `text`;
+- `wav` (a sound's path);
+- `time` (milliseconds);
+- `player`;
+- `number` (a second location, an amount, a state, or for `give_units_to_player` the player
+  who receives the units);
+- `unit`;
+- `modifier` (a count, or how to change a value);
+- `flags`, `pad`, `mask`.
+
+The type names are StarCraft's, in `names.py`: `CONDITIONS`, `ACTIONS`, and
+`BRIEFING_ACTIONS` for the briefing. A text field that pointed at no string in a converted
+map is kept as `{"string_id": n}`.
+
+**Player indices above 11.** On a Hyperion map, a trigger's `players`, a condition's or
+action's `player`, and `give_units_to_player`'s `number` can be a player index of 12 or
+more, written as the index, as for indices 0 to 10. A trigger's `players` accepts indices up
+to 63. Briefings run only for indices 0 to 7. Added 2026-10-13 within version 1: such values
+were rejected before, so no existing map changed meaning.
+
+In the compiled map:
+
+- a condition or an action stores an index above 11 as the player code 0x100 + index. No
+  StarCraft map contains such a code, and only a Hyperion game reads it;
+- the indices above 11 that each trigger runs for are in the section `HXTE` (below), because
+  a `TRIG` entry's own list has room only for Players 1 to 12 and the groups.
 
 ### Unit properties
 
 `[{"slot": 1-64, "valid_state", "valid_props", "owner", "hp", "shields", "energy",
-"resources", "hangar", "state", "used": true}]`, each field 0 when left out.
+"resources", "hangar", "state", "used": true}]`, each field 0 when left out. Here `slot` is
+the property set's number in `UPRP`.
 
 ### Settings
 
-`settings.units` maps a unit to `{"hp", "shields", "armor", "build_time", "minerals",
-"gas", "name"}` and `settings.weapons` a weapon number to `[damage, bonus]` (the whole
-table, whenever a unit is listed). `settings.upgrades` maps an upgrade to `{"minerals",
-"minerals_factor", "gas", "gas_factor", "time", "time_factor"}`, and `settings.techs` a
-tech to `{"minerals", "gas", "time", "energy"}`. Only what a map overrides is listed; the
-rest keeps the game's values. The `*_classic` forms are the ones a map for the original
-StarCraft carries.
+- `settings.units` maps a unit to `{"hp", "shields", "armor", "build_time", "minerals",
+  "gas", "name"}`.
+- `settings.weapons` maps a weapon number to `[damage, bonus]`. The whole weapon table is
+  written whenever any unit is listed.
+- `settings.upgrades` maps an upgrade to `{"minerals", "minerals_factor", "gas",
+  "gas_factor", "time", "time_factor"}`.
+- `settings.techs` maps a tech to `{"minerals", "gas", "time", "energy"}`.
+
+Only what the map overrides is listed. Everything else keeps the game's values. These are
+the Brood War sections `UNIx`, `UPGx` and `TECx`. The forms `units_classic`,
+`upgrades_classic` and `techs_classic` are the sections a map for original StarCraft
+carries: `UNIS`, `UPGS` and `TECS`.
 
 ### Availability
 
-`availability.units`: `global` (unit to 0 or 1, for those not 1) and per player
-`available` and `use_global`. `availability.upgrades`: `global_max`, `global_start` and per
-player `max`, `start`, `use_global`. `availability.techs`: `global_available`,
-`global_researched` and per player `available`, `researched`, `use_global`. Values left out
-are the game's defaults: everything available, upgrade levels 0, nothing researched,
-players using the global settings.
+- `availability.units`: `global` (unit to 0 or 1, listing only those that are not 1), and
+  for each player `available` and `use_global`.
+- `availability.upgrades`: `global_max`, `global_start`, and for each player `max`, `start`
+  and `use_global`.
+- `availability.techs`: `global_available`, `global_researched`, and for each player
+  `available`, `researched` and `use_global`.
+
+Values left out are the game's defaults: everything available, upgrade levels 0, nothing
+researched, and every player using the global settings. `upgrades_classic` and
+`techs_classic` are original StarCraft's `UPGR` and `PTEC`.
 
 ## Layers
 
 | Layer | Element | Meaning |
 |---|---|---|
-| `tiles` | u16 per tile, rows top to bottom | the terrain: each value is a tile group times 16 plus the tile's index in it, from the tileset's CV5 |
-| `fog` | u8 per tile | the bit set of players who start with the tile unexplored |
-| `isom` | u16 | the editor's isometric terrain, as StarEdit and ScmDraft keep it; the game does not read it |
-| `editor_tiles` | u16 per tile | the editor's own copy of the terrain, when it differs from `tiles` |
-| `editor_doodads` | bytes | the editor's doodad list (DD2) |
+| `tiles` | u16 per tile, row by row from the top | the terrain (`MTXM`): the tile group's index in the tileset's CV5 times 16, plus the tile's index within the group |
+| `fog` | u8 per tile | the set of players who start with the tile unexplored, as bits (`MASK`) |
+| `isom` | u16 | the editor's isometric terrain (`ISOM`), as StarEdit and ScmDraft keep it. The game does not read it |
+| `editor_tiles` | u16 per tile | the editor's own copy of the terrain (`TILE`), when it differs from `tiles` |
+| `editor_doodads` | bytes | the editor's doodad list (`DD2 `) |
 
-All little-endian. The layers are binary because a 512 by 512 map has 262,144 tiles; a
-generator writes them with a few lines of code (`tools/hxmap` does it with Python's
-`struct`).
+All layers are little-endian. They are binary because a 512 by 512 map has 262,144 tiles. A
+generator writes one with a few lines of code (`tools/hxmap` uses Python's `struct`).
 
 ## Versions
 
-Version 1 is frozen as of 2026-10-13: every field above keeps its meaning. A field may be
-added to version 1 when leaving it out means what version 1 meant; a change to what an
-existing field means raises the version. Hyperion and `tools/hxmap` refuse a document of a
-newer version than they read, saying so, and ignore fields they do not know.
-`Hyperion.exe --hxm-check <map.hxm>` checks a map an editor wrote (`hxm-for-editors.md`).
+- Version 1 has been frozen since 2026-10-13: every field above keeps its meaning.
+- A field can be added to version 1 only if omitting it means what version 1 already meant.
+- Changing what an existing field means raises the version.
+- Hyperion and `tools/hxmap` reject a document with a version newer than they read, with a
+  message, and ignore fields they do not know.
+- `Hyperion.exe --hxm-check <map.hxm>` validates a map that an editor wrote
+  (`hxm-for-editors.md`).
 
 ## Conversion
 
-`from_chk` reads a CHK as the game does (each handler over every copy of its section, in
-file order: the last copy wins for most, MTXM and MASK overlay copy by copy, UNIT, THG2,
-TRIG and MBRF add up), so a protected map converts to what the game plays. `to_chk` writes
-a CHK any 1.17 tool reads when the map is within 1.17's limits: 256 tiles a side, 11 slots
-and neutral, 255 locations, 4 forces. String ids are renumbered on the way back; nothing
-in the game depends on an id's value.
+**From a CHK.** `from_chk` reads a CHK the way the game does. The game runs each section's
+handler over every copy of that section, in file order:
 
-A map past those limits, more than 256 tiles a side, players from list entry 8 on who take
-part, triggers for slots past 11 or a mod's units, gets a VER of its own: 1206, or 1064 when
-`expansion` is false. No Blizzard version uses either, so a map site or an editor tells such
-a CHK from a classic one by its VER alone, whatever the file is called. Hyperion reads them
-as Remastered's 206 and 64, with STR or STRx, so their MRGN holds 255 locations: a map of
-version 59, which holds 64, gets the rest as empty ones when its VER is raised. A map within the limits keeps the classic
-versions (59, 63, 64, 205, 206), and one converted back from 1206 or 1064 gets 205 or 206,
-63 or 64.
+- for most sections the last copy wins;
+- `MTXM` and `MASK` copies overlay one another;
+- `UNIT`, `THG2`, `TRIG` and `MBRF` copies add up.
+
+So a "protected" map, which relies on duplicate sections, converts to what the game actually
+plays.
+
+**To a CHK.** `to_chk` writes a CHK that any StarCraft tool reads when the map is within
+StarCraft's limits: 256 tiles a side, 11 players and neutral, 255 locations, 4 forces.
+String ids are renumbered on the way back. Nothing in the game depends on an id's value.
+
+**`VER`.** A map within the limits keeps a classic `VER` (59, 63, 64, 205 or 206).
+
+A map past them gets a `VER` of Hyperion's own: 1206, or 1064 when `expansion` is false. A
+map is past the limits when it has more than 256 tiles a side, a player at list entry 8 or
+above who can be played, a trigger for a player index above 11, or a unit that a mod adds.
+
+- No Blizzard version uses 1206 or 1064, so a map site or an editor can tell such a CHK from
+  a classic one by its `VER` alone, whatever the file is called.
+- Hyperion reads 1206 with the section layout of Remastered's 206, and 1064 with that of 64,
+  with strings in `STR ` or `STRx`. Their `MRGN` therefore holds 255 locations. A map of
+  `VER` 59, which holds 64, gets the others as empty locations when its `VER` is raised.
+- A map converted back from 1206 gets 205 or 206, and one from 1064 gets 63 or 64.
+- StarCraft rejects a `VER` it does not know, so it never loads such a map and misreads it.
 
 ### Hyperion's sections in a compiled map
 
-A compiled Hyperion map has up to three sections no classic map has. Each begins with a DWORD
-version, 1 for all three today, and Hyperion refuses the map when it does not read that
-version or the section's size is not what its counts give. They may come anywhere in the
-file: Hyperion reads HXPL before the sections that need the slots, wherever it is.
+A compiled Hyperion map has up to three sections that no classic map has. They exist because
+the CHK's own sections have a fixed number of entries: `OWNR` and `SIDE` 12, `FORC`, `COLR`
+and `CRGB` 8, and a trigger's player list 27.
 
-| Section | After the version | When |
+- Each begins with a DWORD version, which is 1 for all three today.
+- Hyperion rejects the map if it does not know that version, or if the section's size does
+  not match its counts.
+- They can be anywhere in the file. Hyperion reads `HXPL` before the sections that need the
+  players, wherever it is.
+
+| Section | After the version | Written when |
 |---|---|---|
-| `HXPL` | a DWORD count of slots, 9 to 65, which counts neutral's once it passes 11; then four bytes for each slot from 8 on: its kind (OWNR's values), its race (SIDE's), its force and its colour's number, 0xFF for none. Slot 11's four bytes are 0 | a player from slot 8 on takes part |
-| `HXRG` | the same count; then four bytes for each slot from 8 on: 1 when it has a colour, then red, green and blue | such a player has `rgb` |
-| `HXTE` | a DWORD count of TRIG's triggers; then a QWORD for each, bit n set when it runs for slot n | a trigger runs for a slot past 11 |
+| `HXPL` | a DWORD count of player indices, 9 to 65, which includes index 11 once it goes past 11; then four bytes for each index from 8 up: the controller (`OWNR`'s values), the race (`SIDE`'s values), the force, and the colour's number or 0xFF for none. Index 11's four bytes are 0 | a player at index 8 or above can be played |
+| `HXRG` | the same count; then four bytes for each index from 8 up: 1 if it has an RGB colour, then red, green and blue | such a player has `rgb` |
+| `HXTE` | a DWORD count of `TRIG`'s triggers; then a QWORD for each, with bit n set when the trigger runs for index n | a trigger runs for an index above 11 |
 
-A condition or an action names a slot past 11 as the player code 0x100 + slot, and UNIT's
-owner byte is the slot's number. Classic refuses a VER it does not know, so it never reads
-these as something else.
+Elsewhere in the compiled map, a condition or an action names an index above 11 as the
+player code 0x100 + index, and `UNIT`'s owner byte is the index itself.
 
-`python -m tools.hxmap roundtrip` checks every map it is given: the sections the game
-reads come back byte for byte, and those with text come back with the same document. The
-replay check in `tools/hxmap/check.py` goes further: it plays the suite's replays with
-their maps converted to the format and back, and compares every frame with the original.
+## Checking the conversion
+
+`python -m tools.hxmap roundtrip` checks every map it is given: the sections the game reads
+come back byte for byte, and the sections with text come back as the same document. The
+replay check in `tools/hxmap/check.py` goes further: it plays the test replays with their
+maps converted to the format and back, and compares every frame with the original.

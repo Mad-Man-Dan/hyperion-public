@@ -50,6 +50,13 @@ const unsigned char *__cdecl PortSave117Get(unsigned int layout, const unsigned 
 int __cdecl PortSaveChunk(const void *pBuf, int nBytes, unsigned int count, void *pFile);
 int __cdecl PortSave117Compress(unsigned int layout, const void *pRecs, unsigned int count, void *pFile);
 int __cdecl PortSave117Decompress(unsigned int layout, void *pRecs, unsigned int count, void *pFile);
+// A run of records as a save holds it from format 3: each byte less the byte one record
+// before. A pool's free records differ by their links alone, so the pools of the largest unit
+// table pack to little. PortSaveDelta before a run is compressed, PortLoadUndelta after one
+// is read; neither changes a save of an earlier format. Compress and Decompress above do it
+// themselves.
+void PortSaveDelta(void *pRecs, size_t nBytes, size_t nRecord);
+void PortLoadUndelta(void *pRecs, size_t nBytes, size_t nRecord);
 // The high bytes of the ids this build keeps in 16 bits where 1.17's record has a byte
 // (SAVE117_UNSIGNED8, a mod's past 255), which Put drops: how many a record
 // has, and a run's, record by record, copied out to pOut or back in from pIn.

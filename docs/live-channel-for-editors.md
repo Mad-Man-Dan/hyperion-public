@@ -41,9 +41,9 @@ to connect (from `mods\debug-tools\ai-context.md`, its paths and port filled in)
 overlay has Copy for AI, which copies it with the game's status at that moment, and Copy guide
 link; the panel has Copy for AI too. Paste it into the assistant's chat to start.
 
-Started with `--control`, Hyperion goes straight to its menus: 1.17's opening cinematic, which
+Started with `--control`, Hyperion goes straight to its menus: StarCraft's opening cinematic, which
 otherwise plays on a player's first start, waits for a start without it. A game the channel
-starts with `map_load` does not open 1.17's tips either, which would pause it.
+starts with `map_load` does not open StarCraft's tips either, which would pause it.
 
 A test from an editor goes like this: the editor starts `Hyperion.exe --control` once, waits
 until `status` answers, and from then on sends `map_push` or `map_load` each time the map is
@@ -176,7 +176,7 @@ wrong step.
 
 Places are map pixels (32 a tile), from the map's top left. Times are milliseconds (`ms`).
 A unit is named by a label a `spawn` gave (`"as"`), by its id (as `units` and `spawn` answer
-it), or by a list of either. Unit types are 1.17's ids or the names `.hxm` maps use
+it), or by a list of either. Unit types are StarCraft's ids or the names `.hxm` maps use
 (`terran_marine`, `zerg_zergling`, `protoss_zealot`).
 
 | step | fields | what it does |
@@ -225,5 +225,5 @@ a chase). Their places are for the map each is named after. A short scene, which
 ## What is planned
 
 - Scenes kept in an `.hxm` map and started by its triggers, in this same step format.
-- Cutscene styles of their own beyond 1.17's look: other captions, bars and transitions.
+- Cutscene styles of their own beyond StarCraft's look: other captions, bars and transitions.
 - `map_push` with the map's units, locations and triggers, and past 256 tiles through `.hxm`.
